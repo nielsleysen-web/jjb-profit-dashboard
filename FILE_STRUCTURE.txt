@@ -1,0 +1,35 @@
+=== FRESH START - FILE STRUCTURE ===
+
+YOUR NEW PROJECT STRUCTURE:
+
+jjb-profit-dashboard/
+├── pages/
+│   ├── _app.js          → Copy: _app.js
+│   ├── index.js         → Copy: index.js
+│   ├── dashboard.js     → Copy: dashboard.js
+│   └── api/
+│       └── dashboard.js → Copy: dashboard-api.js
+├── package.json         → Copy: package.json
+├── .env.example         → Copy: .env.example
+└── .env.local          → Create this with your actual secrets
+
+=== INSTALLATION STEPS ===
+
+1. In GitHub: Create NEW repo "jjb-profit-dashboard"
+
+2. Upload these files to GitHub:
+   - pages/_app.js
+   - pages/index.js
+   - pages/dashboard.js
+   - pages/api/dashboard.js
+   - package.json
+   - .env.example
+
+3. In Vercel: Add Environment Variables:
+   - NEXT_PUBLIC_PASSWORD = your_password
+   - META_ACCESS_TOKEN = your_eaaw_token
+   - SHOPIFY_STORE_URL = your.store.com
+   - SHOPIFY_ACCESS_TOKEN = your_token
+
+4. Deploy & Test!
+
