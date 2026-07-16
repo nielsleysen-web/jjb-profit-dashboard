@@ -121,6 +121,7 @@ const ORDERS_QUERY = `
             title
             quantity
             discountedTotalSet { shopMoney { amount } }
+            image { url(transform: {maxWidth: 120, maxHeight: 120}) }
             product { title }
             variant { title inventoryItem { unitCost { amount } } }
           }
@@ -378,7 +379,10 @@ function summarizeOrders(orders) {
       if (itemRevenue === 0 && itemCogs === 0) continue; // gratis geschenken overslaan
 
       if (!productMap[name]) {
-        productMap[name] = { name, orders: 0, revenue: 0, cogs: 0, adSpend: 0 };
+        productMap[name] = { name, image: null, orders: 0, revenue: 0, cogs: 0, adSpend: 0 };
+      }
+      if (!productMap[name].image && item.image?.url) {
+        productMap[name].image = item.image.url;
       }
       productMap[name].orders += item.quantity;
       productMap[name].revenue += itemRevenue;
