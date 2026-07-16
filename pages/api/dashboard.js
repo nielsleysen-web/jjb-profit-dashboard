@@ -404,17 +404,50 @@ function pctChange(current, previous) {
   return ((current - previous) / previous) * 100;
 }
 
+// --- campagne ↔ product matching ---
+// Generieke woorden die in campagnenamen vaak voorkomen maar niets zeggen
+// over WELK product het is ("Neurotone Drops" moet matchen op "neurotone").
+const GENERIC_WORDS = new Set([
+  "drops", "cream", "crema", "cerotto", "patch", "patches", "gel", "serum",
+  "roller", "just", "jenny", "the", "and", "for", "con", "die", "het",
+]);
+
+const normalize = (s) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+function productKeywords(name) {
+  const words = name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 4 && !GENERIC_WORDS.has(w));
+  // Volledige naam zonder spaties + individuele kernwoorden
+  return [...new Set([normalize(name), ...words])].filter(Boolean);
+}
+
 function matchAdSpendToProducts(productMap, campaignSpend, inPeriod) {
-  // Ad spend per product o.b.v. campagnenaam die de productnaam bevat
+  // "Neurotone Drops" matcht zo ook campagnes als "NT10 | Neurotone | IT"
+  // en "ArmLift" matcht "Arm Lift scale". Bij meerdere kandidaten wint de
+  // langste (meest specifieke) match, en spend wordt maar 1x toegewezen.
+  const candidates = Object.values(productMap).map((p) => ({
+    product: p,
+    keys: productKeywords(p.name),
+  }));
+
   for (const row of campaignSpend) {
     if (!inPeriod(row.date)) continue;
-    const campaign = row.name.toLowerCase();
-    for (const product of Object.values(productMap)) {
-      if (campaign.includes(product.name.toLowerCase())) {
-        product.adSpend += row.spend;
-        break;
+    const campaign = normalize(row.name);
+    if (!campaign) continue;
+
+    let best = null;
+    let bestLen = 0;
+    for (const { product, keys } of candidates) {
+      for (const key of keys) {
+        if (key.length > bestLen && campaign.includes(key)) {
+          best = product;
+          bestLen = key.length;
+        }
       }
     }
+    if (best) best.adSpend += row.spend;
   }
 }
 
