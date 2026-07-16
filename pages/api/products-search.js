@@ -28,8 +28,9 @@ async function getShopifyToken(storeUrl) {
 }
 
 const SEARCH_QUERY = `
-  query SearchProducts($q: String, $first: Int!) {
-    products(first: $first, query: $q, sortKey: RELEVANCE) {
+  query SearchProducts($q: String, $first: Int!, $after: String) {
+    products(first: $first, query: $q, after: $after, sortKey: TITLE) {
+      pageInfo { hasNextPage endCursor }
       nodes {
         id
         title
@@ -55,25 +56,37 @@ export default async function handler(req, res) {
   try {
     const storeUrl = process.env.SHOPIFY_STORE_URL;
     const token = await getShopifyToken(storeUrl);
+    const endpoint = `https://${storeUrl}/admin/api/2025-01/graphql.json`;
+    const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
     const q = (req.query.q || "").trim();
 
-    const response = await axios.post(
-      `https://${storeUrl}/admin/api/2025-01/graphql.json`,
-      {
-        query: SEARCH_QUERY,
-        variables: { q: q ? `title:*${q}* OR ${q}` : null, first: 50 },
-      },
-      {
-        headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
-        timeout: 15000,
+    // Zonder zoekterm: ALLE producten doorlopen (paginatie), zodat ook
+    // producten verderop in het alfabet (Neurotone, Varicose, ...) meekomen.
+    const nodes = [];
+    let after = null;
+    let hasNextPage = true;
+    let pages = 0;
+    while (hasNextPage && pages < 5) {
+      const response = await axios.post(
+        endpoint,
+        {
+          query: SEARCH_QUERY,
+          variables: { q: q ? `title:*${q}*` : null, first: 100, after },
+        },
+        { headers, timeout: 15000 }
+      );
+      if (response.data.errors) {
+        throw new Error(JSON.stringify(response.data.errors));
       }
-    );
-
-    if (response.data.errors) {
-      throw new Error(JSON.stringify(response.data.errors));
+      const conn = response.data.data.products;
+      nodes.push(...conn.nodes);
+      hasNextPage = conn.pageInfo.hasNextPage;
+      after = conn.pageInfo.endCursor;
+      pages++;
+      if (q && nodes.length >= 50) break; // bij zoeken zijn 50 resultaten genoeg
     }
 
-    const products = response.data.data.products.nodes.map((p) => ({
+    const products = nodes.map((p) => ({
       id: p.id,
       title: p.title,
       image: p.featuredImage?.url || null,
