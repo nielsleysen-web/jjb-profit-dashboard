@@ -183,21 +183,25 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ===== PROFIT PER DAY — bovenaan ===== */}
-      <div style={{ ...ui.card, padding: "24px 24px 12px 24px", marginBottom: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+      {/* ===== REVENUE CHART — bovenaan ===== */}
+      <div style={{ ...ui.card, padding: "20px 20px 8px 20px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#334155" }}>Profit Per Day</span>
-              <Change value={data.profitChange} />
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#334155" }}>
+                Revenue {data.revenueChart?.granularity === "hour" ? "Per Hour" : "Per Day"}
+              </span>
+              <Change value={data.revenueChange} />
             </div>
-            <div style={{ fontSize: "30px", fontWeight: 700, letterSpacing: "-0.5px", marginTop: "6px", color: data.netProfit >= 0 ? "#0f172a" : "#dc2626" }}>
-              {formatCurrency(data.netProfit)}
+            <div style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", marginTop: "4px", color: "#0f172a" }}>
+              {formatCurrency(data.revenue)}
             </div>
           </div>
-          <span style={{ fontSize: "12px", color: "#8a92a3" }}>revenue − COGS − fees − ad spend</span>
+          <span style={{ fontSize: "12px", color: "#8a92a3" }}>
+            net profit: <b style={{ color: data.netProfit >= 0 ? "#16a34a" : "#dc2626" }}>{formatCurrency(data.netProfit)}</b>
+          </span>
         </div>
-        <ProfitLineChart days={data.profitPerDay || []} formatCurrency={formatCurrency} />
+        <RevenueChart chart={data.revenueChart} formatCurrency={formatCurrency} />
       </div>
 
       {/* Summary cards */}
@@ -339,35 +343,57 @@ function Card({ label, value, change, sub, accent, small }) {
   );
 }
 
-/* ---------- moderne line chart (smooth, gradient, hover) ---------- */
+/* ---------- moderne revenue line chart (y-as, smooth, gradient, hover) ---------- */
 
-function ProfitLineChart({ days, formatCurrency }) {
+function niceTicks(maxValue) {
+  const max = Math.max(maxValue, 10);
+  const rough = max / 4;
+  const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+  let step = pow;
+  for (const m of [1, 2, 2.5, 5, 10]) {
+    if (m * pow >= rough) {
+      step = m * pow;
+      break;
+    }
+  }
+  const ticks = [];
+  for (let v = 0; v <= max + step * 0.999; v += step) ticks.push(Math.round(v * 100) / 100);
+  return ticks;
+}
+
+function RevenueChart({ chart, formatCurrency }) {
   const [hover, setHover] = useState(null);
+  const days = chart?.points || [];
+  const isHourly = chart?.granularity === "hour";
 
   if (!days.length) {
     return (
-      <div style={{ height: "260px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <span style={{ color: "#94a3b8", fontSize: "13px" }}>Geen data voor deze periode</span>
       </div>
     );
   }
 
   const W = 1000;
-  const H = 260;
-  const PAD = { top: 16, right: 16, bottom: 28, left: 16 };
+  const H = 190;
+  const PAD = { top: 12, right: 14, bottom: 26, left: 54 };
   const iw = W - PAD.left - PAD.right;
   const ih = H - PAD.top - PAD.bottom;
 
-  const profits = days.map((d) => d.profit);
-  const min = Math.min(0, ...profits);
-  const max = Math.max(0, ...profits);
+  const revenues = days.map((d) => d.revenue);
+  const ticks = niceTicks(Math.max(...revenues));
+  const min = 0;
+  const max = ticks[ticks.length - 1];
   const span = max - min || 1;
 
   const x = (i) => PAD.left + (days.length === 1 ? iw / 2 : (i / (days.length - 1)) * iw);
   const y = (v) => PAD.top + ih - ((v - min) / span) * ih;
   const zeroY = y(0);
 
-  const pts = days.map((d, i) => [x(i), y(d.profit)]);
+  const fmtAxis = (v) =>
+    new Intl.NumberFormat("nl-BE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
+
+  const pts = days.map((d, i) => [x(i), y(d.revenue)]);
 
   // Smooth cubic bezier pad
   const linePath = pts.reduce((acc, [px, py], i) => {
@@ -379,8 +405,10 @@ function ProfitLineChart({ days, formatCurrency }) {
 
   const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${zeroY} L ${pts[0][0]},${zeroY} Z`;
 
-  const dateLabel = (dateStr) =>
-    new Date(`${dateStr}T12:00:00Z`).toLocaleDateString("nl-BE", { day: "numeric", month: "short" });
+  const dateLabel = (label) =>
+    isHourly
+      ? label
+      : new Date(`${label}T12:00:00Z`).toLocaleDateString("nl-BE", { day: "numeric", month: "short" });
 
   const handleMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -397,7 +425,7 @@ function ProfitLineChart({ days, formatCurrency }) {
     setHover(nearest);
   };
 
-  const labelStep = Math.max(1, Math.ceil(days.length / 10));
+  const labelStep = isHourly ? 3 : Math.max(1, Math.ceil(days.length / 10));
 
   return (
     <div style={{ position: "relative" }}>
@@ -408,30 +436,31 @@ function ProfitLineChart({ days, formatCurrency }) {
         onMouseLeave={() => setHover(null)}
       >
         <defs>
-          <linearGradient id="profitFill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.22" />
             <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
-        {/* horizontale gridlijnen */}
-        {[0.25, 0.5, 0.75].map((f) => (
-          <line
-            key={f}
-            x1={PAD.left}
-            x2={W - PAD.right}
-            y1={PAD.top + ih * f}
-            y2={PAD.top + ih * f}
-            stroke="#f1f3f6"
-            strokeWidth="1"
-          />
+        {/* y-as: gridlijnen + eurobedragen */}
+        {ticks.map((t) => (
+          <g key={t}>
+            <line
+              x1={PAD.left}
+              x2={W - PAD.right}
+              y1={y(t)}
+              y2={y(t)}
+              stroke={t === 0 ? "#e2e6ec" : "#f1f3f6"}
+              strokeWidth="1"
+            />
+            <text x={PAD.left - 8} y={y(t) + 3.5} textAnchor="end" fontSize="10.5" fill="#94a3b8" fontFamily="inherit">
+              {fmtAxis(t)}
+            </text>
+          </g>
         ))}
 
-        {/* nullijn */}
-        <line x1={PAD.left} x2={W - PAD.right} y1={zeroY} y2={zeroY} stroke="#e2e6ec" strokeWidth="1" />
-
         {/* area + lijn */}
-        <path d={areaPath} fill="url(#profitFill)" />
+        <path d={areaPath} fill="url(#revenueFill)" />
         <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
 
         {/* hover indicator */}
@@ -445,8 +474,8 @@ function ProfitLineChart({ days, formatCurrency }) {
         {/* x-as labels */}
         {days.map((d, i) =>
           i % labelStep === 0 ? (
-            <text key={d.date} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#94a3b8" fontFamily="inherit">
-              {dateLabel(d.date)}
+            <text key={d.label} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10.5" fill="#94a3b8" fontFamily="inherit">
+              {dateLabel(d.label)}
             </text>
           ) : null
         )}
@@ -472,16 +501,16 @@ function ProfitLineChart({ days, formatCurrency }) {
             zIndex: 10,
           }}
         >
-          <div style={{ fontWeight: 700, marginBottom: "2px" }}>{dateLabel(days[hover].date)}</div>
+          <div style={{ fontWeight: 700, marginBottom: "2px" }}>{dateLabel(days[hover].label)}</div>
           <div>
-            Profit:{" "}
-            <b style={{ color: days[hover].profit >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(days[hover].profit)}</b>
+            Revenue: <b style={{ color: "#93c5fd" }}>{formatCurrency(days[hover].revenue)}</b>
           </div>
-          <div style={{ color: "#cbd5e1" }}>Revenue: {formatCurrency(days[hover].revenue)}</div>
-          <div style={{ color: "#cbd5e1" }}>Ad spend: {formatCurrency(days[hover].adSpend)}</div>
-          <div style={{ color: "#cbd5e1" }}>
-            COGS: {formatCurrency(days[hover].cogs)} · Fees: {formatCurrency(days[hover].fees)}
-          </div>
+          {days[hover].profit != null && (
+            <div style={{ color: "#cbd5e1" }}>
+              Profit:{" "}
+              <b style={{ color: days[hover].profit >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(days[hover].profit)}</b>
+            </div>
+          )}
           <div style={{ color: "#cbd5e1" }}>Orders: {days[hover].orders}</div>
         </div>
       )}
