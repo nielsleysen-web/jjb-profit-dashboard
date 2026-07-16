@@ -35,8 +35,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { range = "7d" } = req.query;
-    const { dateFrom, dateTo, prevFrom, prevTo } = getDateRange(range);
+    const { range = "7d", from, to } = req.query;
+    const { dateFrom, dateTo, prevFrom, prevTo } = getDateRange(range, from, to);
 
     // 1 window = huidige + vorige periode → in één keer ophalen, daarna splitsen
     const [orders, meta] = await Promise.all([
@@ -75,11 +75,17 @@ function shiftDays(dateStr, days) {
   return d.toISOString().split("T")[0];
 }
 
-function getDateRange(range) {
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function getDateRange(range, from, to) {
   const today = localDateStr(new Date());
   let dateFrom, dateTo;
 
-  if (range === "today") {
+  if (range === "custom" && DATE_RE.test(from || "") && DATE_RE.test(to || "")) {
+    // Custom periode of één specifieke dag (from === to)
+    dateFrom = from <= to ? from : to;
+    dateTo = from <= to ? to : from;
+  } else if (range === "today") {
     dateFrom = today;
     dateTo = today;
   } else if (range === "yesterday") {
