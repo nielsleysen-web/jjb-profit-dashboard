@@ -158,14 +158,22 @@ async function getShopifyToken(storeUrl) {
     client_secret: clientSecret,
   });
 
-  const response = await axios.post(
-    `https://${storeUrl}/admin/oauth/access_token`,
-    params.toString(),
-    {
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      timeout: 15000,
-    }
-  );
+  let response;
+  try {
+    response = await axios.post(
+      `https://${storeUrl}/admin/oauth/access_token`,
+      params.toString(),
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 15000,
+      }
+    );
+  } catch (err) {
+    const detail = err.response
+      ? `HTTP ${err.response.status}: ${JSON.stringify(err.response.data)}`
+      : err.message;
+    throw new Error(`Shopify TOKEN request mislukt — ${detail}`);
+  }
 
   const { access_token, expires_in } = response.data;
   if (!access_token) {
@@ -195,20 +203,28 @@ async function fetchShopifyOrders(dateFrom, dateTo) {
   let pages = 0;
 
   while (hasNextPage && pages < 20) {
-    const response = await axios.post(
-      endpoint,
-      {
-        query: ORDERS_QUERY,
-        variables: { first: 250, query: searchQuery, after },
-      },
-      {
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
+    let response;
+    try {
+      response = await axios.post(
+        endpoint,
+        {
+          query: ORDERS_QUERY,
+          variables: { first: 250, query: searchQuery, after },
         },
-        timeout: 15000,
-      }
-    );
+        {
+          headers: {
+            "X-Shopify-Access-Token": token,
+            "Content-Type": "application/json",
+          },
+          timeout: 15000,
+        }
+      );
+    } catch (err) {
+      const detail = err.response
+        ? `HTTP ${err.response.status}: ${JSON.stringify(err.response.data)}`
+        : err.message;
+      throw new Error(`Shopify ORDERS request mislukt — ${detail}`);
+    }
 
     if (response.data.errors) {
       throw new Error(
