@@ -11,6 +11,18 @@ const RANGES = [
   { label: "30d", value: "30d" },
 ];
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
+
 const ui = {
   page: {
     padding: "28px 36px",
@@ -42,6 +54,7 @@ export default function Dashboard() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [refreshedAt, setRefreshedAt] = useState("");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (dateRange === "custom" && (!customFrom || !customTo)) return;
@@ -119,7 +132,16 @@ export default function Dashboard() {
   if (!data) return <div style={ui.page}>No data</div>;
 
   return (
-    <div style={{ ...ui.page, display: "flex", gap: "20px", alignItems: "stretch" }}>
+    <div
+      style={{
+        ...ui.page,
+        padding: isMobile ? "16px 14px" : ui.page.padding,
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        gap: "20px",
+        alignItems: "stretch",
+      }}
+    >
       <SaleNotifier />
       {/* Hoofdkolom */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -208,13 +230,13 @@ export default function Dashboard() {
       </div>
 
       {/* Summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "16px" }}>
         <Card label="Total Orders" value={data.totalOrders || 0} change={data.ordersChange} />
         <Card label="Net Profit" value={formatCurrency(data.netProfit)} change={data.profitChange} accent={data.netProfit >= 0 ? "#16a34a" : "#dc2626"} />
         <Card label="Revenue" value={formatCurrency(data.revenue)} change={data.revenueChange} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "20px" }}>
         <Card small label="Profit %" value={`${(data.profitPercent || 0).toFixed(1)}%`} change={data.profitPercentChange} />
         <Card small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
         <Card small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
@@ -223,9 +245,10 @@ export default function Dashboard() {
       </div>
 
       {/* Products */}
-      <div style={{ ...ui.card, padding: "24px" }}>
+      <div style={{ ...ui.card, padding: isMobile ? "16px 12px" : "24px" }}>
         <h2 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: 600, color: "#334155" }}>Products — Ranked by Profit</h2>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", minWidth: isMobile ? "640px" : "auto", borderCollapse: "collapse", fontSize: "13px" }}>
           <thead>
             <tr>
               {["Product", "ROAS", "Orders", "Revenue", "COGS", "Ad spend", "Profit"].map((h, i) => (
@@ -292,14 +315,15 @@ export default function Dashboard() {
             )}
           </tbody>
         </table>
+        </div>
         <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
           Ad spend gematcht op campagnenaam • product profit = revenue − COGS − matched ad spend
         </p>
       </div>
       </div>
 
-      {/* Rechterkolom: recente aankopen */}
-      <RecentActivity formatCurrency={formatCurrency} />
+      {/* Rechterkolom: recente aankopen (op mobiel onderaan) */}
+      <RecentActivity formatCurrency={formatCurrency} isMobile={isMobile} />
     </div>
   );
 }
@@ -317,7 +341,7 @@ function timeAgo(iso) {
   return mo === 1 ? "1 maand geleden" : `${mo} maanden geleden`;
 }
 
-function RecentActivity({ formatCurrency }) {
+function RecentActivity({ formatCurrency, isMobile }) {
   const [orders, setOrders] = useState([]);
   const [, setTick] = useState(0);
 
@@ -343,13 +367,14 @@ function RecentActivity({ formatCurrency }) {
     <div
       style={{
         ...ui.card,
-        width: "272px",
+        width: isMobile ? "100%" : "272px",
+        boxSizing: "border-box",
         flexShrink: 0,
         padding: "20px 16px",
         alignSelf: "stretch",
-        position: "sticky",
+        position: isMobile ? "static" : "sticky",
         top: "28px",
-        maxHeight: "calc(100vh - 56px)",
+        maxHeight: isMobile ? "420px" : "calc(100vh - 56px)",
         overflowY: "auto",
       }}
     >
