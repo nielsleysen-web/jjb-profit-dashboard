@@ -1,5 +1,5 @@
 // pages/dashboard.js
-// JJB Profit Dashboard — frontend (EUR, echte data, Profit Per Day chart)
+// JJB Profit Dashboard — modern design: line chart bovenaan, productfoto's, EUR
 
 import { useState, useEffect } from "react";
 
@@ -10,6 +10,29 @@ const RANGES = [
   { label: "14d", value: "14d" },
   { label: "30d", value: "30d" },
 ];
+
+const ui = {
+  page: {
+    padding: "28px 36px",
+    background: "#f7f8fa",
+    minHeight: "100vh",
+    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+    color: "#0f172a",
+  },
+  card: {
+    background: "#ffffff",
+    borderRadius: "16px",
+    border: "1px solid #eceef2",
+    boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+  },
+  label: {
+    fontSize: "11px",
+    fontWeight: 600,
+    color: "#8a92a3",
+    textTransform: "uppercase",
+    letterSpacing: "0.7px",
+  },
+};
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
@@ -54,43 +77,63 @@ export default function Dashboard() {
       maximumFractionDigits: 2,
     }).format(value || 0);
 
-  const changeLabel = (change) => {
-    const v = change || 0;
+  const Change = ({ value, muted }) => {
+    const v = value || 0;
     const up = v >= 0;
+    if (muted) return <span style={{ fontSize: "12px", color: "#8a92a3" }}>{muted}</span>;
     return (
-      <span style={{ color: up ? "#10b981" : "#ef4444" }}>
-        {up ? "↑" : "↓"} {Math.abs(v).toFixed(1)}% vs. vorige periode
+      <span
+        style={{
+          fontSize: "12px",
+          fontWeight: 600,
+          color: up ? "#16a34a" : "#dc2626",
+          background: up ? "#f0fdf4" : "#fef2f2",
+          padding: "2px 8px",
+          borderRadius: "999px",
+        }}
+      >
+        {up ? "↗" : "↘"} {Math.abs(v).toFixed(1)}%
       </span>
     );
   };
 
   if (loading)
-    return <div style={{ padding: "40px", textAlign: "center" }}>Loading...</div>;
+    return (
+      <div style={{ ...ui.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ color: "#8a92a3" }}>Loading…</span>
+      </div>
+    );
   if (error)
-    return <div style={{ padding: "40px", color: "#dc2626" }}>Error: {error}</div>;
-  if (!data) return <div style={{ padding: "40px" }}>No data</div>;
+    return (
+      <div style={ui.page}>
+        <div style={{ ...ui.card, padding: "24px", color: "#dc2626" }}>Error: {error}</div>
+      </div>
+    );
+  if (!data) return <div style={ui.page}>No data</div>;
 
   return (
-    <div style={{ padding: "32px", background: "#f9fafb", minHeight: "100vh", fontFamily: "system-ui, sans-serif" }}>
+    <div style={ui.page}>
       {/* Header */}
-      <div style={{ marginBottom: "32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
-          <h1 style={{ margin: "0 0 8px 0", fontSize: "32px", fontWeight: "700", color: "#1f2937" }}>Dashboard</h1>
-          <p style={{ margin: 0, fontSize: "12px", color: "#6b7280" }}>refreshed {refreshedAt}</p>
+          <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>Dashboard</h1>
+          <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>refreshed {refreshedAt}</p>
         </div>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "4px", background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "4px" }}>
           {RANGES.map(({ label, value }) => (
             <button
               key={value}
               onClick={() => setDateRange(value)}
               style={{
-                padding: "6px 12px",
-                background: dateRange === value ? "#3b82f6" : "white",
-                color: dateRange === value ? "white" : "#6b7280",
-                border: "1px solid #e5e7eb",
-                borderRadius: "4px",
+                padding: "7px 14px",
+                background: dateRange === value ? "#0f172a" : "transparent",
+                color: dateRange === value ? "#ffffff" : "#64748b",
+                border: "none",
+                borderRadius: "9px",
                 cursor: "pointer",
-                fontSize: "12px",
+                fontSize: "12.5px",
+                fontWeight: 600,
+                transition: "all 0.15s",
               }}
             >
               {label}
@@ -99,80 +142,109 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Summary Cards Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
-        <Card label="Total Orders" value={data.totalOrders || 0} sub={changeLabel(data.ordersChange)} />
-        <Card
-          label="Net Profit"
-          value={formatCurrency(data.netProfit)}
-          sub={changeLabel(data.profitChange)}
-          highlight={data.netProfit >= 0 ? "#10b981" : "#ef4444"}
-        />
-        <Card label="Revenue" value={formatCurrency(data.revenue)} sub={changeLabel(data.revenueChange)} />
+      {/* ===== PROFIT PER DAY — bovenaan ===== */}
+      <div style={{ ...ui.card, padding: "24px 24px 12px 24px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span style={{ fontSize: "14px", fontWeight: 600, color: "#334155" }}>Profit Per Day</span>
+              <Change value={data.profitChange} />
+            </div>
+            <div style={{ fontSize: "30px", fontWeight: 700, letterSpacing: "-0.5px", marginTop: "6px", color: data.netProfit >= 0 ? "#0f172a" : "#dc2626" }}>
+              {formatCurrency(data.netProfit)}
+            </div>
+          </div>
+          <span style={{ fontSize: "12px", color: "#8a92a3" }}>revenue − COGS − fees − ad spend</span>
+        </div>
+        <ProfitLineChart days={data.profitPerDay || []} formatCurrency={formatCurrency} />
       </div>
 
-      {/* Second Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "24px" }}>
-        <Card small label="Profit %" value={`${(data.profitPercent || 0).toFixed(1)}%`} sub={changeLabel(data.profitPercentChange)} />
-        <Card small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub={<span style={{ color: "#6b7280" }}>revenue / ad spend</span>} />
-        <Card small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} sub={changeLabel(data.aovChange)} />
-        <Card
-          small
-          label="COGS + Fees"
-          value={formatCurrency(data.cogsAndFees)}
-          sub={<span style={{ color: "#6b7280" }}>COGS {formatCurrency(data.cogs)} · fees {formatCurrency(data.fees)}</span>}
-        />
-        <Card
-          small
-          label="Ad Spend (Meta)"
-          value={formatCurrency(data.adSpend)}
-          sub={<span style={{ color: "#6b7280" }}>{(data.adSpendPercent || 0).toFixed(1)}% van revenue</span>}
-        />
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "16px" }}>
+        <Card label="Total Orders" value={data.totalOrders || 0} change={data.ordersChange} />
+        <Card label="Net Profit" value={formatCurrency(data.netProfit)} change={data.profitChange} accent={data.netProfit >= 0 ? "#16a34a" : "#dc2626"} />
+        <Card label="Revenue" value={formatCurrency(data.revenue)} change={data.revenueChange} />
       </div>
 
-      {/* Profit Per Day Chart */}
-      <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #e5e7eb", marginBottom: "24px" }}>
-        <h2 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: "600", color: "#1f2937" }}>Profit Per Day</h2>
-        <ProfitChart days={data.profitPerDay || []} formatCurrency={formatCurrency} />
-        <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
-          Profit = revenue − COGS − fees − ad spend, per dag
-        </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "16px", marginBottom: "20px" }}>
+        <Card small label="Profit %" value={`${(data.profitPercent || 0).toFixed(1)}%`} change={data.profitPercentChange} />
+        <Card small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
+        <Card small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
+        <Card small label="COGS + Fees" value={formatCurrency(data.cogsAndFees)} sub={`COGS ${formatCurrency(data.cogs)} · fees ${formatCurrency(data.fees)}`} />
+        <Card small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% van revenue`} />
       </div>
 
-      {/* Products Table */}
-      <div style={{ background: "white", padding: "24px", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
-        <h2 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: "600", color: "#1f2937" }}>Products — Ranked by Profit</h2>
+      {/* Products */}
+      <div style={{ ...ui.card, padding: "24px" }}>
+        <h2 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: 600, color: "#334155" }}>Products — Ranked by Profit</h2>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
           <thead>
-            <tr style={{ borderBottom: "1px solid #e5e7eb", background: "#f9fafb" }}>
-              {["Product", "ROAS", "Orders", "Revenue", "COGS", "Ad spend", "Profit"].map((h) => (
-                <th key={h} style={{ padding: "12px", textAlign: "left", fontWeight: "600", color: "#374151" }}>{h}</th>
+            <tr>
+              {["Product", "ROAS", "Orders", "Revenue", "COGS", "Ad spend", "Profit"].map((h, i) => (
+                <th
+                  key={h}
+                  style={{
+                    padding: "10px 12px",
+                    textAlign: i === 0 ? "left" : "right",
+                    ...ui.label,
+                    borderBottom: "1px solid #eceef2",
+                  }}
+                >
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {data.products && data.products.length > 0 ? (
               data.products.map((product, idx) => (
-                <tr key={idx} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "12px", color: "#1f2937", fontWeight: "500" }}>{product.name}</td>
-                  <td style={{ padding: "12px", color: "#1f2937" }}>{product.roas != null ? product.roas.toFixed(2) : "—"}</td>
-                  <td style={{ padding: "12px", color: "#1f2937" }}>{product.orders || 0}</td>
-                  <td style={{ padding: "12px", color: "#1f2937" }}>{formatCurrency(product.revenue)}</td>
-                  <td style={{ padding: "12px", color: "#1f2937" }}>{formatCurrency(product.cogs)}</td>
-                  <td style={{ padding: "12px", color: "#1f2937" }}>{product.adSpend > 0 ? formatCurrency(product.adSpend) : "—"}</td>
-                  <td style={{ padding: "12px", fontWeight: "600", color: product.profit >= 0 ? "#10b981" : "#ef4444" }}>
-                    {formatCurrency(product.profit)}
+                <tr key={idx} style={{ borderBottom: idx < data.products.length - 1 ? "1px solid #f4f5f7" : "none" }}>
+                  <td style={{ padding: "10px 12px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      {product.image ? (
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2", background: "#f7f8fa" }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "38px",
+                            height: "38px",
+                            borderRadius: "10px",
+                            background: "#f1f5f9",
+                            border: "1px solid #eceef2",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "14px",
+                            fontWeight: 600,
+                            color: "#94a3b8",
+                          }}
+                        >
+                          {product.name?.charAt(0) || "?"}
+                        </div>
+                      )}
+                      <span style={{ fontWeight: 600, color: "#0f172a" }}>{product.name}</span>
+                    </div>
                   </td>
+                  <td style={cellR}>{product.roas != null ? product.roas.toFixed(2) : "—"}</td>
+                  <td style={cellR}>{product.orders || 0}</td>
+                  <td style={cellR}>{formatCurrency(product.revenue)}</td>
+                  <td style={cellR}>{formatCurrency(product.cogs)}</td>
+                  <td style={cellR}>{product.adSpend > 0 ? formatCurrency(product.adSpend) : "—"}</td>
+                  <td style={{ ...cellR, fontWeight: 700, color: product.profit >= 0 ? "#16a34a" : "#dc2626" }}>{formatCurrency(product.profit)}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="7" style={{ padding: "24px", textAlign: "center", color: "#9ca3af" }}>No sales in this period.</td>
+                <td colSpan="7" style={{ padding: "32px", textAlign: "center", color: "#94a3b8" }}>No sales in this period.</td>
               </tr>
             )}
           </tbody>
         </table>
-        <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "#6b7280" }}>
+        <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
           Ad spend gematcht op campagnenaam • product profit = revenue − COGS − matched ad spend
         </p>
       </div>
@@ -180,73 +252,198 @@ export default function Dashboard() {
   );
 }
 
-function Card({ label, value, sub, highlight, small }) {
+const cellR = { padding: "10px 12px", textAlign: "right", color: "#334155", fontVariantNumeric: "tabular-nums" };
+
+function Card({ label, value, change, sub, accent, small }) {
   return (
-    <div
-      style={{
-        background: "white",
-        padding: small ? "20px" : "24px",
-        borderRadius: "8px",
-        border: highlight ? `2px solid ${highlight}` : "1px solid #e5e7eb",
-      }}
-    >
-      <div style={{ fontSize: small ? "11px" : "12px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: small ? "8px" : "12px" }}>
-        {label}
-      </div>
-      <div style={{ fontSize: small ? "24px" : "32px", fontWeight: "700", color: highlight || "#1f2937", marginBottom: small ? "4px" : "8px" }}>
+    <div style={{ ...ui.card, padding: small ? "18px 20px" : "22px 24px" }}>
+      <div style={{ ...ui.label, marginBottom: small ? "8px" : "10px" }}>{label}</div>
+      <div
+        style={{
+          fontSize: small ? "22px" : "28px",
+          fontWeight: 700,
+          letterSpacing: "-0.5px",
+          color: accent || "#0f172a",
+          marginBottom: "6px",
+        }}
+      >
         {value}
       </div>
-      <div style={{ fontSize: small ? "11px" : "12px" }}>{sub}</div>
+      {sub != null ? (
+        <span style={{ fontSize: "12px", color: "#8a92a3" }}>{sub}</span>
+      ) : (
+        <span>
+          {(() => {
+            const v = change || 0;
+            const up = v >= 0;
+            return (
+              <span
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  color: up ? "#16a34a" : "#dc2626",
+                  background: up ? "#f0fdf4" : "#fef2f2",
+                  padding: "2px 8px",
+                  borderRadius: "999px",
+                }}
+              >
+                {up ? "↗" : "↘"} {Math.abs(v).toFixed(1)}%
+              </span>
+            );
+          })()}
+          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "6px" }}>vs. vorige periode</span>
+        </span>
+      )}
     </div>
   );
 }
 
-function ProfitChart({ days, formatCurrency }) {
+/* ---------- moderne line chart (smooth, gradient, hover) ---------- */
+
+function ProfitLineChart({ days, formatCurrency }) {
+  const [hover, setHover] = useState(null);
+
   if (!days.length) {
     return (
-      <div style={{ height: "300px", background: "#f9fafb", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "#9ca3af", margin: 0 }}>Geen data voor deze periode</p>
+      <div style={{ height: "260px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ color: "#94a3b8", fontSize: "13px" }}>Geen data voor deze periode</span>
       </div>
     );
   }
 
-  const maxAbs = Math.max(...days.map((d) => Math.abs(d.profit)), 1);
-  const H = 260; // chart hoogte in px
-  const zero = H / 2;
+  const W = 1000;
+  const H = 260;
+  const PAD = { top: 16, right: 16, bottom: 28, left: 16 };
+  const iw = W - PAD.left - PAD.right;
+  const ih = H - PAD.top - PAD.bottom;
+
+  const profits = days.map((d) => d.profit);
+  const min = Math.min(0, ...profits);
+  const max = Math.max(0, ...profits);
+  const span = max - min || 1;
+
+  const x = (i) => PAD.left + (days.length === 1 ? iw / 2 : (i / (days.length - 1)) * iw);
+  const y = (v) => PAD.top + ih - ((v - min) / span) * ih;
+  const zeroY = y(0);
+
+  const pts = days.map((d, i) => [x(i), y(d.profit)]);
+
+  // Smooth cubic bezier pad
+  const linePath = pts.reduce((acc, [px, py], i) => {
+    if (i === 0) return `M ${px},${py}`;
+    const [prevX, prevY] = pts[i - 1];
+    const cx = (prevX + px) / 2;
+    return `${acc} C ${cx},${prevY} ${cx},${py} ${px},${py}`;
+  }, "");
+
+  const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${zeroY} L ${pts[0][0]},${zeroY} Z`;
+
+  const dateLabel = (dateStr) =>
+    new Date(`${dateStr}T12:00:00Z`).toLocaleDateString("nl-BE", { day: "numeric", month: "short" });
+
+  const handleMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = ((e.clientX - rect.left) / rect.width) * W;
+    let nearest = 0;
+    let best = Infinity;
+    pts.forEach(([px], i) => {
+      const dist = Math.abs(px - relX);
+      if (dist < best) {
+        best = dist;
+        nearest = i;
+      }
+    });
+    setHover(nearest);
+  };
+
+  const labelStep = Math.max(1, Math.ceil(days.length / 10));
 
   return (
-    <div style={{ height: `${H + 40}px`, display: "flex", alignItems: "flex-end", gap: "4px", padding: "0 4px" }}>
-      {days.map((d) => {
-        const barH = Math.max((Math.abs(d.profit) / maxAbs) * (H / 2 - 10), 2);
-        const positive = d.profit >= 0;
-        const dateLabel = new Date(`${d.date}T12:00:00Z`).toLocaleDateString("nl-BE", { day: "numeric", month: "short" });
-        return (
-          <div
-            key={d.date}
-            title={`${dateLabel}\nProfit: ${formatCurrency(d.profit)}\nRevenue: ${formatCurrency(d.revenue)}\nCOGS: ${formatCurrency(d.cogs)}\nFees: ${formatCurrency(d.fees)}\nAd spend: ${formatCurrency(d.adSpend)}\nOrders: ${d.orders}`}
-            style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", cursor: "default" }}
-          >
-            <div style={{ height: `${H}px`, width: "100%", position: "relative" }}>
-              <div
-                style={{
-                  position: "absolute",
-                  left: "10%",
-                  width: "80%",
-                  background: positive ? "#10b981" : "#ef4444",
-                  borderRadius: "3px",
-                  height: `${barH}px`,
-                  top: positive ? `${zero - barH}px` : `${zero}px`,
-                }}
-              />
-              {/* nullijn */}
-              <div style={{ position: "absolute", top: `${zero}px`, left: 0, right: 0, borderTop: "1px solid #e5e7eb" }} />
-            </div>
-            <div style={{ fontSize: "10px", color: "#9ca3af", marginTop: "6px", whiteSpace: "nowrap" }}>
-              {days.length <= 16 ? dateLabel : dateLabel.split(" ")[0]}
-            </div>
+    <div style={{ position: "relative" }}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ width: "100%", height: "auto", display: "block", cursor: "crosshair" }}
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHover(null)}
+      >
+        <defs>
+          <linearGradient id="profitFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {/* horizontale gridlijnen */}
+        {[0.25, 0.5, 0.75].map((f) => (
+          <line
+            key={f}
+            x1={PAD.left}
+            x2={W - PAD.right}
+            y1={PAD.top + ih * f}
+            y2={PAD.top + ih * f}
+            stroke="#f1f3f6"
+            strokeWidth="1"
+          />
+        ))}
+
+        {/* nullijn */}
+        <line x1={PAD.left} x2={W - PAD.right} y1={zeroY} y2={zeroY} stroke="#e2e6ec" strokeWidth="1" />
+
+        {/* area + lijn */}
+        <path d={areaPath} fill="url(#profitFill)" />
+        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+
+        {/* hover indicator */}
+        {hover != null && (
+          <g>
+            <line x1={pts[hover][0]} x2={pts[hover][0]} y1={PAD.top} y2={PAD.top + ih} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3" />
+            <circle cx={pts[hover][0]} cy={pts[hover][1]} r="5" fill="#ffffff" stroke="#3b82f6" strokeWidth="2.5" />
+          </g>
+        )}
+
+        {/* x-as labels */}
+        {days.map((d, i) =>
+          i % labelStep === 0 ? (
+            <text key={d.date} x={x(i)} y={H - 8} textAnchor="middle" fontSize="11" fill="#94a3b8" fontFamily="inherit">
+              {dateLabel(d.date)}
+            </text>
+          ) : null
+        )}
+      </svg>
+
+      {/* tooltip */}
+      {hover != null && (
+        <div
+          style={{
+            position: "absolute",
+            left: `${(pts[hover][0] / W) * 100}%`,
+            top: "0px",
+            transform: `translateX(${pts[hover][0] > W * 0.75 ? "-105%" : "8px"})`,
+            background: "#0f172a",
+            color: "#ffffff",
+            borderRadius: "10px",
+            padding: "10px 12px",
+            fontSize: "12px",
+            lineHeight: 1.7,
+            pointerEvents: "none",
+            boxShadow: "0 8px 24px rgba(15,23,42,0.18)",
+            whiteSpace: "nowrap",
+            zIndex: 10,
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: "2px" }}>{dateLabel(days[hover].date)}</div>
+          <div>
+            Profit:{" "}
+            <b style={{ color: days[hover].profit >= 0 ? "#4ade80" : "#f87171" }}>{formatCurrency(days[hover].profit)}</b>
           </div>
-        );
-      })}
+          <div style={{ color: "#cbd5e1" }}>Revenue: {formatCurrency(days[hover].revenue)}</div>
+          <div style={{ color: "#cbd5e1" }}>Ad spend: {formatCurrency(days[hover].adSpend)}</div>
+          <div style={{ color: "#cbd5e1" }}>
+            COGS: {formatCurrency(days[hover].cogs)} · Fees: {formatCurrency(days[hover].fees)}
+          </div>
+          <div style={{ color: "#cbd5e1" }}>Orders: {days[hover].orders}</div>
+        </div>
+      )}
     </div>
   );
 }
