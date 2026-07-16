@@ -7,6 +7,18 @@ import { useState, useEffect, useRef } from "react";
 const FEE_PERCENT = 0.029;
 const FEE_FIXED = 0.3;
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
+
 const ui = {
   page: {
     padding: "28px 36px",
@@ -50,6 +62,7 @@ export default function ProductEconomics() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState({}); // { productId: { invItemId: "12.50" } }
   const [saving, setSaving] = useState(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     loadData();
@@ -136,9 +149,9 @@ export default function ProductEconomics() {
     );
 
   return (
-    <div style={ui.page}>
+    <div style={{ ...ui.page, padding: isMobile ? "16px 14px" : ui.page.padding }}>
       {/* Header */}
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>Product Economics</h1>
           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
@@ -259,7 +272,8 @@ const td = { padding: "9px 10px", textAlign: "right", fontSize: "13px", color: "
 
 function VariantTable({ product, editing, onChange }) {
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+    <table style={{ width: "100%", minWidth: "640px", borderCollapse: "collapse" }}>
       <thead>
         <tr>
           <th style={{ ...th, textAlign: "left" }}>Variant</th>
@@ -317,6 +331,7 @@ function VariantTable({ product, editing, onChange }) {
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 
