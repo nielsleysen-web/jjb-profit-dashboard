@@ -27,7 +27,8 @@ async function getShopifyToken(storeUrl) {
   return tokenCache.token;
 }
 
-const QUERY = `
+// Volledige query (met klantgegevens — vereist read_customers scope)
+const QUERY_FULL = `
   query LatestOrders($first: Int!) {
     orders(first: $first, sortKey: CREATED_AT, reverse: true) {
       nodes {
@@ -37,6 +38,28 @@ const QUERY = `
         currentTotalPriceSet { shopMoney { amount } }
         customer { firstName lastName }
         shippingAddress { city country }
+        lineItems(first: 5) {
+          nodes {
+            title
+            quantity
+            image { url(transform: {maxWidth: 120, maxHeight: 120}) }
+            product { title }
+          }
+        }
+      }
+    }
+  }
+`;
+
+// Fallback zonder klantgegevens (werkt met alleen read_orders + read_products)
+const QUERY_BASIC = `
+  query LatestOrdersBasic($first: Int!) {
+    orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+      nodes {
+        id
+        name
+        createdAt
+        currentTotalPriceSet { shopMoney { amount } }
         lineItems(first: 5) {
           nodes {
             title
@@ -60,18 +83,27 @@ export default async function handler(req, res) {
   try {
     const storeUrl = process.env.SHOPIFY_STORE_URL;
     const token = await getShopifyToken(storeUrl);
+    const endpoint = `https://${storeUrl}/admin/api/2025-01/graphql.json`;
+    const headers = { "X-Shopify-Access-Token": token, "Content-Type": "application/json" };
 
-    const response = await axios.post(
-      `https://${storeUrl}/admin/api/2025-01/graphql.json`,
-      { query: QUERY, variables: { first: 20 } },
-      {
-        headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" },
-        timeout: 15000,
-      }
+    // Probeer eerst mét klantgegevens; als de scope ontbreekt, val terug
+    // op de basisversie zodat de sales sowieso getoond worden.
+    let response = await axios.post(
+      endpoint,
+      { query: QUERY_FULL, variables: { first: 20 } },
+      { headers, timeout: 15000 }
     );
 
-    if (response.data.errors) {
-      throw new Error(JSON.stringify(response.data.errors));
+    if (response.data.errors && !response.data.data?.orders) {
+      console.warn("Latest orders: klantgegevens niet beschikbaar, fallback zonder customer. Errors:", JSON.stringify(response.data.errors));
+      response = await axios.post(
+        endpoint,
+        { query: QUERY_BASIC, variables: { first: 20 } },
+        { headers, timeout: 15000 }
+      );
+      if (response.data.errors && !response.data.data?.orders) {
+        throw new Error(JSON.stringify(response.data.errors));
+      }
     }
 
     const orders = response.data.data.orders.nodes.map((o) => {
