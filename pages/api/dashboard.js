@@ -2,10 +2,14 @@
 // JJB Profit Dashboard — REAL data endpoint (Shopify + Meta)
 //
 // Env vars (Vercel → Settings → Environment Variables):
-//   SHOPIFY_STORE_URL    = your-store.myshopify.com  (zonder https://)
-//   SHOPIFY_ACCESS_TOKEN = shpat_...                 (Admin API token, GEEN Client ID!)
-//   META_ACCESS_TOKEN    = EAAW...
-//   META_AD_ACCOUNT_IDS  = 1729,2349                 (volledige act_ nummers, komma-gescheiden)
+//   SHOPIFY_STORE_URL      = your-store.myshopify.com  (zonder https://)
+//   SHOPIFY_CLIENT_ID      = uit Dev Dashboard → app → Settings
+//   SHOPIFY_CLIENT_SECRET  = uit Dev Dashboard → app → Settings
+//   META_ACCESS_TOKEN      = EAAW...
+//   META_AD_ACCOUNT_IDS    = 1729,2349                 (volledige act_ nummers, komma-gescheiden)
+//
+// Auth: client credentials grant (Dev Dashboard app). De code haalt zelf een
+// access token op en vernieuwt het automatisch voor het na 24u vervalt.
 
 import axios from "axios";
 
@@ -131,15 +135,64 @@ const ORDERS_QUERY = `
   }
 `;
 
-async function fetchShopifyOrders(dateFrom, dateTo) {
-  const storeUrl = process.env.SHOPIFY_STORE_URL;
-  const token = process.env.SHOPIFY_ACCESS_TOKEN;
+// Token cache (blijft geldig binnen een warme serverless instance)
+let shopifyTokenCache = { token: null, expiresAt: 0 };
 
-  if (!storeUrl || !token) {
+async function getShopifyToken(storeUrl) {
+  // 5 min veiligheidsmarge voor de 24u-vervaltijd
+  if (shopifyTokenCache.token && Date.now() < shopifyTokenCache.expiresAt - 300000) {
+    return shopifyTokenCache.token;
+  }
+
+  const clientId = process.env.SHOPIFY_CLIENT_ID;
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
     throw new Error(
-      "SHOPIFY_STORE_URL of SHOPIFY_ACCESS_TOKEN ontbreekt in environment variables"
+      "SHOPIFY_CLIENT_ID of SHOPIFY_CLIENT_SECRET ontbreekt in environment variables"
     );
   }
+
+  const params = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
+  let response;
+  try {
+    response = await axios.post(
+      `https://${storeUrl}/admin/oauth/access_token`,
+      params.toString(),
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        timeout: 15000,
+      }
+    );
+  } catch (err) {
+    const detail = err.response
+      ? `HTTP ${err.response.status}: ${JSON.stringify(err.response.data)}`
+      : err.message;
+    throw new Error(`Shopify TOKEN request mislukt — ${detail}`);
+  }
+
+  const { access_token, expires_in } = response.data;
+  if (!access_token) {
+    throw new Error("Shopify token request gaf geen access_token terug");
+  }
+
+  shopifyTokenCache = {
+    token: access_token,
+    expiresAt: Date.now() + (expires_in || 86399) * 1000,
+  };
+  return access_token;
+}
+
+async function fetchShopifyOrders(dateFrom, dateTo) {
+  const storeUrl = process.env.SHOPIFY_STORE_URL;
+  if (!storeUrl) {
+    throw new Error("SHOPIFY_STORE_URL ontbreekt in environment variables");
+  }
+  const token = await getShopifyToken(storeUrl);
 
   const endpoint = `https://${storeUrl}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
   const searchQuery = `created_at:>='${dateFrom}T00:00:00+02:00' AND created_at:<='${dateTo}T23:59:59+02:00'`;
@@ -150,20 +203,28 @@ async function fetchShopifyOrders(dateFrom, dateTo) {
   let pages = 0;
 
   while (hasNextPage && pages < 20) {
-    const response = await axios.post(
-      endpoint,
-      {
-        query: ORDERS_QUERY,
-        variables: { first: 250, query: searchQuery, after },
-      },
-      {
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
+    let response;
+    try {
+      response = await axios.post(
+        endpoint,
+        {
+          query: ORDERS_QUERY,
+          variables: { first: 250, query: searchQuery, after },
         },
-        timeout: 15000,
-      }
-    );
+        {
+          headers: {
+            "X-Shopify-Access-Token": token,
+            "Content-Type": "application/json",
+          },
+          timeout: 15000,
+        }
+      );
+    } catch (err) {
+      const detail = err.response
+        ? `HTTP ${err.response.status}: ${JSON.stringify(err.response.data)}`
+        : err.message;
+      throw new Error(`Shopify ORDERS request mislukt — ${detail}`);
+    }
 
     if (response.data.errors) {
       throw new Error(
