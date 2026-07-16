@@ -145,13 +145,12 @@ export default function DailyOverview() {
               <th style={th()}>Ad Spend</th>
               <th style={th()}>Net Profit</th>
               <th style={th()}>Profit %</th>
-              <th style={th()}>AOV</th>
+              <th style={th()}>COGS</th>
             </tr>
           </thead>
           <tbody>
             {days.map((d, idx) => {
               const profitPct = d.revenue > 0 ? (d.profit / d.revenue) * 100 : 0;
-              const aov = d.orders > 0 ? d.revenue / d.orders : 0;
               const isToday = idx === 0 && dateRange !== "custom";
               return (
                 <tr
@@ -176,7 +175,7 @@ export default function DailyOverview() {
                   <td style={{ ...td, color: profitPct >= 0 ? "#16a34a" : "#dc2626" }}>
                     {d.revenue > 0 ? `${profitPct.toFixed(1)}%` : "—"}
                   </td>
-                  <td style={td}>{d.orders > 0 ? fmt(aov) : "—"}</td>
+                  <td style={td}>{d.cogs > 0 ? fmt(d.cogs) : "—"}</td>
                 </tr>
               );
             })}
@@ -195,7 +194,7 @@ export default function DailyOverview() {
                 <td style={{ ...td, fontWeight: 700 }}>{fmt(data.adSpend)}</td>
                 <td style={{ ...td, fontWeight: 700, color: data.netProfit >= 0 ? "#16a34a" : "#dc2626" }}>{fmt(data.netProfit)}</td>
                 <td style={{ ...td, fontWeight: 700 }}>{(data.profitPercent || 0).toFixed(1)}%</td>
-                <td style={{ ...td, fontWeight: 700 }}>{fmt(data.avgOrderValue)}</td>
+                <td style={{ ...td, fontWeight: 700 }}>{fmt(data.cogs)}</td>
               </tr>
             </tfoot>
           )}
