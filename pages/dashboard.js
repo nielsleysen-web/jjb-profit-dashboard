@@ -119,8 +119,10 @@ export default function Dashboard() {
   if (!data) return <div style={ui.page}>No data</div>;
 
   return (
-    <div style={ui.page}>
+    <div style={{ ...ui.page, display: "flex", gap: "20px", alignItems: "stretch" }}>
       <SaleNotifier />
+      {/* Hoofdkolom */}
+      <div style={{ flex: 1, minWidth: 0 }}>
       {/* Header */}
       <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
@@ -293,6 +295,113 @@ export default function Dashboard() {
         <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
           Ad spend gematcht op campagnenaam • product profit = revenue − COGS − matched ad spend
         </p>
+      </div>
+      </div>
+
+      {/* Rechterkolom: recente aankopen */}
+      <RecentActivity formatCurrency={formatCurrency} />
+    </div>
+  );
+}
+
+function timeAgo(iso) {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return "zojuist";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min geleden`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} uur geleden`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return d === 1 ? "1 dag geleden" : `${d} dagen geleden`;
+  const mo = Math.floor(d / 30);
+  return mo === 1 ? "1 maand geleden" : `${mo} maanden geleden`;
+}
+
+function RecentActivity({ formatCurrency }) {
+  const [orders, setOrders] = useState([]);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/latest-orders")
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success) setOrders(res.orders || []);
+        })
+        .catch(() => {});
+    load();
+    const iv = setInterval(load, 30000);
+    // "x min geleden" elke minuut verversen
+    const clock = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => {
+      clearInterval(iv);
+      clearInterval(clock);
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        ...ui.card,
+        width: "272px",
+        flexShrink: 0,
+        padding: "20px 16px",
+        alignSelf: "stretch",
+        position: "sticky",
+        top: "28px",
+        maxHeight: "calc(100vh - 56px)",
+        overflowY: "auto",
+      }}
+    >
+      <h2 style={{ margin: "0 0 14px 4px", fontSize: "14px", fontWeight: 700, color: "#0f172a" }}>
+        Recent activity
+      </h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        {orders.length === 0 && (
+          <p style={{ fontSize: "12px", color: "#94a3b8", textAlign: "center", padding: "16px 0" }}>
+            Nog geen aankopen
+          </p>
+        )}
+        {orders.map((order) => {
+          const item = order.items?.[0];
+          const extra = (order.items?.length || 0) - 1;
+          return (
+            <div
+              key={order.id}
+              style={{
+                display: "flex",
+                gap: "10px",
+                padding: "10px",
+                background: "#f8fafc",
+                borderRadius: "12px",
+                alignItems: "flex-start",
+              }}
+            >
+              {item?.image ? (
+                <img
+                  src={item.image}
+                  alt=""
+                  style={{ width: "34px", height: "34px", borderRadius: "8px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }}
+                />
+              ) : (
+                <div style={{ width: "34px", height: "34px", borderRadius: "8px", background: "#eef2f7", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>
+                  🛒
+                </div>
+              )}
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: "12.5px", color: "#334155", lineHeight: 1.45 }}>
+                  <b style={{ color: "#0f172a" }}>{order.customerFull || order.customer || "Iemand"}</b>{" "}
+                  kocht voor <b style={{ color: "#16a34a" }}>{formatCurrency(order.total)}</b>
+                </div>
+                <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {item ? `${item.quantity}× ${item.title}` : order.name}
+                  {extra > 0 ? ` +${extra}` : ""}
+                </div>
+                <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>{timeAgo(order.createdAt)}</div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -599,8 +708,8 @@ function RevenueChart({ chart, formatCurrency }) {
       >
         <defs>
           <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.08" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -623,13 +732,13 @@ function RevenueChart({ chart, formatCurrency }) {
 
         {/* area + lijn */}
         <path d={areaPath} fill="url(#revenueFill)" />
-        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" />
+        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" />
 
         {/* hover indicator */}
         {hover != null && (
           <g>
             <line x1={pts[hover][0]} x2={pts[hover][0]} y1={PAD.top} y2={PAD.top + ih} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3" />
-            <circle cx={pts[hover][0]} cy={pts[hover][1]} r="5" fill="#ffffff" stroke="#3b82f6" strokeWidth="2.5" />
+            <circle cx={pts[hover][0]} cy={pts[hover][1]} r="4" fill="#ffffff" stroke="#3b82f6" strokeWidth="1.5" />
           </g>
         )}
 
