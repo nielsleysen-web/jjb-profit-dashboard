@@ -1,7 +1,7 @@
 // pages/dashboard.js
 // JJB Profit Dashboard — modern design: line chart bovenaan, productfoto's, EUR
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const RANGES = [
   { label: "Today", value: "today" },
@@ -120,6 +120,7 @@ export default function Dashboard() {
 
   return (
     <div style={ui.page}>
+      <SaleNotifier />
       {/* Header */}
       <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
@@ -339,6 +340,167 @@ function Card({ label, value, change, sub, accent, small }) {
           <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "6px" }}>vs. vorige periode</span>
         </span>
       )}
+    </div>
+  );
+}
+
+/* ---------- realtime sale-notificaties (confetti + toast) ---------- */
+
+function fireConfetti() {
+  if (typeof document === "undefined") return;
+  const canvas = document.createElement("canvas");
+  canvas.style.cssText =
+    "position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9998;";
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+
+  const colors = ["#3b82f6", "#16a34a", "#f59e0b", "#ec4899", "#8b5cf6", "#ef4444", "#14b8a6"];
+  const parts = [];
+  for (let i = 0; i < 140; i++) {
+    const fromLeft = i % 2 === 0;
+    parts.push({
+      x: fromLeft ? -10 : canvas.width + 10,
+      y: canvas.height * (0.35 + Math.random() * 0.45),
+      vx: (fromLeft ? 1 : -1) * (4 + Math.random() * 8),
+      vy: -(6 + Math.random() * 8),
+      w: 6 + Math.random() * 6,
+      h: 3 + Math.random() * 4,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.3,
+    });
+  }
+
+  const start = Date.now();
+  const tick = () => {
+    const t = Date.now() - start;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of parts) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.25; // zwaartekracht
+      p.vx *= 0.99;
+      p.rot += p.vr;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = Math.max(0, 1 - t / 3000);
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    if (t < 3000) requestAnimationFrame(tick);
+    else canvas.remove();
+  };
+  requestAnimationFrame(tick);
+}
+
+function SaleNotifier() {
+  const [toasts, setToasts] = useState([]);
+  const seenRef = useRef(null);
+
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/latest-orders").then((r) => r.json());
+        if (!res.success || !Array.isArray(res.orders)) return;
+
+        // Eerste keer: alleen onthouden wat er al is (geen notificaties)
+        if (!seenRef.current) {
+          seenRef.current = new Set(res.orders.map((o) => o.id));
+          return;
+        }
+
+        const fresh = res.orders.filter((o) => !seenRef.current.has(o.id));
+        if (fresh.length === 0) return;
+
+        fireConfetti();
+        // Oudste eerst tonen
+        [...fresh].reverse().forEach((order, idx) => {
+          seenRef.current.add(order.id);
+          setTimeout(() => {
+            setToasts((t) => [...t, order]);
+            setTimeout(() => {
+              setToasts((t) => t.filter((x) => x.id !== order.id));
+            }, 9000);
+          }, idx * 600);
+        });
+      } catch {
+        /* stil falen, volgende poll probeert opnieuw */
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 20000); // elke 20 sec
+    return () => clearInterval(interval);
+  }, []);
+
+  if (toasts.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        bottom: "20px",
+        right: "20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        zIndex: 9999,
+      }}
+    >
+      {toasts.map((order) => {
+        const item = order.items?.[0];
+        const extra = (order.items?.length || 0) - 1;
+        const who = [order.customer, order.city, order.country].filter(Boolean);
+        return (
+          <div
+            key={order.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              background: "#ffffff",
+              border: "1px solid #eceef2",
+              borderRadius: "14px",
+              padding: "12px 16px",
+              boxShadow: "0 12px 32px rgba(15,23,42,0.16)",
+              minWidth: "300px",
+              maxWidth: "380px",
+              animation: "jjbSlideIn 0.35s ease-out",
+            }}
+          >
+            {item?.image ? (
+              <img
+                src={item.image}
+                alt=""
+                style={{ width: "44px", height: "44px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }}
+              />
+            ) : (
+              <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: "#f1f5f9", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                🛒
+              </div>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
+                🎉 Nieuwe sale — {item ? `${item.quantity}× ${item.title}` : order.name}
+                {extra > 0 ? ` +${extra}` : ""}
+              </div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+                {who.length > 0 ? `${who[0]}${who.length > 1 ? ` uit ${who.slice(1).join(", ")}` : ""}` : "Nieuwe bestelling"}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+      <style>{`
+        @keyframes jjbSlideIn {
+          from { transform: translateX(120%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
