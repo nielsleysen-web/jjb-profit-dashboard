@@ -209,20 +209,20 @@ export default function Dashboard() {
       </div>
 
       {/* ===== REVENUE CHART — bovenaan ===== */}
-      <div style={{ ...ui.card, padding: "20px 20px 8px 20px", marginBottom: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "4px" }}>
+      <div style={{ ...ui.card, padding: "16px 16px 6px 16px", marginBottom: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "2px" }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <span style={{ fontSize: "14px", fontWeight: 600, color: "#334155" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>
                 Revenue {data.revenueChart?.granularity === "hour" ? "Per Hour" : "Per Day"}
               </span>
               <Change value={data.revenueChange} />
             </div>
-            <div style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px", marginTop: "4px", color: "#0f172a" }}>
+            <div style={{ fontSize: "20px", fontWeight: 700, letterSpacing: "-0.4px", marginTop: "2px", color: "#0f172a" }}>
               {formatCurrency(data.revenue)}
             </div>
           </div>
-          <span style={{ fontSize: "12px", color: "#8a92a3" }}>
+          <span style={{ fontSize: "11px", color: "#8a92a3" }}>
             net profit: <b style={{ color: data.netProfit >= 0 ? "#16a34a" : "#dc2626" }}>{formatCurrency(data.netProfit)}</b>
           </span>
         </div>
@@ -671,8 +671,8 @@ function RevenueChart({ chart, formatCurrency }) {
   }
 
   const W = 1000;
-  const H = 190;
-  const PAD = { top: 12, right: 14, bottom: 26, left: 54 };
+  const H = 140;
+  const PAD = { top: 8, right: 12, bottom: 20, left: 44 };
   const iw = W - PAD.left - PAD.right;
   const ih = H - PAD.top - PAD.bottom;
 
@@ -749,7 +749,7 @@ function RevenueChart({ chart, formatCurrency }) {
               stroke={t === 0 ? "#e2e6ec" : "#f1f3f6"}
               strokeWidth="1"
             />
-            <text x={PAD.left - 8} y={y(t) + 3.5} textAnchor="end" fontSize="10.5" fill="#94a3b8" fontFamily="inherit">
+            <text x={PAD.left - 7} y={y(t) + 3} textAnchor="end" fontSize="8.5" fill="#a4adbd" fontFamily="inherit">
               {fmtAxis(t)}
             </text>
           </g>
@@ -757,20 +757,20 @@ function RevenueChart({ chart, formatCurrency }) {
 
         {/* area + lijn */}
         <path d={areaPath} fill="url(#revenueFill)" />
-        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" />
+        <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="1.2" strokeLinecap="round" />
 
         {/* hover indicator */}
         {hover != null && (
           <g>
             <line x1={pts[hover][0]} x2={pts[hover][0]} y1={PAD.top} y2={PAD.top + ih} stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3" />
-            <circle cx={pts[hover][0]} cy={pts[hover][1]} r="4" fill="#ffffff" stroke="#3b82f6" strokeWidth="1.5" />
+            <circle cx={pts[hover][0]} cy={pts[hover][1]} r="3" fill="#ffffff" stroke="#3b82f6" strokeWidth="1.2" />
           </g>
         )}
 
         {/* x-as labels */}
         {days.map((d, i) =>
           i % labelStep === 0 ? (
-            <text key={d.label} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10.5" fill="#94a3b8" fontFamily="inherit">
+            <text key={d.label} x={x(i)} y={H - 6} textAnchor="middle" fontSize="8.5" fill="#a4adbd" fontFamily="inherit">
               {dateLabel(d.label)}
             </text>
           ) : null
