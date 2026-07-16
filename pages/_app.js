@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: "📊" },
+  { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
+  { href: "/product-economics", label: "Product Economics", icon: "📦" },
+];
+
 export default function App({ Component, pageProps }) {
   const router = useRouter();
   const [authenticated, setAuthenticated] = useState(false);
@@ -36,9 +42,7 @@ export default function App({ Component, pageProps }) {
 
   if (loading) return null;
 
-  const isDashboard = router.pathname === "/dashboard";
-  const isProductEconomics = router.pathname === "/product-economics";
-  const requiresAuth = isDashboard || isProductEconomics;
+  const requiresAuth = NAV_ITEMS.some((item) => router.pathname === item.href);
 
   if (requiresAuth && !authenticated) {
     return (
@@ -47,21 +51,22 @@ export default function App({ Component, pageProps }) {
         justifyContent: "center",
         alignItems: "center",
         minHeight: "100vh",
-        background: "#f3f4f6",
-        fontFamily: "system-ui, sans-serif"
+        background: "#f7f8fa",
+        fontFamily: "Inter, system-ui, sans-serif"
       }}>
         <form onSubmit={handleLogin} style={{
           background: "white",
           padding: "40px",
-          borderRadius: "8px",
+          borderRadius: "18px",
           width: "100%",
           maxWidth: "400px",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.1)"
+          border: "1px solid #eceef2",
+          boxShadow: "0 4px 24px rgba(15,23,42,0.06)"
         }}>
-          <h1 style={{ margin: "0 0 8px 0", fontSize: "24px", color: "#1f2937" }}>
+          <h1 style={{ margin: "0 0 6px 0", fontSize: "22px", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.3px" }}>
             Just Jenny
           </h1>
-          <p style={{ margin: "0 0 24px 0", fontSize: "14px", color: "#6b7280" }}>
+          <p style={{ margin: "0 0 24px 0", fontSize: "13px", color: "#8a92a3" }}>
             Profit Dashboard
           </p>
           <input
@@ -72,16 +77,17 @@ export default function App({ Component, pageProps }) {
             autoFocus
             style={{
               width: "100%",
-              padding: "10px 12px",
-              border: "1px solid #d1d5db",
-              borderRadius: "6px",
+              padding: "11px 14px",
+              border: "1px solid #e2e6ec",
+              borderRadius: "10px",
               fontSize: "14px",
               marginBottom: "12px",
-              boxSizing: "border-box"
+              boxSizing: "border-box",
+              outline: "none"
             }}
           />
           {error && (
-            <p style={{ color: "#dc2626", fontSize: "13px", marginBottom: "12px", margin: "0 0 12px 0" }}>
+            <p style={{ color: "#dc2626", fontSize: "13px", margin: "0 0 12px 0" }}>
               {error}
             </p>
           )}
@@ -89,13 +95,13 @@ export default function App({ Component, pageProps }) {
             type="submit"
             style={{
               width: "100%",
-              padding: "10px 12px",
-              background: "#3b82f6",
+              padding: "11px 14px",
+              background: "#0f172a",
               color: "white",
               border: "none",
-              borderRadius: "6px",
+              borderRadius: "10px",
               fontSize: "14px",
-              fontWeight: "500",
+              fontWeight: 600,
               cursor: "pointer"
             }}
           >
@@ -107,77 +113,64 @@ export default function App({ Component, pageProps }) {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f9fafb", fontFamily: "system-ui, sans-serif" }}>
+    <div style={{ display: "flex", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif" }}>
       {/* Sidebar */}
       {requiresAuth && authenticated && (
         <div style={{
-          width: "120px",
+          width: "200px",
           background: "white",
-          borderRight: "1px solid #e5e7eb",
-          padding: "24px 0",
+          borderRight: "1px solid #eceef2",
+          padding: "24px 12px",
           display: "flex",
-          flexDirection: "column"
+          flexDirection: "column",
+          flexShrink: 0
         }}>
-          <div style={{ paddingLeft: "16px", marginBottom: "32px" }}>
-            <h2 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "#1f2937" }}>Just Jenny</h2>
-            <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#6b7280" }}>Profit</p>
+          <div style={{ paddingLeft: "12px", marginBottom: "28px" }}>
+            <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>Just Jenny</h2>
+            <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#8a92a3" }}>Profit Dashboard</p>
           </div>
-
-          <nav style={{ flex: 1 }}>
-            <Link href="/dashboard">
-              <a style={{
-                display: "block",
-                padding: "12px 16px",
-                background: isDashboard ? "#3b82f6" : "transparent",
-                color: isDashboard ? "white" : "#6b7280",
-                textDecoration: "none",
-                fontSize: "12px",
-                fontWeight: "500",
-                borderLeft: isDashboard ? "3px solid #3b82f6" : "3px solid transparent",
-                marginBottom: "8px"
-              }}>
-                📊 Dashboard
-              </a>
-            </Link>
-            <Link href="/product-economics">
-              <a style={{
-                display: "block",
-                padding: "12px 16px",
-                background: isProductEconomics ? "#3b82f6" : "transparent",
-                color: isProductEconomics ? "white" : "#6b7280",
-                textDecoration: "none",
-                fontSize: "12px",
-                fontWeight: "500",
-                borderLeft: isProductEconomics ? "3px solid #3b82f6" : "3px solid transparent"
-              }}>
-                📦 Product Economics
-              </a>
-            </Link>
+          <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+            {NAV_ITEMS.map((item) => {
+              const active = router.pathname === item.href;
+              return (
+                <Link key={item.href} href={item.href}>
+                  <a style={{
+                    display: "block",
+                    padding: "10px 12px",
+                    background: active ? "#0f172a" : "transparent",
+                    color: active ? "#ffffff" : "#64748b",
+                    textDecoration: "none",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    borderRadius: "10px"
+                  }}>
+                    {item.icon} {item.label}
+                  </a>
+                </Link>
+              );
+            })}
           </nav>
-
           <button
             onClick={handleLogout}
             style={{
-              padding: "12px 16px",
-              background: "#ef4444",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              fontSize: "12px",
-              cursor: "pointer",
-              margin: "0 16px"
+              padding: "10px 12px",
+              background: "#ffffff",
+              color: "#dc2626",
+              border: "1px solid #fecaca",
+              borderRadius: "10px",
+              fontSize: "12.5px",
+              fontWeight: 600,
+              cursor: "pointer"
             }}
           >
             Logout
           </button>
         </div>
       )}
-
       {/* Main Content */}
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <Component {...pageProps} />
       </div>
-
       <style jsx global>{`
         * {
           margin: 0;
@@ -185,8 +178,8 @@ export default function App({ Component, pageProps }) {
           box-sizing: border-box;
         }
         body {
-          font-family: system-ui, sans-serif;
-          background: #f9fafb;
+          font-family: Inter, system-ui, sans-serif;
+          background: #f7f8fa;
         }
         a {
           color: inherit;
