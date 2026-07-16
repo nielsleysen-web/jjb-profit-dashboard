@@ -1,6 +1,19 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
+import Head from "next/head";
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
@@ -14,6 +27,7 @@ export default function App({ Component, pageProps }) {
   const [loading, setLoading] = useState(true);
   const [passwordInput, setPasswordInput] = useState("");
   const [error, setError] = useState("");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     const isAuth = localStorage.getItem("jjb_auth") === "true";
@@ -113,9 +127,64 @@ export default function App({ Component, pageProps }) {
   }
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif" }}>
-      {/* Sidebar */}
-      {requiresAuth && authenticated && (
+    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif" }}>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+      </Head>
+      {/* Navigatie: sidebar op desktop, bovenbalk op mobiel */}
+      {requiresAuth && authenticated && (isMobile ? (
+        <div style={{
+          background: "white",
+          borderBottom: "1px solid #eceef2",
+          padding: "10px 14px",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          position: "sticky",
+          top: 0,
+          zIndex: 50
+        }}>
+          <h2 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#0f172a", flexShrink: 0 }}>Just Jenny</h2>
+          <nav style={{ display: "flex", gap: "4px", overflowX: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>
+            {NAV_ITEMS.map((item) => {
+              const active = router.pathname === item.href;
+              return (
+                <Link key={item.href} href={item.href}>
+                  <a style={{
+                    padding: "7px 10px",
+                    background: active ? "#0f172a" : "transparent",
+                    color: active ? "#ffffff" : "#64748b",
+                    textDecoration: "none",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    borderRadius: "9px",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0
+                  }}>
+                    {item.icon} {item.label}
+                  </a>
+                </Link>
+              );
+            })}
+          </nav>
+          <button
+            onClick={handleLogout}
+            style={{
+              padding: "7px 10px",
+              background: "#ffffff",
+              color: "#dc2626",
+              border: "1px solid #fecaca",
+              borderRadius: "9px",
+              fontSize: "11.5px",
+              fontWeight: 600,
+              cursor: "pointer",
+              flexShrink: 0
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      ) : (
         <div style={{
           width: "200px",
           background: "white",
@@ -166,7 +235,7 @@ export default function App({ Component, pageProps }) {
             Logout
           </button>
         </div>
-      )}
+      ))}
       {/* Main Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <Component {...pageProps} />
