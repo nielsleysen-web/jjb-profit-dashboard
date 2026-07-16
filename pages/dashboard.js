@@ -39,18 +39,25 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [dateRange, setDateRange] = useState("7d");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [refreshedAt, setRefreshedAt] = useState("");
 
   useEffect(() => {
+    if (dateRange === "custom" && (!customFrom || !customTo)) return;
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange]);
+  }, [dateRange, customFrom, customTo]);
 
   const fetchData = async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch(`/api/dashboard?range=${dateRange}`);
+      const url =
+        dateRange === "custom"
+          ? `/api/dashboard?range=custom&from=${customFrom}&to=${customTo}`
+          : `/api/dashboard?range=${dateRange}`;
+      const response = await fetch(url);
       const result = await response.json();
       if (!result.success) throw new Error(result.error);
       setData(result.data);
@@ -119,26 +126,60 @@ export default function Dashboard() {
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>Dashboard</h1>
           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>refreshed {refreshedAt}</p>
         </div>
-        <div style={{ display: "flex", gap: "4px", background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "4px" }}>
-          {RANGES.map(({ label, value }) => (
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "4px", background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "4px" }}>
+            {RANGES.map(({ label, value }) => (
+              <button
+                key={value}
+                onClick={() => setDateRange(value)}
+                style={{
+                  padding: "7px 14px",
+                  background: dateRange === value ? "#0f172a" : "transparent",
+                  color: dateRange === value ? "#ffffff" : "#64748b",
+                  border: "none",
+                  borderRadius: "9px",
+                  cursor: "pointer",
+                  fontSize: "12.5px",
+                  fontWeight: 600,
+                  transition: "all 0.15s",
+                }}
+              >
+                {label}
+              </button>
+            ))}
             <button
-              key={value}
-              onClick={() => setDateRange(value)}
+              onClick={() => setDateRange("custom")}
               style={{
                 padding: "7px 14px",
-                background: dateRange === value ? "#0f172a" : "transparent",
-                color: dateRange === value ? "#ffffff" : "#64748b",
+                background: dateRange === "custom" ? "#0f172a" : "transparent",
+                color: dateRange === "custom" ? "#ffffff" : "#64748b",
                 border: "none",
                 borderRadius: "9px",
                 cursor: "pointer",
                 fontSize: "12.5px",
                 fontWeight: 600,
-                transition: "all 0.15s",
               }}
             >
-              {label}
+              Custom
             </button>
-          ))}
+          </div>
+          {dateRange === "custom" && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "5px 10px" }}>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                style={{ border: "none", outline: "none", fontSize: "12.5px", color: "#334155", fontFamily: "inherit", background: "transparent" }}
+              />
+              <span style={{ color: "#94a3b8", fontSize: "12px" }}>→</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                style={{ border: "none", outline: "none", fontSize: "12.5px", color: "#334155", fontFamily: "inherit", background: "transparent" }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
