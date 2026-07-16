@@ -467,6 +467,45 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
     });
   }
 
+  // Chart-data: per dag, of per uur bij een enkele dag
+  const singleDay = dateFrom === dateTo;
+  let revenueChart;
+  if (singleDay) {
+    const hourly = {};
+    for (const order of currentOrders) {
+      const h = new Date(order.createdAt).toLocaleString("en-GB", {
+        timeZone: STORE_TIMEZONE,
+        hour: "2-digit",
+        hourCycle: "h23",
+      });
+      const gross = parseFloat(order.currentTotalPriceSet.shopMoney.amount);
+      const refunded = parseFloat(order.totalRefundedSet?.shopMoney?.amount || 0);
+      if (!hourly[h]) hourly[h] = { revenue: 0, orders: 0 };
+      hourly[h].revenue += gross - refunded;
+      hourly[h].orders++;
+    }
+    const points = [];
+    for (let h = 0; h < 24; h++) {
+      const key = String(h).padStart(2, "0");
+      points.push({
+        label: `${key}:00`,
+        revenue: round2(hourly[key]?.revenue || 0),
+        orders: hourly[key]?.orders || 0,
+      });
+    }
+    revenueChart = { granularity: "hour", points };
+  } else {
+    revenueChart = {
+      granularity: "day",
+      points: profitPerDay.map((d) => ({
+        label: d.date,
+        revenue: d.revenue,
+        orders: d.orders,
+        profit: d.profit,
+      })),
+    };
+  }
+
   // Producten gesorteerd op winst
   const products = Object.values(cur.productMap)
     .map((p) => ({
@@ -501,6 +540,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
     profitPercent: round1(profitPercent),
     profitPercentChange: round1(profitPercent - prevProfitPercent),
     profitPerDay,
+    revenueChart,
     products,
     metaAccounts: meta.accountsData,
   };
