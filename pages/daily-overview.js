@@ -9,6 +9,18 @@ const RANGES = [
   { label: "30d", value: "30d" },
 ];
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
+
 const ui = {
   page: {
     padding: "28px 36px",
@@ -37,6 +49,7 @@ export default function DailyOverview() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [dateRange, setDateRange] = useState("14d");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     setLoading(true);
@@ -92,8 +105,8 @@ export default function DailyOverview() {
   };
 
   return (
-    <div style={ui.page}>
-      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ ...ui.page, padding: isMobile ? "16px 14px" : ui.page.padding }}>
+      <div style={{ marginBottom: "24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>Daily Overview</h1>
           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
@@ -122,8 +135,8 @@ export default function DailyOverview() {
         </div>
       </div>
 
-      <div style={{ ...ui.card, padding: "8px 0" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <div style={{ ...ui.card, padding: "8px 0", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <table style={{ width: "100%", minWidth: isMobile ? "640px" : "auto", borderCollapse: "collapse" }}>
           <thead>
             <tr>
               <th style={th("left")}>Datum</th>
