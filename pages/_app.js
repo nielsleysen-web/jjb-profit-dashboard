@@ -1,209 +1,310 @@
-// pages/accounts.js
-// Account Management — alleen zichtbaar voor de beheerder.
-// Goedkeuren van nieuwe accounts, rechten (Finance/Strategy) toekennen of intrekken.
+// pages/_app.js
+// Just Jenny Operations Centre — login met accounts, categorieën en rollen.
+// Finance: Dashboard, Daily Overview, Product Economics
+// Strategy: Constraint Focus
+// Admin (alleen beheerder): Account Management
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import Link from "next/link";
+import Head from "next/head";
 
-const ui = {
-  page: {
-    padding: "28px 36px",
-    background: "#f7f8fa",
-    minHeight: "100vh",
-    fontFamily: "Inter, system-ui, -apple-system, sans-serif",
-    color: "#0f172a",
+function useIsMobile() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 820px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
+
+const CATEGORIES = [
+  {
+    name: "Finance",
+    perm: "finance",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: "📊" },
+      { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
+      { href: "/product-economics", label: "Product Economics", icon: "📦" },
+    ],
   },
-  card: {
-    background: "#ffffff",
-    borderRadius: "16px",
-    border: "1px solid #eceef2",
-    boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+  {
+    name: "Strategy",
+    perm: "strategy",
+    items: [{ href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" }],
   },
-  label: {
-    fontSize: "11px",
-    fontWeight: 600,
-    color: "#8a92a3",
-    textTransform: "uppercase",
-    letterSpacing: "0.7px",
+  {
+    name: "Marketing",
+    perm: "marketing",
+    items: [
+      { href: "/ready-to-work", label: "Ready To Work", icon: "🎬" },
+      { href: "/in-production", label: "In Production", icon: "🎨" },
+      { href: "/qa-check", label: "QA Check", icon: "✅" },
+    ],
   },
+  {
+    name: "Admin",
+    perm: "admin",
+    items: [{ href: "/accounts", label: "Account Management", icon: "👥" }],
+  },
+];
+
+const ALL_PROTECTED = CATEGORIES.flatMap((c) => c.items.map((i) => i.href));
+
+function requiredPerm(pathname) {
+  for (const cat of CATEGORIES) {
+    if (cat.items.some((i) => i.href === pathname)) return cat.perm;
+  }
+  return null;
+}
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "11px 14px",
+  border: "1px solid #e2e6ec",
+  borderRadius: "10px",
+  fontSize: "14px",
+  marginBottom: "12px",
+  outline: "none",
+  fontFamily: "inherit",
 };
 
-const STATUS_STYLE = {
-  pending: { text: "Awaiting approval", color: "#b45309", bg: "#fef3c7" },
-  active: { text: "Active", color: "#166534", bg: "#dcfce7" },
-  disabled: { text: "Blocked", color: "#991b1b", bg: "#fee2e2" },
-};
-
-export default function Accounts() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(null);
+export default function App({ Component, pageProps }) {
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [checked, setChecked] = useState(false);
+  const [mode, setMode] = useState("login"); // login | register
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [message, setMessage] = useState(null); // { type: "error"|"info", text }
+  const [busy, setBusy] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
-    fetch("/api/accounts")
-      .then((r) => r.json())
+    fetch("/api/auth?action=me")
+      .then((r) => (r.ok ? r.json() : null))
       .then((res) => {
-        if (!res.success) throw new Error(res.error);
-        setUsers(res.users);
+        if (res?.success) setUser(res.user);
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .catch(() => {})
+      .finally(() => setChecked(true));
   }, []);
 
-  const update = async (userId, payload) => {
-    setBusy(userId);
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setMessage(null);
     try {
-      const res = await fetch("/api/accounts", {
+      const res = await fetch(`/api/auth?action=${mode}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, ...payload }),
-      }).then((r) => r.json());
-      if (!res.success) throw new Error(res.error);
-      setUsers(res.users);
+        body: JSON.stringify(form),
+      });
+      const result = await res.json();
+      if (!result.success) {
+        setMessage({ type: "error", text: result.error || "Something went wrong" });
+      } else if (result.pending) {
+        setMode("login");
+        setMessage({ type: "info", text: "Account created! You will get access once the administrator has approved you." });
+      } else {
+        setUser(result.user);
+        setForm({ name: "", email: "", password: "" });
+      }
     } catch (err) {
-      alert("Failed: " + err.message);
+      setMessage({ type: "error", text: err.message });
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
-  if (loading)
+  const logout = async () => {
+    await fetch("/api/auth?action=logout", { method: "POST" }).catch(() => {});
+    setUser(null);
+  };
+
+  if (!checked) return null;
+
+  const requiresAuth = ALL_PROTECTED.includes(router.pathname);
+  const perm = requiredPerm(router.pathname);
+
+  /* ---------- login / registratie ---------- */
+  if (requiresAuth && !user) {
     return (
-      <div style={{ ...ui.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ color: "#8a92a3" }}>Loading…</span>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif", padding: "16px" }}>
+        <Head>
+          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        </Head>
+        <form onSubmit={submit} style={{ background: "white", padding: "40px", borderRadius: "18px", width: "100%", maxWidth: "400px", border: "1px solid #eceef2", boxShadow: "0 4px 24px rgba(15,23,42,0.06)" }}>
+          <h1 style={{ margin: "0 0 4px 0", fontSize: "22px", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.3px" }}>Just Jenny</h1>
+          <p style={{ margin: "0 0 24px 0", fontSize: "13px", color: "#8a92a3" }}>Operations Centre</p>
+
+          {mode === "register" && (
+            <input
+              type="text"
+              placeholder="Name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              style={inputStyle}
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Email address"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            autoFocus
+            style={inputStyle}
+          />
+          <input
+            type="password"
+            placeholder={mode === "register" ? "Choose a password (min. 8 characters)" : "Password"}
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            style={inputStyle}
+          />
+
+          {message && (
+            <p style={{ color: message.type === "error" ? "#dc2626" : "#16a34a", fontSize: "13px", margin: "0 0 12px 0", lineHeight: 1.5 }}>
+              {message.text}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy}
+            style={{ width: "100%", padding: "11px 14px", background: "#0f172a", color: "white", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: 600, cursor: "pointer", marginBottom: "12px" }}
+          >
+            {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
+          </button>
+
+          <p style={{ margin: 0, fontSize: "13px", color: "#64748b", textAlign: "center" }}>
+            {mode === "login" ? (
+              <>No account yet?{" "}
+                <a onClick={() => { setMode("register"); setMessage(null); }} style={{ color: "#3b82f6", cursor: "pointer", fontWeight: 600 }}>Register</a>
+              </>
+            ) : (
+              <>Already have an account?{" "}
+                <a onClick={() => { setMode("login"); setMessage(null); }} style={{ color: "#3b82f6", cursor: "pointer", fontWeight: 600 }}>Sign in</a>
+              </>
+            )}
+          </p>
+        </form>
       </div>
     );
-  if (error)
-    return (
-      <div style={ui.page}>
-        <div style={{ ...ui.card, padding: "24px", color: "#dc2626" }}>Error: {error}</div>
-      </div>
-    );
+  }
 
-  const pending = users.filter((u) => u.status === "pending");
-  const others = users.filter((u) => u.status !== "pending");
+  /* ---------- geen rechten voor deze pagina ---------- */
+  const noAccess = requiresAuth && user && perm && !user[perm];
 
-  return (
-    <div style={ui.page}>
-      <div style={{ marginBottom: "24px" }}>
-        <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>👥 Account Management</h1>
-        <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Approve new accounts and manage who has access to Finance, Strategy and Marketing
-        </p>
-      </div>
+  const visibleCategories = user
+    ? CATEGORIES.filter((cat) => user[cat.perm] && cat.items.length > 0)
+    : [];
 
-      {pending.length > 0 && (
-        <>
-          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700, color: "#b45309" }}>
-            ⏳ Awaiting approval ({pending.length})
-          </h2>
-          <div style={{ display: "grid", gap: "10px", marginBottom: "24px" }}>
-            {pending.map((u) => (
-              <UserCard key={u.id} user={u} update={update} busy={busy === u.id} />
-            ))}
-          </div>
-        </>
-      )}
-
-      <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>Accounts</h2>
-      <div style={{ display: "grid", gap: "10px" }}>
-        {others.length === 0 && (
-          <div style={{ ...ui.card, padding: "28px", textAlign: "center", color: "#8a92a3", fontSize: "13px" }}>
-            No accounts yet.
+  const NavLinks = ({ horizontal }) =>
+    visibleCategories.map((cat) => (
+      <div key={cat.name} style={horizontal ? { display: "flex", gap: "4px", alignItems: "center" } : { marginBottom: "18px" }}>
+        {!horizontal && (
+          <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.8px", padding: "0 12px", marginBottom: "6px" }}>
+            {cat.name}
           </div>
         )}
-        {others.map((u) => (
-          <UserCard key={u.id} user={u} update={update} busy={busy === u.id} />
-        ))}
+        {cat.items.map((item) => {
+          const active = router.pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href}>
+              <a
+                style={{
+                  display: "block",
+                  padding: horizontal ? "7px 10px" : "9px 12px",
+                  background: active ? "#0f172a" : "transparent",
+                  color: active ? "#ffffff" : "#64748b",
+                  textDecoration: "none",
+                  fontSize: horizontal ? "12px" : "13px",
+                  fontWeight: 600,
+                  borderRadius: "9px",
+                  whiteSpace: "nowrap",
+                  marginBottom: horizontal ? 0 : "2px",
+                }}
+              >
+                {item.icon} {item.label}
+              </a>
+            </Link>
+          );
+        })}
       </div>
-    </div>
-  );
-}
-
-function Toggle({ label, checked, onChange, disabled }) {
-  return (
-    <label style={{ display: "flex", alignItems: "center", gap: "7px", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}>
-      <input type="checkbox" checked={!!checked} onChange={onChange} disabled={disabled} style={{ width: "15px", height: "15px", cursor: "inherit" }} />
-      <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>{label}</span>
-    </label>
-  );
-}
-
-function UserCard({ user, update, busy }) {
-  const isAdmin = user.email === "nielsleysen@gmail.com";
-  const status = STATUS_STYLE[user.status] || STATUS_STYLE.active;
-
-  const btn = (label, payload, style = {}) => (
-    <button
-      onClick={() => update(user.id, payload)}
-      disabled={busy}
-      style={{
-        padding: "7px 12px",
-        background: "#ffffff",
-        color: "#334155",
-        border: "1px solid #e2e6ec",
-        borderRadius: "9px",
-        fontSize: "12px",
-        fontWeight: 600,
-        cursor: "pointer",
-        ...style,
-      }}
-    >
-      {label}
-    </button>
-  );
+    ));
 
   return (
-    <div style={{ ...ui.card, padding: "16px 20px", display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap", opacity: busy ? 0.6 : 1 }}>
-      {/* Avatar + info */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1, minWidth: "200px" }}>
-        <div style={{ width: "40px", height: "40px", borderRadius: "999px", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#475569", flexShrink: 0 }}>
-          {(user.name || user.email).charAt(0).toUpperCase()}
+    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif" }}>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+      </Head>
+
+      {/* Navigatie */}
+      {requiresAuth && user && (isMobile ? (
+        <div style={{ background: "white", borderBottom: "1px solid #eceef2", padding: "10px 14px", display: "flex", alignItems: "center", gap: "8px", position: "sticky", top: 0, zIndex: 50 }}>
+          <h2 style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#0f172a", flexShrink: 0 }}>Just Jenny</h2>
+          <nav style={{ display: "flex", gap: "4px", overflowX: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>
+            <NavLinks horizontal />
+          </nav>
+          <button onClick={logout} style={{ padding: "7px 10px", background: "#ffffff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "9px", fontSize: "11.5px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+            Log out
+          </button>
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: "13.5px", fontWeight: 700 }}>
-            {user.name} {isAdmin && <span style={{ fontSize: "10px", color: "#3b82f6", background: "#eff6ff", padding: "2px 7px", borderRadius: "999px", marginLeft: "4px" }}>ADMIN</span>}
+      ) : (
+        <div style={{ width: "216px", background: "white", borderRight: "1px solid #eceef2", padding: "24px 12px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+          <div style={{ paddingLeft: "12px", marginBottom: "26px" }}>
+            <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>Just Jenny</h2>
+            <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#8a92a3" }}>Operations Centre</p>
           </div>
-          <div style={{ fontSize: "12px", color: "#8a92a3", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</div>
+          <nav style={{ flex: 1 }}>
+            <NavLinks />
+          </nav>
+          <div style={{ padding: "10px 12px", borderTop: "1px solid #f4f5f7", marginBottom: "10px" }}>
+            <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+            <div style={{ fontSize: "11px", color: "#8a92a3", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</div>
+          </div>
+          <button onClick={logout} style={{ padding: "10px 12px", background: "#ffffff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontSize: "12.5px", fontWeight: 600, cursor: "pointer" }}>
+            Log out
+          </button>
         </div>
+      ))}
+
+      {/* Main Content */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {noAccess ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", padding: "24px" }}>
+            <div style={{ background: "white", border: "1px solid #eceef2", borderRadius: "16px", padding: "40px", textAlign: "center", maxWidth: "400px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "12px" }}>🔒</div>
+              <h2 style={{ margin: "0 0 8px 0", fontSize: "17px", fontWeight: 700, color: "#0f172a" }}>No access</h2>
+              <p style={{ margin: 0, fontSize: "13.5px", color: "#64748b", lineHeight: 1.6 }}>
+                Your account doesn't have access to this category. Ask the administrator to update your permissions.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Component {...pageProps} />
+        )}
       </div>
 
-      {/* Status badge */}
-      <span style={{ fontSize: "11.5px", fontWeight: 700, color: status.color, background: status.bg, padding: "4px 10px", borderRadius: "999px", flexShrink: 0 }}>
-        {status.text}
-      </span>
-
-      {/* Rechten */}
-      <div style={{ display: "flex", gap: "14px", flexShrink: 0 }}>
-        <Toggle
-          label="Finance"
-          checked={isAdmin || user.finance}
-          disabled={isAdmin}
-          onChange={() => update(user.id, { updates: { finance: !user.finance } })}
-        />
-        <Toggle
-          label="Strategy"
-          checked={isAdmin || user.strategy}
-          disabled={isAdmin}
-          onChange={() => update(user.id, { updates: { strategy: !user.strategy } })}
-        />
-        <Toggle
-          label="Marketing"
-          checked={isAdmin || user.marketing}
-          disabled={isAdmin}
-          onChange={() => update(user.id, { updates: { marketing: !user.marketing } })}
-        />
-      </div>
-
-      {/* Acties */}
-      {!isAdmin && (
-        <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-          {user.status === "pending" && btn("✓ Approve", { updates: { status: "active" } }, { background: "#16a34a", color: "#fff", border: "none" })}
-          {user.status === "active" && btn("Block", { updates: { status: "disabled" } }, { color: "#b45309", borderColor: "#fde68a" })}
-          {user.status === "disabled" && btn("Reactivate", { updates: { status: "active" } }, { color: "#166534", borderColor: "#bbf7d0" })}
-          {btn("Delete", { remove: true }, { color: "#dc2626", borderColor: "#fecaca" })}
-        </div>
-      )}
+      <style jsx global>{`
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: Inter, system-ui, sans-serif;
+          background: #f7f8fa;
+        }
+        a {
+          color: inherit;
+          text-decoration: none;
+        }
+      `}</style>
     </div>
   );
 }
