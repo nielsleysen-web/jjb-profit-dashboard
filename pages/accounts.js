@@ -88,7 +88,7 @@ export default function Accounts() {
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>👥 Account Management</h1>
         <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Approve new accounts and manage who has access to Finance and Strategy
+          Approve new accounts and manage who has access to Finance, Strategy and Marketing
         </p>
       </div>
 
@@ -186,6 +186,12 @@ function UserCard({ user, update, busy }) {
           checked={isAdmin || user.strategy}
           disabled={isAdmin}
           onChange={() => update(user.id, { updates: { strategy: !user.strategy } })}
+        />
+        <Toggle
+          label="Marketing"
+          checked={isAdmin || user.marketing}
+          disabled={isAdmin}
+          onChange={() => update(user.id, { updates: { marketing: !user.marketing } })}
         />
       </div>
 
