@@ -43,7 +43,7 @@ const ui = {
 };
 
 const fmt = (v) =>
-  new Intl.NumberFormat("nl-BE", { style: "currency", currency: "EUR" }).format(v || 0);
+  new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(v || 0);
 
 const calcRow = (price, cogs) => {
   const fees = price > 0 ? price * FEE_PERCENT + FEE_FIXED : 0;
@@ -126,7 +126,7 @@ export default function ProductEconomics() {
       }).then((r) => r.json());
 
       if (!res.success && res.errors?.length) {
-        alert("Sommige waarden konden niet worden opgeslagen:\n" + res.errors.map((e) => e.message).join("\n"));
+        alert("Some values could not be saved:\n" + res.errors.map((e) => e.message).join("\n"));
       }
       setEditing((e) => {
         const n = { ...e };
@@ -135,7 +135,7 @@ export default function ProductEconomics() {
       });
       await loadData();
     } catch (err) {
-      alert("Opslaan mislukt: " + err.message);
+      alert("Saving failed: " + err.message);
     } finally {
       setSaving(null);
     }
@@ -155,7 +155,7 @@ export default function ProductEconomics() {
         <div>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>Product Economics</h1>
           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-            Unit costs worden direct in Shopify opgeslagen — het dashboard gebruikt ze automatisch
+            Unit costs are saved directly to Shopify — the dashboard uses them automatically
           </p>
         </div>
         <button
@@ -183,7 +183,7 @@ export default function ProductEconomics() {
       {tracked.length === 0 ? (
         <div style={{ ...ui.card, padding: "48px", textAlign: "center" }}>
           <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>
-            Nog geen producten met unit costs. Klik op <b>+ Add products</b> om te starten.
+            No products with unit costs yet. Click <b>+ Add products</b> to get started.
           </p>
         </div>
       ) : (
@@ -381,7 +381,7 @@ function AddProductsOverlay({ onClose }) {
         body: JSON.stringify({ updates }),
       }).then((r) => r.json());
       if (!res.success && res.errors?.length) {
-        alert("Fout bij opslaan:\n" + res.errors.map((e) => e.message).join("\n"));
+        alert("Error while saving:\n" + res.errors.map((e) => e.message).join("\n"));
       } else {
         onClose();
       }
@@ -428,7 +428,7 @@ function AddProductsOverlay({ onClose }) {
             <input
               autoFocus
               type="text"
-              placeholder="Zoek in je Shopify producten…"
+              placeholder="Search your Shopify products…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               style={{
@@ -442,7 +442,7 @@ function AddProductsOverlay({ onClose }) {
                 outline: "none",
               }}
             />
-            {searching && <p style={{ color: "#8a92a3", fontSize: "13px" }}>Zoeken…</p>}
+            {searching && <p style={{ color: "#8a92a3", fontSize: "13px" }}>Searching…</p>}
             <div style={{ display: "grid", gap: "6px" }}>
               {results.map((p) => (
                 <button
@@ -469,22 +469,22 @@ function AddProductsOverlay({ onClose }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, color: "#0f172a" }}>{p.title}</div>
                     <div style={{ fontSize: "12px", color: "#8a92a3" }}>
-                      {p.variants.length} variant{p.variants.length !== 1 ? "en" : ""}
-                      {p.variants.some((v) => v.unitCost != null) && " · COGS deels ingevuld"}
+                      {p.variants.length} variant{p.variants.length !== 1 ? "s" : ""}
+                      {p.variants.some((v) => v.unitCost != null) && " · COGS partially set"}
                     </div>
                   </div>
                   <span style={{ color: "#3b82f6", fontSize: "13px", fontWeight: 600 }}>Select →</span>
                 </button>
               ))}
               {!searching && results.length === 0 && (
-                <p style={{ color: "#8a92a3", fontSize: "13px", textAlign: "center", padding: "16px" }}>Geen producten gevonden</p>
+                <p style={{ color: "#8a92a3", fontSize: "13px", textAlign: "center", padding: "16px" }}>No products found</p>
               )}
             </div>
           </>
         ) : (
           <>
             <p style={{ margin: "0 0 14px 0", fontSize: "13px", color: "#64748b" }}>
-              Vul de unit cost (inkoopprijs) per variant in. Dit wordt direct in Shopify opgeslagen.
+              Enter the unit cost (purchase price) per variant. This is saved directly to Shopify.
             </p>
             <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "18px" }}>
               <thead>
@@ -522,7 +522,7 @@ function AddProductsOverlay({ onClose }) {
               </tbody>
             </table>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <button onClick={() => setSelected(null)} style={btnGhost}>← Terug</button>
+              <button onClick={() => setSelected(null)} style={btnGhost}>← Back</button>
               <button onClick={save} disabled={saving} style={btnPrimary}>
                 {saving ? "Saving…" : "Save to Shopify"}
               </button>
