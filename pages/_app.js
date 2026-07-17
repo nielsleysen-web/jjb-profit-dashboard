@@ -19,6 +19,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
   { href: "/product-economics", label: "Product Economics", icon: "📦" },
+  { href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" },
 ];
 
 export default function App({ Component, pageProps }) {
