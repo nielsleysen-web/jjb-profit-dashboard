@@ -3,6 +3,26 @@
 // Vereist scopes: read_orders, read_products, read_customers
 
 import axios from "axios";
+import crypto from "crypto";
+
+// --- sessie check (Operations Centre accounts) ---
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
+function getSession(req) {
+  const match = (req.headers.cookie || "").match(/(?:^|;\s*)jjb_session=([^;]+)/);
+  const sessionToken = match ? match[1] : null;
+  if (!sessionToken) return null;
+  const [body, sig] = sessionToken.split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 let tokenCache = { token: null, expiresAt: 0 };
 
@@ -78,6 +98,11 @@ const isFreeGift = (title) => /regalo|gratuito|free gift/i.test(title || "");
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const session = getSession(req);
+  if (!session || !(session.finance || session.admin)) {
+    return res.status(401).json({ success: false, error: "No access" });
   }
 
   try {
