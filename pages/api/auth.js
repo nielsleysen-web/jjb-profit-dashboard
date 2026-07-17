@@ -151,6 +151,7 @@ export default async function handler(req, res) {
         status: isAdmin ? "active" : "pending",
         finance: isAdmin,
         strategy: isAdmin,
+        marketing: isAdmin,
         createdAt: new Date().toISOString(),
       };
       accounts.users.push(user);
@@ -163,10 +164,11 @@ export default async function handler(req, res) {
           admin: true,
           finance: true,
           strategy: true,
+          marketing: true,
           exp: Date.now() + SESSION_HOURS * 3600000,
         });
         setSessionCookie(res, token);
-        return res.status(200).json({ success: true, user: { email, name: user.name, admin: true, finance: true, strategy: true } });
+        return res.status(200).json({ success: true, user: { email, name: user.name, admin: true, finance: true, strategy: true, marketing: true } });
       }
       return res.status(200).json({ success: true, pending: true });
     }
@@ -191,6 +193,7 @@ export default async function handler(req, res) {
         admin: isAdmin,
         finance: isAdmin || !!user.finance,
         strategy: isAdmin || !!user.strategy,
+        marketing: isAdmin || !!user.marketing,
         exp: Date.now() + SESSION_HOURS * 3600000,
       };
       setSessionCookie(res, signSession(payload));
