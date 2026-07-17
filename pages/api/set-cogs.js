@@ -4,6 +4,26 @@
 // Vereist scope: write_inventory
 
 import axios from "axios";
+import crypto from "crypto";
+
+// --- sessie check (Operations Centre accounts) ---
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
+function getSession(req) {
+  const match = (req.headers.cookie || "").match(/(?:^|;\s*)jjb_session=([^;]+)/);
+  const sessionToken = match ? match[1] : null;
+  if (!sessionToken) return null;
+  const [body, sig] = sessionToken.split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 let tokenCache = { token: null, expiresAt: 0 };
 
@@ -42,10 +62,15 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const session = getSession(req);
+  if (!session || !(session.finance || session.admin)) {
+    return res.status(401).json({ success: false, error: "No access" });
+  }
+
   try {
     const { updates } = req.body || {};
     if (!Array.isArray(updates) || updates.length === 0) {
-      return res.status(400).json({ success: false, error: "Geen updates meegegeven" });
+      return res.status(400).json({ success: false, error: "No updates provided" });
     }
 
     const storeUrl = process.env.SHOPIFY_STORE_URL;
@@ -57,7 +82,7 @@ export default async function handler(req, res) {
 
     for (const u of updates) {
       if (!u.inventoryItemId || u.cost == null || isNaN(parseFloat(u.cost))) {
-        errors.push({ id: u.inventoryItemId, message: "Ongeldige input" });
+        errors.push({ id: u.inventoryItemId, message: "Invalid input" });
         continue;
       }
       const response = await axios.post(
