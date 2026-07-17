@@ -75,7 +75,7 @@ export default function Dashboard() {
       if (!result.success) throw new Error(result.error);
       setData(result.data);
       setRefreshedAt(
-        new Date().toLocaleString("nl-BE", {
+        new Date().toLocaleString("en-GB", {
           day: "numeric",
           month: "short",
           hour: "2-digit",
@@ -90,7 +90,7 @@ export default function Dashboard() {
   };
 
   const formatCurrency = (value) =>
-    new Intl.NumberFormat("nl-BE", {
+    new Intl.NumberFormat("en-IE", {
       style: "currency",
       currency: (data && data.currency) || "EUR",
       minimumFractionDigits: 2,
@@ -241,7 +241,7 @@ export default function Dashboard() {
         <Card small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
         <Card small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
         <Card small label="COGS + Fees" value={formatCurrency(data.cogsAndFees)} sub={`COGS ${formatCurrency(data.cogs)} · fees ${formatCurrency(data.fees)}`} />
-        <Card small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% van revenue`} />
+        <Card small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue`} />
       </div>
 
       {/* Products */}
@@ -317,7 +317,7 @@ export default function Dashboard() {
         </table>
         </div>
         <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Ad spend gematcht op campagnenaam • product profit = revenue − COGS − matched ad spend
+          Ad spend matched by campaign name • product profit = revenue − COGS − matched ad spend
         </p>
       </div>
       </div>
@@ -330,15 +330,15 @@ export default function Dashboard() {
 
 function timeAgo(iso) {
   const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 60) return "zojuist";
+  if (s < 60) return "just now";
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} min geleden`;
+  if (m < 60) return `${m} min ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} uur geleden`;
+  if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
-  if (d < 30) return d === 1 ? "1 dag geleden" : `${d} dagen geleden`;
+  if (d < 30) return d === 1 ? "1 day ago" : `${d} days ago`;
   const mo = Math.floor(d / 30);
-  return mo === 1 ? "1 maand geleden" : `${mo} maanden geleden`;
+  return mo === 1 ? "1 month ago" : `${mo} months ago`;
 }
 
 function RecentActivity({ formatCurrency, isMobile }) {
@@ -384,7 +384,7 @@ function RecentActivity({ formatCurrency, isMobile }) {
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         {orders.length === 0 && (
           <p style={{ fontSize: "12px", color: "#94a3b8", textAlign: "center", padding: "16px 0" }}>
-            Nog geen aankopen
+            No purchases yet
           </p>
         )}
         {orders.map((order) => {
@@ -415,8 +415,8 @@ function RecentActivity({ formatCurrency, isMobile }) {
               )}
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: "12.5px", color: "#334155", lineHeight: 1.45 }}>
-                  <b style={{ color: "#0f172a" }}>{order.customerFull || order.customer || "Iemand"}</b>{" "}
-                  kocht voor <b style={{ color: "#16a34a" }}>{formatCurrency(order.total)}</b>
+                  <b style={{ color: "#0f172a" }}>{order.customerFull || order.customer || "Someone"}</b>{" "}
+                  purchased <b style={{ color: "#16a34a" }}>{formatCurrency(order.total)}</b>
                 </div>
                 <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {item ? `${item.quantity}× ${item.title}` : order.name}
@@ -471,7 +471,7 @@ function Card({ label, value, change, sub, accent, small }) {
               </span>
             );
           })()}
-          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "6px" }}>vs. vorige periode</span>
+          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "6px" }}>vs. previous period</span>
         </span>
       )}
     </div>
@@ -619,11 +619,11 @@ function SaleNotifier() {
             )}
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>
-                🎉 Nieuwe sale — {item ? `${item.quantity}× ${item.title}` : order.name}
+                🎉 New sale — {item ? `${item.quantity}× ${item.title}` : order.name}
                 {extra > 0 ? ` +${extra}` : ""}
               </div>
               <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
-                {who.length > 0 ? `${who[0]}${who.length > 1 ? ` uit ${who.slice(1).join(", ")}` : ""}` : "Nieuwe bestelling"}
+                {who.length > 0 ? `${who[0]}${who.length > 1 ? ` from ${who.slice(1).join(", ")}` : ""}` : "New order"}
               </div>
             </div>
           </div>
@@ -665,7 +665,7 @@ function RevenueChart({ chart, formatCurrency }) {
   if (!days.length) {
     return (
       <div style={{ height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ color: "#94a3b8", fontSize: "13px" }}>Geen data voor deze periode</span>
+        <span style={{ color: "#94a3b8", fontSize: "13px" }}>No data for this period</span>
       </div>
     );
   }
@@ -687,7 +687,7 @@ function RevenueChart({ chart, formatCurrency }) {
   const zeroY = y(0);
 
   const fmtAxis = (v) =>
-    new Intl.NumberFormat("nl-BE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
+    new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
 
   const pts = days.map((d, i) => [x(i), y(d.revenue)]);
 
@@ -704,7 +704,7 @@ function RevenueChart({ chart, formatCurrency }) {
   const dateLabel = (label) =>
     isHourly
       ? label
-      : new Date(`${label}T12:00:00Z`).toLocaleDateString("nl-BE", { day: "numeric", month: "short" });
+      : new Date(`${label}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
   const handleMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
