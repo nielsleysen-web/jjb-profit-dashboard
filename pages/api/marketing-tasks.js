@@ -134,7 +134,6 @@ export default async function handler(req, res) {
         angle: taskInput.angle || "",
         landingPage: taskInput.landingPage || "",
         briefingLink: taskInput.briefingLink || "",
-        scriptLink: taskInput.scriptLink || "",
         deadline: taskInput.deadline || "",
         spocEmail: taskInput.spocEmail || "",
         spocName: taskInput.spocName || "",
@@ -158,7 +157,7 @@ export default async function handler(req, res) {
     /* --- full edit (admin only) --- */
     if (action === "update") {
       if (!isAdmin) return res.status(403).json({ success: false, error: "Only the administrator can edit tasks." });
-      const allowed = ["product", "angle", "landingPage", "briefingLink", "scriptLink", "deadline", "spocEmail", "spocName", "type", "format", "frameioLink", "status"];
+      const allowed = ["product", "angle", "landingPage", "briefingLink", "deadline", "spocEmail", "spocName", "type", "format", "frameioLink", "status"];
       for (const key of allowed) {
         if (taskInput && key in taskInput) task[key] = taskInput[key];
       }
