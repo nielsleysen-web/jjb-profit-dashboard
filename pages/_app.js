@@ -1,3 +1,9 @@
+// pages/_app.js
+// Just Jenny Operations Centre — login met accounts, categorieën en rollen.
+// Finance: Dashboard, Daily Overview, Product Economics
+// Strategy: Constraint Focus
+// Admin (alleen beheerder): Account Management
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
@@ -15,232 +21,266 @@ function useIsMobile() {
   return mobile;
 }
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: "📊" },
-  { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
-  { href: "/product-economics", label: "Product Economics", icon: "📦" },
-  { href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" },
+const CATEGORIES = [
+  {
+    name: "Finance",
+    perm: "finance",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: "📊" },
+      { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
+      { href: "/product-economics", label: "Product Economics", icon: "📦" },
+    ],
+  },
+  {
+    name: "Strategy",
+    perm: "strategy",
+    items: [{ href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" }],
+  },
+  {
+    name: "Admin",
+    perm: "admin",
+    items: [{ href: "/accounts", label: "Account Management", icon: "👥" }],
+  },
 ];
+
+const ALL_PROTECTED = CATEGORIES.flatMap((c) => c.items.map((i) => i.href));
+
+function requiredPerm(pathname) {
+  for (const cat of CATEGORIES) {
+    if (cat.items.some((i) => i.href === pathname)) return cat.perm;
+  }
+  return null;
+}
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "11px 14px",
+  border: "1px solid #e2e6ec",
+  borderRadius: "10px",
+  fontSize: "14px",
+  marginBottom: "12px",
+  outline: "none",
+  fontFamily: "inherit",
+};
 
 export default function App({ Component, pageProps }) {
   const router = useRouter();
-  const [authenticated, setAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [passwordInput, setPasswordInput] = useState("");
-  const [error, setError] = useState("");
+  const [user, setUser] = useState(null);
+  const [checked, setChecked] = useState(false);
+  const [mode, setMode] = useState("login"); // login | register
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [message, setMessage] = useState(null); // { type: "error"|"info", text }
+  const [busy, setBusy] = useState(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    const isAuth = localStorage.getItem("jjb_auth") === "true";
-    setAuthenticated(isAuth);
-    setLoading(false);
+    fetch("/api/auth?action=me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => {
+        if (res?.success) setUser(res.user);
+      })
+      .catch(() => {})
+      .finally(() => setChecked(true));
   }, []);
 
-  const handleLogin = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    setError("");
-    const password = process.env.NEXT_PUBLIC_PASSWORD || "password";
-    if (passwordInput === password) {
-      localStorage.setItem("jjb_auth", "true");
-      setAuthenticated(true);
-      setPasswordInput("");
-    } else {
-      setError("Invalid password");
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/auth?action=${mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const result = await res.json();
+      if (!result.success) {
+        setMessage({ type: "error", text: result.error || "Something went wrong" });
+      } else if (result.pending) {
+        setMode("login");
+        setMessage({ type: "info", text: "Account created! You will get access once the administrator has approved you." });
+      } else {
+        setUser(result.user);
+        setForm({ name: "", email: "", password: "" });
+      }
+    } catch (err) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("jjb_auth");
-    setAuthenticated(false);
-    setPasswordInput("");
+  const logout = async () => {
+    await fetch("/api/auth?action=logout", { method: "POST" }).catch(() => {});
+    setUser(null);
   };
 
-  if (loading) return null;
+  if (!checked) return null;
 
-  const requiresAuth = NAV_ITEMS.some((item) => router.pathname === item.href);
+  const requiresAuth = ALL_PROTECTED.includes(router.pathname);
+  const perm = requiredPerm(router.pathname);
 
-  if (requiresAuth && !authenticated) {
+  /* ---------- login / registratie ---------- */
+  if (requiresAuth && !user) {
     return (
-      <div style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        minHeight: "100vh",
-        background: "#f7f8fa",
-        fontFamily: "Inter, system-ui, sans-serif"
-      }}>
-        <form onSubmit={handleLogin} style={{
-          background: "white",
-          padding: "40px",
-          borderRadius: "18px",
-          width: "100%",
-          maxWidth: "400px",
-          border: "1px solid #eceef2",
-          boxShadow: "0 4px 24px rgba(15,23,42,0.06)"
-        }}>
-          <h1 style={{ margin: "0 0 6px 0", fontSize: "22px", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.3px" }}>
-            Just Jenny
-          </h1>
-          <p style={{ margin: "0 0 24px 0", fontSize: "13px", color: "#8a92a3" }}>
-            Profit Dashboard
-          </p>
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif", padding: "16px" }}>
+        <Head>
+          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        </Head>
+        <form onSubmit={submit} style={{ background: "white", padding: "40px", borderRadius: "18px", width: "100%", maxWidth: "400px", border: "1px solid #eceef2", boxShadow: "0 4px 24px rgba(15,23,42,0.06)" }}>
+          <h1 style={{ margin: "0 0 4px 0", fontSize: "22px", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.3px" }}>Just Jenny</h1>
+          <p style={{ margin: "0 0 24px 0", fontSize: "13px", color: "#8a92a3" }}>Operations Centre</p>
+
+          {mode === "register" && (
+            <input
+              type="text"
+              placeholder="Name"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              style={inputStyle}
+            />
+          )}
+          <input
+            type="email"
+            placeholder="Email address"
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            autoFocus
+            style={inputStyle}
+          />
           <input
             type="password"
-            value={passwordInput}
-            onChange={(e) => setPasswordInput(e.target.value)}
-            placeholder="Password"
-            autoFocus
-            style={{
-              width: "100%",
-              padding: "11px 14px",
-              border: "1px solid #e2e6ec",
-              borderRadius: "10px",
-              fontSize: "14px",
-              marginBottom: "12px",
-              boxSizing: "border-box",
-              outline: "none"
-            }}
+            placeholder={mode === "register" ? "Choose a password (min. 8 characters)" : "Password"}
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            style={inputStyle}
           />
-          {error && (
-            <p style={{ color: "#dc2626", fontSize: "13px", margin: "0 0 12px 0" }}>
-              {error}
+
+          {message && (
+            <p style={{ color: message.type === "error" ? "#dc2626" : "#16a34a", fontSize: "13px", margin: "0 0 12px 0", lineHeight: 1.5 }}>
+              {message.text}
             </p>
           )}
+
           <button
             type="submit"
-            style={{
-              width: "100%",
-              padding: "11px 14px",
-              background: "#0f172a",
-              color: "white",
-              border: "none",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              cursor: "pointer"
-            }}
+            disabled={busy}
+            style={{ width: "100%", padding: "11px 14px", background: "#0f172a", color: "white", border: "none", borderRadius: "10px", fontSize: "14px", fontWeight: 600, cursor: "pointer", marginBottom: "12px" }}
           >
-            Login
+            {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
           </button>
+
+          <p style={{ margin: 0, fontSize: "13px", color: "#64748b", textAlign: "center" }}>
+            {mode === "login" ? (
+              <>No account yet?{" "}
+                <a onClick={() => { setMode("register"); setMessage(null); }} style={{ color: "#3b82f6", cursor: "pointer", fontWeight: 600 }}>Register</a>
+              </>
+            ) : (
+              <>Already have an account?{" "}
+                <a onClick={() => { setMode("login"); setMessage(null); }} style={{ color: "#3b82f6", cursor: "pointer", fontWeight: 600 }}>Sign in</a>
+              </>
+            )}
+          </p>
         </form>
       </div>
     );
   }
+
+  /* ---------- geen rechten voor deze pagina ---------- */
+  const noAccess = requiresAuth && user && perm && !user[perm];
+
+  const visibleCategories = user
+    ? CATEGORIES.filter((cat) => user[cat.perm] && cat.items.length > 0)
+    : [];
+
+  const NavLinks = ({ horizontal }) =>
+    visibleCategories.map((cat) => (
+      <div key={cat.name} style={horizontal ? { display: "flex", gap: "4px", alignItems: "center" } : { marginBottom: "18px" }}>
+        {!horizontal && (
+          <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.8px", padding: "0 12px", marginBottom: "6px" }}>
+            {cat.name}
+          </div>
+        )}
+        {cat.items.map((item) => {
+          const active = router.pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href}>
+              <a
+                style={{
+                  display: "block",
+                  padding: horizontal ? "7px 10px" : "9px 12px",
+                  background: active ? "#0f172a" : "transparent",
+                  color: active ? "#ffffff" : "#64748b",
+                  textDecoration: "none",
+                  fontSize: horizontal ? "12px" : "13px",
+                  fontWeight: 600,
+                  borderRadius: "9px",
+                  whiteSpace: "nowrap",
+                  marginBottom: horizontal ? 0 : "2px",
+                }}
+              >
+                {item.icon} {item.label}
+              </a>
+            </Link>
+          );
+        })}
+      </div>
+    ));
 
   return (
     <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif" }}>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
-      {/* Navigatie: sidebar op desktop, bovenbalk op mobiel */}
-      {requiresAuth && authenticated && (isMobile ? (
-        <div style={{
-          background: "white",
-          borderBottom: "1px solid #eceef2",
-          padding: "10px 14px",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          position: "sticky",
-          top: 0,
-          zIndex: 50
-        }}>
-          <h2 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#0f172a", flexShrink: 0 }}>Just Jenny</h2>
+
+      {/* Navigatie */}
+      {requiresAuth && user && (isMobile ? (
+        <div style={{ background: "white", borderBottom: "1px solid #eceef2", padding: "10px 14px", display: "flex", alignItems: "center", gap: "8px", position: "sticky", top: 0, zIndex: 50 }}>
+          <h2 style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#0f172a", flexShrink: 0 }}>Just Jenny</h2>
           <nav style={{ display: "flex", gap: "4px", overflowX: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>
-            {NAV_ITEMS.map((item) => {
-              const active = router.pathname === item.href;
-              return (
-                <Link key={item.href} href={item.href}>
-                  <a style={{
-                    padding: "7px 10px",
-                    background: active ? "#0f172a" : "transparent",
-                    color: active ? "#ffffff" : "#64748b",
-                    textDecoration: "none",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    borderRadius: "9px",
-                    whiteSpace: "nowrap",
-                    flexShrink: 0
-                  }}>
-                    {item.icon} {item.label}
-                  </a>
-                </Link>
-              );
-            })}
+            <NavLinks horizontal />
           </nav>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: "7px 10px",
-              background: "#ffffff",
-              color: "#dc2626",
-              border: "1px solid #fecaca",
-              borderRadius: "9px",
-              fontSize: "11.5px",
-              fontWeight: 600,
-              cursor: "pointer",
-              flexShrink: 0
-            }}
-          >
-            Logout
+          <button onClick={logout} style={{ padding: "7px 10px", background: "#ffffff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "9px", fontSize: "11.5px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+            Log out
           </button>
         </div>
       ) : (
-        <div style={{
-          width: "200px",
-          background: "white",
-          borderRight: "1px solid #eceef2",
-          padding: "24px 12px",
-          display: "flex",
-          flexDirection: "column",
-          flexShrink: 0
-        }}>
-          <div style={{ paddingLeft: "12px", marginBottom: "28px" }}>
+        <div style={{ width: "216px", background: "white", borderRight: "1px solid #eceef2", padding: "24px 12px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+          <div style={{ paddingLeft: "12px", marginBottom: "26px" }}>
             <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>Just Jenny</h2>
-            <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#8a92a3" }}>Profit Dashboard</p>
+            <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#8a92a3" }}>Operations Centre</p>
           </div>
-          <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-            {NAV_ITEMS.map((item) => {
-              const active = router.pathname === item.href;
-              return (
-                <Link key={item.href} href={item.href}>
-                  <a style={{
-                    display: "block",
-                    padding: "10px 12px",
-                    background: active ? "#0f172a" : "transparent",
-                    color: active ? "#ffffff" : "#64748b",
-                    textDecoration: "none",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    borderRadius: "10px"
-                  }}>
-                    {item.icon} {item.label}
-                  </a>
-                </Link>
-              );
-            })}
+          <nav style={{ flex: 1 }}>
+            <NavLinks />
           </nav>
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: "10px 12px",
-              background: "#ffffff",
-              color: "#dc2626",
-              border: "1px solid #fecaca",
-              borderRadius: "10px",
-              fontSize: "12.5px",
-              fontWeight: 600,
-              cursor: "pointer"
-            }}
-          >
-            Logout
+          <div style={{ padding: "10px 12px", borderTop: "1px solid #f4f5f7", marginBottom: "10px" }}>
+            <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+            <div style={{ fontSize: "11px", color: "#8a92a3", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</div>
+          </div>
+          <button onClick={logout} style={{ padding: "10px 12px", background: "#ffffff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontSize: "12.5px", fontWeight: 600, cursor: "pointer" }}>
+            Log out
           </button>
         </div>
       ))}
+
       {/* Main Content */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <Component {...pageProps} />
+        {noAccess ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh", padding: "24px" }}>
+            <div style={{ background: "white", border: "1px solid #eceef2", borderRadius: "16px", padding: "40px", textAlign: "center", maxWidth: "400px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "12px" }}>🔒</div>
+              <h2 style={{ margin: "0 0 8px 0", fontSize: "17px", fontWeight: 700, color: "#0f172a" }}>No access</h2>
+              <p style={{ margin: 0, fontSize: "13.5px", color: "#64748b", lineHeight: 1.6 }}>
+                Your account doesn't have access to this category. Ask the administrator to update your permissions.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <Component {...pageProps} />
+        )}
       </div>
+
       <style jsx global>{`
         * {
           margin: 0;
