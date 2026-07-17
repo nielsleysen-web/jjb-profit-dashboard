@@ -12,6 +12,26 @@
 // access token op en vernieuwt het automatisch voor het na 24u vervalt.
 
 import axios from "axios";
+import crypto from "crypto";
+
+// --- sessie check (Operations Centre accounts) ---
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
+function getSession(req) {
+  const match = (req.headers.cookie || "").match(/(?:^|;\s*)jjb_session=([^;]+)/);
+  const sessionToken = match ? match[1] : null;
+  if (!sessionToken) return null;
+  const [body, sig] = sessionToken.split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 const SHOPIFY_API_VERSION = "2025-01";
 const STORE_TIMEZONE = "Europe/Brussels";
@@ -32,6 +52,11 @@ const COGS_MAP = {
 export default async function handler(req, res) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const session = getSession(req);
+  if (!session || !(session.finance || session.admin)) {
+    return res.status(401).json({ success: false, error: "No access — sign in with an account that has Finance permission" });
   }
 
   try {
@@ -179,7 +204,7 @@ async function getShopifyToken(storeUrl) {
     const detail = err.response
       ? `HTTP ${err.response.status}: ${JSON.stringify(err.response.data)}`
       : err.message;
-    throw new Error(`Shopify TOKEN request mislukt — ${detail}`);
+    throw new Error(`Shopify TOKEN request failed — ${detail}`);
   }
 
   const { access_token, expires_in } = response.data;
@@ -230,7 +255,7 @@ async function fetchShopifyOrders(dateFrom, dateTo) {
       const detail = err.response
         ? `HTTP ${err.response.status}: ${JSON.stringify(err.response.data)}`
         : err.message;
-      throw new Error(`Shopify ORDERS request mislukt — ${detail}`);
+      throw new Error(`Shopify ORDERS request failed — ${detail}`);
     }
 
     if (response.data.errors) {
