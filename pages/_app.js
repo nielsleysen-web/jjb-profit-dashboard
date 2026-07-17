@@ -54,6 +54,13 @@ const CATEGORIES = [
 
 const ALL_PROTECTED = CATEGORIES.flatMap((c) => c.items.map((i) => i.href));
 
+// Marketing-pagina → taakstatus (voor de tellers in het menu)
+const MARKETING_STATUS_BY_HREF = {
+  "/ready-to-work": "Ready to work",
+  "/in-production": "In production",
+  "/qa-check": "QA Check",
+};
+
 function requiredPerm(pathname) {
   for (const cat of CATEGORIES) {
     if (cat.items.some((i) => i.href === pathname)) return cat.perm;
@@ -81,7 +88,26 @@ export default function App({ Component, pageProps }) {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [message, setMessage] = useState(null); // { type: "error"|"info", text }
   const [busy, setBusy] = useState(false);
+  const [taskCounts, setTaskCounts] = useState({});
   const isMobile = useIsMobile();
+
+  // Tellers voor de Marketing-boards in het menu
+  useEffect(() => {
+    if (!user?.marketing) return;
+    const loadCounts = () =>
+      fetch("/api/marketing-tasks")
+        .then((r) => r.json())
+        .then((res) => {
+          if (!res.success) return;
+          const counts = {};
+          for (const t of res.tasks || []) counts[t.status] = (counts[t.status] || 0) + 1;
+          setTaskCounts(counts);
+        })
+        .catch(() => {});
+    loadCounts();
+    const iv = setInterval(loadCounts, 60000);
+    return () => clearInterval(iv);
+  }, [user, router.pathname]);
 
   useEffect(() => {
     fetch("/api/auth?action=me")
@@ -213,11 +239,16 @@ export default function App({ Component, pageProps }) {
         )}
         {cat.items.map((item) => {
           const active = router.pathname === item.href;
+          const countStatus = MARKETING_STATUS_BY_HREF[item.href];
+          const count = countStatus ? taskCounts[countStatus] || 0 : null;
           return (
             <Link key={item.href} href={item.href}>
               <a
                 style={{
-                  display: "block",
+                  display: horizontal ? "inline-flex" : "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "6px",
                   padding: horizontal ? "7px 10px" : "9px 12px",
                   background: active ? "#0f172a" : "transparent",
                   color: active ? "#ffffff" : "#64748b",
@@ -229,7 +260,22 @@ export default function App({ Component, pageProps }) {
                   marginBottom: horizontal ? 0 : "2px",
                 }}
               >
-                {item.icon} {item.label}
+                <span>{item.icon} {item.label}</span>
+                {count != null && count > 0 && (
+                  <span
+                    style={{
+                      fontSize: "10.5px",
+                      fontWeight: 700,
+                      color: active ? "#0f172a" : "#ffffff",
+                      background: active ? "#ffffff" : "#3b82f6",
+                      padding: "1px 7px",
+                      borderRadius: "999px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {count}
+                  </span>
+                )}
               </a>
             </Link>
           );
