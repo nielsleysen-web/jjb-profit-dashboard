@@ -354,11 +354,6 @@ function TaskRow({ t, me, onOpen }) {
           📅 {fmtDate(t.deadline)}{overdue ? " ⚠" : ""}
         </span>
       )}
-      {!t.frameioLink && (
-        <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#dc2626", background: "#fef2f2", padding: "3px 8px", borderRadius: "999px", flexShrink: 0 }}>
-          Frame.io missing
-        </span>
-      )}
       <span style={{ color: "#cbd5e1", fontSize: "14px", flexShrink: 0 }}>→</span>
     </div>
   );
@@ -472,11 +467,10 @@ function TaskModal({ t, me, post, onClose, onEdit, isMobile }) {
         <div style={{ marginBottom: "16px" }}>
           <div style={{ ...ui.label, marginBottom: "4px" }}>Links</div>
           <LinkRow label="🔗 Landing page" url={t.landingPage} />
-          <LinkRow label="📋 Briefing" url={t.briefingLink} />
-          <LinkRow label="📝 Script" url={t.scriptLink} />
-          {/* Frame.io — verplicht, door team invulbaar */}
+          <LinkRow label="📋 Briefing Link" url={t.briefingLink} />
+          {/* Frame.io — door team invulbaar */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0" }}>
-            <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#64748b" }}>🎞 Frame.io <span style={{ color: "#dc2626" }}>*</span></span>
+            <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#64748b" }}>🎞 Frame.io</span>
             {frameioEdit ? (
               <span style={{ display: "inline-flex", gap: "6px", alignItems: "center" }}>
                 <input
@@ -495,8 +489,8 @@ function TaskModal({ t, me, post, onClose, onEdit, isMobile }) {
                 <a onClick={() => setFrameioEdit(true)} style={{ color: "#94a3b8", cursor: "pointer", fontSize: "11px" }}>edit</a>
               </span>
             ) : (
-              <a onClick={() => setFrameioEdit(true)} style={{ fontSize: "12px", fontWeight: 700, color: "#dc2626", cursor: "pointer" }}>
-                Required — add link
+              <a onClick={() => setFrameioEdit(true)} style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}>
+                + Add link
               </a>
             )}
           </div>
@@ -566,7 +560,6 @@ function TaskForm({ existing, team, defaultStatus, onClose, onSave, onDelete }) 
           angle: "",
           landingPage: "",
           briefingLink: "",
-          scriptLink: "",
           deadline: "",
           spocEmail: "",
           spocName: "",
@@ -611,7 +604,6 @@ function TaskForm({ existing, team, defaultStatus, onClose, onSave, onDelete }) 
       angle: form.angle,
       landingPage: form.landingPage,
       briefingLink: form.briefingLink,
-      scriptLink: form.scriptLink,
       deadline: form.deadline,
       spocEmail: form.spocEmail,
       spocName: form.spocName,
@@ -688,20 +680,14 @@ function TaskForm({ existing, team, defaultStatus, onClose, onSave, onDelete }) 
               <input style={ui.input} placeholder="https://…" value={form.landingPage} onChange={(e) => setForm({ ...form, landingPage: e.target.value })} />
             </div>
             <div>
-              <div style={{ ...ui.label, marginBottom: "6px" }}>Briefing link</div>
+              <div style={{ ...ui.label, marginBottom: "6px" }}>Briefing Link</div>
               <input style={ui.input} placeholder="https://…" value={form.briefingLink} onChange={(e) => setForm({ ...form, briefingLink: e.target.value })} />
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "6px" }}>Script link</div>
-              <input style={ui.input} placeholder="https://…" value={form.scriptLink} onChange={(e) => setForm({ ...form, scriptLink: e.target.value })} />
-            </div>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "6px" }}>Frame.io link</div>
-              <input style={ui.input} placeholder="https://f.io/…" value={form.frameioLink} onChange={(e) => setForm({ ...form, frameioLink: e.target.value })} />
-            </div>
+          <div>
+            <div style={{ ...ui.label, marginBottom: "6px" }}>Frame.io link</div>
+            <input style={ui.input} placeholder="https://f.io/…" value={form.frameioLink} onChange={(e) => setForm({ ...form, frameioLink: e.target.value })} />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
