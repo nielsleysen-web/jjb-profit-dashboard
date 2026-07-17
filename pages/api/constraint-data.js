@@ -1,11 +1,29 @@
 // pages/api/constraint-data.js
 // Opslag voor de Constraint Focus pagina — bewaard als metaobject in Shopify.
-// Beveiligd met een apart wachtwoord (header x-focus-password).
+// Beveiligd via Operations Centre accounts: alleen Strategy-rechten (of admin).
 // Vereist scopes: read_metaobjects, write_metaobjects
 
 import axios from "axios";
+import crypto from "crypto";
 
-const FOCUS_PASSWORD = process.env.FOCUS_PASSWORD || "Keeper1234@";
+// --- sessie check (Operations Centre accounts) ---
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
+function getSession(req) {
+  const match = (req.headers.cookie || "").match(/(?:^|;\s*)jjb_session=([^;]+)/);
+  const sessionToken = match ? match[1] : null;
+  if (!sessionToken) return null;
+  const [body, sig] = sessionToken.split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 let tokenCache = { token: null, expiresAt: 0 };
 
@@ -53,9 +71,9 @@ const UPSERT_MUTATION = `
 const EMPTY = { constraints: [], hypotheses: [] };
 
 export default async function handler(req, res) {
-  // Apart wachtwoord voor deze pagina — server-side gecheckt
-  if (req.headers["x-focus-password"] !== FOCUS_PASSWORD) {
-    return res.status(401).json({ success: false, error: "Onjuist wachtwoord" });
+  const session = getSession(req);
+  if (!session || !(session.strategy || session.admin)) {
+    return res.status(401).json({ success: false, error: "No access — Strategy permission required" });
   }
 
   try {
@@ -86,7 +104,7 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const { data } = req.body || {};
       if (!data || typeof data !== "object") {
-        return res.status(400).json({ success: false, error: "Geen data meegegeven" });
+        return res.status(400).json({ success: false, error: "No data provided" });
       }
       const response = await axios.post(
         endpoint,
