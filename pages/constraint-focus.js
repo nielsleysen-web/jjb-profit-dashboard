@@ -74,47 +74,21 @@ const btnGhost = {
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
 export default function ConstraintFocus() {
-  const [unlocked, setUnlocked] = useState(false);
-  const [password, setPassword] = useState("");
-  const [pwInput, setPwInput] = useState("");
-  const [pwError, setPwError] = useState("");
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [saveState, setSaveState] = useState("saved"); // saved | saving | error
   const saveTimer = useRef(null);
   const isMobile = useIsMobile();
 
-  // Bij laden: eerder ingevoerd wachtwoord proberen
   useEffect(() => {
-    const stored = localStorage.getItem("jjb_focus_pw");
-    if (stored) tryUnlock(stored);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetch("/api/constraint-data")
+      .then((r) => r.json())
+      .then((res) => {
+        if (!res.success) throw new Error(res.error);
+        setData(res.data);
+      })
+      .catch((err) => setError(err.message));
   }, []);
-
-  const tryUnlock = async (pw) => {
-    setLoading(true);
-    setPwError("");
-    try {
-      const res = await fetch("/api/constraint-data", {
-        headers: { "x-focus-password": pw },
-      });
-      if (res.status === 401) {
-        localStorage.removeItem("jjb_focus_pw");
-        setPwError(pw === localStorage.getItem("jjb_focus_pw") ? "" : "Onjuist wachtwoord");
-        return;
-      }
-      const result = await res.json();
-      if (!result.success) throw new Error(result.error);
-      localStorage.setItem("jjb_focus_pw", pw);
-      setPassword(pw);
-      setData(result.data);
-      setUnlocked(true);
-    } catch (err) {
-      setPwError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Autosave met debounce
   const persist = (next) => {
@@ -125,7 +99,7 @@ export default function ConstraintFocus() {
       try {
         const res = await fetch("/api/constraint-data", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-focus-password": password },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ data: next }),
         }).then((r) => r.json());
         setSaveState(res.success ? "saved" : "error");
@@ -135,40 +109,19 @@ export default function ConstraintFocus() {
     }, 800);
   };
 
-  /* ---------- wachtwoord-scherm ---------- */
-  if (!unlocked) {
+  if (error)
     return (
-      <div style={{ ...ui.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            tryUnlock(pwInput);
-          }}
-          style={{ ...ui.card, padding: "36px", width: "100%", maxWidth: "380px" }}
-        >
-          <div style={{ fontSize: "28px", marginBottom: "10px" }}>🎯</div>
-          <h1 style={{ margin: "0 0 4px 0", fontSize: "20px", fontWeight: 700 }}>Constraint Focus</h1>
-          <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "#8a92a3" }}>
-            Deze pagina is extra beveiligd. Voer het wachtwoord in.
-          </p>
-          <input
-            type="password"
-            value={pwInput}
-            onChange={(e) => setPwInput(e.target.value)}
-            placeholder="Wachtwoord"
-            autoFocus
-            style={{ ...ui.input, marginBottom: "12px" }}
-          />
-          {pwError && <p style={{ color: "#dc2626", fontSize: "12.5px", margin: "0 0 12px 0" }}>{pwError}</p>}
-          <button type="submit" disabled={loading} style={{ ...btnPrimary, width: "100%", padding: "11px" }}>
-            {loading ? "Controleren…" : "Ontgrendel"}
-          </button>
-        </form>
+      <div style={ui.page}>
+        <div style={{ ...ui.card, padding: "24px", color: "#dc2626" }}>Error: {error}</div>
       </div>
     );
-  }
 
-  if (!data) return null;
+  if (!data)
+    return (
+      <div style={{ ...ui.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ color: "#8a92a3" }}>Loading…</span>
+      </div>
+    );
 
   const activeConstraint = data.constraints.find((c) => c.status === "active") || null;
   const archivedConstraints = data.constraints.filter((c) => c.status !== "active");
@@ -186,11 +139,11 @@ export default function ConstraintFocus() {
         <div>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>🎯 Constraint Focus</h1>
           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-            1 constraint → hypotheses op ICE-score → taken → review → volgende
+            1 constraint → hypotheses by ICE score → tasks → review → next
           </p>
         </div>
         <span style={{ fontSize: "12px", color: saveState === "error" ? "#dc2626" : "#8a92a3" }}>
-          {saveState === "saving" ? "Opslaan…" : saveState === "error" ? "⚠ Opslaan mislukt" : "✓ Opgeslagen"}
+          {saveState === "saving" ? "Saving…" : saveState === "error" ? "⚠ Save failed" : "✓ Saved"}
         </span>
       </div>
 
@@ -217,12 +170,12 @@ export default function ConstraintFocus() {
       {/* Archief van opgeloste constraints */}
       {archivedConstraints.length > 0 && (
         <div style={{ ...ui.card, padding: "20px 24px", marginTop: "20px" }}>
-          <h2 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 700 }}>Opgeloste constraints</h2>
+          <h2 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 700 }}>Solved constraints</h2>
           {archivedConstraints.map((c) => (
             <div key={c.id} style={{ padding: "12px 0", borderBottom: "1px solid #f4f5f7" }}>
               <div style={{ fontSize: "13.5px", fontWeight: 600 }}>✅ {c.title}</div>
               <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
-                {c.metricName}: {c.metricCurrent} → doel {c.metricTarget}
+                {c.metricName}: {c.metricCurrent} → target {c.metricTarget}
               </div>
               {c.conclusion && (
                 <div style={{ fontSize: "12.5px", color: "#334155", marginTop: "6px", fontStyle: "italic" }}>
@@ -283,50 +236,50 @@ function ConstraintSection({ activeConstraint, data, persist, isMobile }) {
     return (
       <div style={{ ...ui.card, padding: "24px", marginBottom: "20px" }}>
         <h2 style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: 700 }}>
-          {editing ? "Constraint bewerken" : "Stap 1 — Wat is de main constraint?"}
+          {editing ? "Edit constraint" : "Step 1 — What is the main constraint?"}
         </h2>
         <p style={{ margin: "0 0 16px 0", fontSize: "12.5px", color: "#8a92a3" }}>
-          De ene bottleneck die de groei van het bedrijf nu het meest tegenhoudt.
+          The one bottleneck holding back the company's growth the most right now.
         </p>
         <div style={{ display: "grid", gap: "10px" }}>
           <input
             style={ui.input}
-            placeholder="Constraint — bv. 'Te lage conversie op de productpagina'"
+            placeholder="Constraint — e.g. 'Low conversion rate on the product page'"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
           <textarea
             style={{ ...ui.input, minHeight: "70px", resize: "vertical" }}
-            placeholder="Analyse — waarom denk je dat dit dé constraint is? Wat zie je in de data?"
+            placeholder="Analysis — why do you think this is THE constraint? What does the data show?"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: "10px" }}>
             <input
               style={ui.input}
-              placeholder="Metric — bv. 'CR productpagina'"
+              placeholder="Metric — e.g. 'Product page CR'"
               value={form.metricName}
               onChange={(e) => setForm({ ...form, metricName: e.target.value })}
             />
             <input
               style={ui.input}
-              placeholder="Nu — bv. '1,8%'"
+              placeholder="Now — e.g. '1.8%'"
               value={form.metricCurrent}
               onChange={(e) => setForm({ ...form, metricCurrent: e.target.value })}
             />
             <input
               style={ui.input}
-              placeholder="Doel — bv. '3%'"
+              placeholder="Target — e.g. '3%'"
               value={form.metricTarget}
               onChange={(e) => setForm({ ...form, metricTarget: e.target.value })}
             />
           </div>
           <div style={{ display: "flex", gap: "8px" }}>
             <button onClick={save} style={btnPrimary}>
-              {editing ? "Opslaan" : "Constraint vastleggen"}
+              {editing ? "Save" : "Set constraint"}
             </button>
             {editing && (
-              <button onClick={() => setEditing(false)} style={btnGhost}>Annuleer</button>
+              <button onClick={() => setEditing(false)} style={btnGhost}>Cancel</button>
             )}
           </div>
         </div>
@@ -356,9 +309,9 @@ function ConstraintSection({ activeConstraint, data, persist, isMobile }) {
           )}
         </div>
         <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button onClick={startEdit} style={btnGhost}>Bewerk</button>
+          <button onClick={startEdit} style={btnGhost}>Edit</button>
           <button onClick={() => setClosing(true)} style={{ ...btnPrimary, background: "#16a34a" }}>
-            Constraint opgelost ✓
+            Constraint solved ✓
           </button>
         </div>
       </div>
@@ -366,17 +319,17 @@ function ConstraintSection({ activeConstraint, data, persist, isMobile }) {
       {closing && (
         <div style={{ marginTop: "16px", padding: "16px", background: "#f0fdf4", borderRadius: "12px" }}>
           <p style={{ margin: "0 0 10px 0", fontSize: "13px", fontWeight: 600, color: "#166534" }}>
-            Conclusie — wat heeft het opgelost en wat was de impact op de cijfers?
+            Conclusion — what solved it and what was the impact on the numbers?
           </p>
           <textarea
             style={{ ...ui.input, minHeight: "70px", resize: "vertical", marginBottom: "10px" }}
-            placeholder="Bv. 'CR steeg van 1,8% naar 2,9% na de nieuwe productpagina — omzet +31%'"
+            placeholder="E.g. 'CR went from 1.8% to 2.9% after the new product page — revenue +31%'"
             value={conclusion}
             onChange={(e) => setConclusion(e.target.value)}
           />
           <div style={{ display: "flex", gap: "8px" }}>
-            <button onClick={solve} style={{ ...btnPrimary, background: "#16a34a" }}>Afsluiten</button>
-            <button onClick={() => setClosing(false)} style={btnGhost}>Annuleer</button>
+            <button onClick={solve} style={{ ...btnPrimary, background: "#16a34a" }}>Close</button>
+            <button onClick={() => setClosing(false)} style={btnGhost}>Cancel</button>
           </div>
         </div>
       )}
@@ -423,9 +376,9 @@ function calendarUrl(hypothesis, deadline) {
   const dEnd = next.toISOString().split("T")[0].replace(/-/g, "");
   const params = new URLSearchParams({
     action: "TEMPLATE",
-    text: `🎯 Review hypothese: ${hypothesis.title}`,
+    text: `🎯 Review hypothesis: ${hypothesis.title}`,
     dates: `${d}/${dEnd}`,
-    details: `Review de resultaten van deze hypothese in het Constraint Focus dashboard:\nhttps://jjb-profit-dashboard.vercel.app/constraint-focus\n\nHypothese: ${hypothesis.description || hypothesis.title}\n\nCheck: is de metric verbeterd? Wat zegt de data? Schrijf je feedback in het dashboard en sluit de hypothese af.`,
+    details: `Review the results of this hypothesis in the Constraint Focus dashboard:\nhttps://jjb-profit-dashboard.vercel.app/constraint-focus\n\nHypothesis: ${hypothesis.description || hypothesis.title}\n\nCheck: has the metric improved? What does the data say? Write your feedback in the dashboard and close the hypothesis.`,
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
@@ -460,7 +413,7 @@ function HypothesesSection({ constraint, openHypotheses, closedHypotheses, data,
   };
 
   const deleteH = (id) => {
-    if (!confirm("Hypothese verwijderen?")) return;
+    if (!confirm("Delete hypothesis?")) return;
     persist({ ...data, hypotheses: data.hypotheses.filter((h) => h.id !== id) });
   };
 
@@ -468,9 +421,9 @@ function HypothesesSection({ constraint, openHypotheses, closedHypotheses, data,
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
         <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700 }}>
-          Stap 2 — Hypotheses <span style={{ color: "#8a92a3", fontWeight: 500, fontSize: "12.5px" }}>(gerankt op ICE-score)</span>
+          Step 2 — Hypotheses <span style={{ color: "#8a92a3", fontWeight: 500, fontSize: "12.5px" }}>(ranked by ICE score)</span>
         </h2>
-        <button onClick={() => setShowForm(!showForm)} style={btnPrimary}>+ Hypothese</button>
+        <button onClick={() => setShowForm(!showForm)} style={btnPrimary}>+ Hypothesis</button>
       </div>
 
       {/* Nieuwe hypothese */}
@@ -479,14 +432,14 @@ function HypothesesSection({ constraint, openHypotheses, closedHypotheses, data,
           <div style={{ display: "grid", gap: "10px" }}>
             <input
               style={ui.input}
-              placeholder="Hypothese — bv. 'Als we reviews boven de fold tonen, stijgt de CR'"
+              placeholder="Hypothesis — e.g. 'If we show reviews above the fold, CR will increase'"
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               autoFocus
             />
             <textarea
               style={{ ...ui.input, minHeight: "60px", resize: "vertical" }}
-              placeholder="Onderbouwing — waarom geloof je dit? Welke metric moet dit verbeteren?"
+              placeholder="Reasoning — why do you believe this? Which metric should it improve?"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
@@ -495,13 +448,13 @@ function HypothesesSection({ constraint, openHypotheses, closedHypotheses, data,
               <ScorePicker label="Confidence" value={form.confidence} onChange={(v) => setForm({ ...form, confidence: v })} />
               <ScorePicker label="Ease" value={form.ease} onChange={(v) => setForm({ ...form, ease: v })} />
               <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                <div style={ui.label}>ICE totaal</div>
+                <div style={ui.label}>ICE total</div>
                 <div style={{ fontSize: "24px", fontWeight: 700 }}>{form.impact + form.confidence + form.ease}<span style={{ fontSize: "13px", color: "#94a3b8" }}>/15</span></div>
               </div>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
-              <button onClick={addHypothesis} style={btnPrimary}>Toevoegen</button>
-              <button onClick={() => setShowForm(false)} style={btnGhost}>Annuleer</button>
+              <button onClick={addHypothesis} style={btnPrimary}>Add</button>
+              <button onClick={() => setShowForm(false)} style={btnGhost}>Cancel</button>
             </div>
           </div>
         </div>
@@ -511,7 +464,7 @@ function HypothesesSection({ constraint, openHypotheses, closedHypotheses, data,
       {openHypotheses.length === 0 && !showForm && (
         <div style={{ ...ui.card, padding: "32px", textAlign: "center", marginBottom: "14px" }}>
           <p style={{ margin: 0, fontSize: "13px", color: "#8a92a3" }}>
-            Nog geen open hypotheses. Klik op <b>+ Hypothese</b> om te brainstormen over oplossingen voor deze constraint.
+            No open hypotheses yet. Click <b>+ Hypothesis</b> to brainstorm solutions for this constraint.
           </p>
         </div>
       )}
@@ -531,7 +484,7 @@ function HypothesesSection({ constraint, openHypotheses, closedHypotheses, data,
         ))}
       </div>
 
-      {/* Afgesloten hypotheses */}
+      {/* Closed hypotheses */}
       {closedHypotheses.length > 0 && (
         <div style={{ ...ui.card, padding: "20px 24px" }}>
           <h3 style={{ margin: "0 0 10px 0", fontSize: "13.5px", fontWeight: 700, color: "#64748b" }}>
@@ -598,15 +551,15 @@ function HypothesisCard({ h, isFocus, expanded, onToggle, updateH, deleteH, isMo
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             {isFocus && (
               <span style={{ fontSize: "10px", fontWeight: 700, color: "#3b82f6", background: "#eff6ff", padding: "2px 8px", borderRadius: "999px", textTransform: "uppercase" }}>
-                🎯 Focus nu
+                🎯 Focus now
               </span>
             )}
             <span style={{ fontSize: "14px", fontWeight: 700 }}>{h.title}</span>
           </div>
           <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "3px" }}>
             I {h.impact} · C {h.confidence} · E {h.ease}
-            {h.tasks.length > 0 && ` — taken ${doneTasks}/${h.tasks.length}`}
-            {h.deadline && ` — review ${new Date(h.deadline + "T12:00:00Z").toLocaleDateString("nl-BE", { day: "numeric", month: "short" })}`}
+            {h.tasks.length > 0 && ` — tasks ${doneTasks}/${h.tasks.length}`}
+            {h.deadline && ` — review ${new Date(h.deadline + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}
           </div>
         </div>
         <span style={{ color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>{expanded ? "▲" : "▼"}</span>
@@ -627,7 +580,7 @@ function HypothesisCard({ h, isFocus, expanded, onToggle, updateH, deleteH, isMo
           </div>
 
           {/* Taken */}
-          <div style={{ ...ui.label, margin: "16px 0 8px 0" }}>Taken</div>
+          <div style={{ ...ui.label, margin: "16px 0 8px 0" }}>Tasks</div>
           {h.tasks.map((t) => (
             <div key={t.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px 0" }}>
               <input
@@ -652,7 +605,7 @@ function HypothesisCard({ h, isFocus, expanded, onToggle, updateH, deleteH, isMo
           <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
             <input
               style={{ ...ui.input, flex: 1 }}
-              placeholder="Nieuwe taak…"
+              placeholder="New task…"
               value={taskInput}
               onChange={(e) => setTaskInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addTask()}
@@ -676,16 +629,16 @@ function HypothesisCard({ h, isFocus, expanded, onToggle, updateH, deleteH, isMo
                 rel="noreferrer"
                 style={{ ...btnGhost, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "6px" }}
               >
-                📅 Zet in Google Agenda
+                📅 Add to Google Calendar
               </a>
             )}
           </div>
 
           {/* Feedback */}
-          <div style={{ ...ui.label, margin: "18px 0 8px 0" }}>Feedback & resultaten</div>
+          <div style={{ ...ui.label, margin: "18px 0 8px 0" }}>Feedback & results</div>
           <textarea
             style={{ ...ui.input, minHeight: "80px", resize: "vertical" }}
-            placeholder="Klopte de hypothese? Wat zeggen de cijfers (omzet, CR, ROAS, ...)? Wat is de impact op de groei geweest?"
+            placeholder="Was the hypothesis correct? What do the numbers say (revenue, CR, ROAS, ...)? What was the impact on growth?"
             value={h.feedback || ""}
             onChange={(e) => updateH(h.id, { feedback: e.target.value })}
           />
@@ -695,30 +648,30 @@ function HypothesisCard({ h, isFocus, expanded, onToggle, updateH, deleteH, isMo
             {closing == null ? (
               <>
                 <button onClick={() => setClosing("validated")} style={{ ...btnPrimary, background: "#16a34a" }}>
-                  ✓ Gevalideerd — afsluiten
+                  ✓ Validated — close
                 </button>
                 <button onClick={() => setClosing("rejected")} style={{ ...btnGhost, color: "#dc2626", borderColor: "#fecaca" }}>
-                  ✗ Verworpen — afsluiten
+                  ✗ Rejected — close
                 </button>
                 <button onClick={() => deleteH(h.id)} style={{ ...btnGhost, marginLeft: "auto", color: "#94a3b8" }}>
-                  Verwijder
+                  Delete
                 </button>
               </>
             ) : (
               <div style={{ padding: "12px 16px", background: closing === "validated" ? "#f0fdf4" : "#fef2f2", borderRadius: "10px", width: "100%" }}>
                 <p style={{ margin: "0 0 10px 0", fontSize: "13px", fontWeight: 600 }}>
                   {h.feedback?.trim()
-                    ? "Zeker afsluiten? De volgende hypothese met de hoogste ICE-score wordt dan de nieuwe focus."
-                    : "Tip: schrijf eerst je feedback hierboven, zodat je later weet wat dit experiment opleverde. Toch afsluiten?"}
+                    ? "Close for sure? The next hypothesis with the highest ICE score will become the new focus."
+                    : "Tip: write your feedback above first, so you'll know later what this experiment delivered. Close anyway?"}
                 </p>
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
                     onClick={() => updateH(h.id, { status: closing, closedAt: new Date().toISOString() })}
                     style={{ ...btnPrimary, background: closing === "validated" ? "#16a34a" : "#dc2626" }}
                   >
-                    Ja, afsluiten
+                    Yes, close
                   </button>
-                  <button onClick={() => setClosing(null)} style={btnGhost}>Annuleer</button>
+                  <button onClick={() => setClosing(null)} style={btnGhost}>Cancel</button>
                 </div>
               </div>
             )}
