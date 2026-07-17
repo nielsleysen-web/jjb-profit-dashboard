@@ -37,6 +37,15 @@ const CATEGORIES = [
     items: [{ href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" }],
   },
   {
+    name: "Marketing",
+    perm: "marketing",
+    items: [
+      { href: "/ready-to-work", label: "Ready To Work", icon: "🎬" },
+      { href: "/in-production", label: "In Production", icon: "🎨" },
+      { href: "/qa-check", label: "QA Check", icon: "✅" },
+    ],
+  },
+  {
     name: "Admin",
     perm: "admin",
     items: [{ href: "/accounts", label: "Account Management", icon: "👥" }],
