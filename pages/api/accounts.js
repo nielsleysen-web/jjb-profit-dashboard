@@ -116,7 +116,7 @@ export default async function handler(req, res) {
       if (remove) {
         accounts.users = accounts.users.filter((u) => u.id !== userId);
       } else if (updates) {
-        const allowed = ["status", "finance", "strategy", "name"];
+        const allowed = ["status", "finance", "strategy", "marketing", "name"];
         for (const key of allowed) {
           if (key in updates) user[key] = updates[key];
         }
