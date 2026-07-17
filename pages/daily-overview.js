@@ -65,10 +65,10 @@ export default function DailyOverview() {
   }, [dateRange]);
 
   const fmt = (v) =>
-    new Intl.NumberFormat("nl-BE", { style: "currency", currency: "EUR" }).format(v || 0);
+    new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(v || 0);
 
   const dateLabel = (dateStr) =>
-    new Date(`${dateStr}T12:00:00Z`).toLocaleDateString("nl-BE", {
+    new Date(`${dateStr}T12:00:00Z`).toLocaleDateString("en-GB", {
       weekday: "short",
       day: "numeric",
       month: "short",
@@ -110,7 +110,7 @@ export default function DailyOverview() {
         <div>
           <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>Daily Overview</h1>
           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-            Orders, revenue, profit, AOV en ad spend per dag
+            Orders, revenue, profit, COGS and ad spend per day
           </p>
         </div>
         <div style={{ display: "flex", gap: "4px", background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "4px" }}>
@@ -139,7 +139,7 @@ export default function DailyOverview() {
         <table style={{ width: "100%", minWidth: isMobile ? "640px" : "auto", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={th("left")}>Datum</th>
+              <th style={th("left")}>Date</th>
               <th style={th()}>Orders</th>
               <th style={th()}>Revenue</th>
               <th style={th()}>Ad Spend</th>
@@ -164,7 +164,7 @@ export default function DailyOverview() {
                     {dateLabel(d.date)}
                     {isToday && (
                       <span style={{ marginLeft: "8px", fontSize: "10px", fontWeight: 700, color: "#3b82f6", background: "#eff6ff", padding: "2px 7px", borderRadius: "999px", textTransform: "uppercase" }}>
-                        vandaag
+                        today
                       </span>
                     )}
                   </td>
@@ -181,14 +181,14 @@ export default function DailyOverview() {
             })}
             {days.length === 0 && (
               <tr>
-                <td colSpan="7" style={{ padding: "32px", textAlign: "center", color: "#94a3b8" }}>Geen data</td>
+                <td colSpan="7" style={{ padding: "32px", textAlign: "center", color: "#94a3b8" }}>No data</td>
               </tr>
             )}
           </tbody>
           {days.length > 0 && (
             <tfoot>
               <tr style={{ borderTop: "2px solid #eceef2", background: "#fafbfc" }}>
-                <td style={{ ...td, textAlign: "left", fontWeight: 700, color: "#0f172a" }}>Totaal</td>
+                <td style={{ ...td, textAlign: "left", fontWeight: 700, color: "#0f172a" }}>Total</td>
                 <td style={{ ...td, fontWeight: 700 }}>{data.totalOrders}</td>
                 <td style={{ ...td, fontWeight: 700 }}>{fmt(data.revenue)}</td>
                 <td style={{ ...td, fontWeight: 700 }}>{fmt(data.adSpend)}</td>
