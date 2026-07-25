@@ -41,6 +41,10 @@ const STORE_TIMEZONE = "Europe/Brussels";
 const FALLBACK_FEE_PERCENT = 0.029;
 const FALLBACK_FEE_FIXED = 0.3;
 
+// Fee aan de ad account supplier: 2,5% bovenop de Meta ad spend,
+// wordt mee afgetrokken van de net profit.
+const AD_SUPPLIER_FEE_PERCENT = 0.025;
+
 // Optionele COGS override per variant. Wordt gebruikt als er GEEN unitCost
 // in Shopify staat. Key = "Product titel|Variant titel", value = kostprijs in EUR.
 // Voorbeeld: "ArmLift|2": 10.43
@@ -500,9 +504,11 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
 
   matchAdSpendToProducts(cur.productMap, meta.campaignSpend, inCurrent);
 
-  // Kerncijfers
-  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend;
-  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend;
+  // Kerncijfers (incl. 2,5% ad account supplier fee)
+  const adSupplierFee = adSpend * AD_SUPPLIER_FEE_PERCENT;
+  const prevAdSupplierFee = prevAdSpend * AD_SUPPLIER_FEE_PERCENT;
+  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend - adSupplierFee;
+  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend - prevAdSupplierFee;
   const avgOrderValue = cur.totalOrders > 0 ? cur.revenue / cur.totalOrders : 0;
   const prevAOV = prev.totalOrders > 0 ? prev.revenue / prev.totalOrders : 0;
   const profitPercent = cur.revenue > 0 ? (netProfit / cur.revenue) * 100 : 0;
@@ -521,7 +527,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
       cogs: round2(day.cogs),
       fees: round2(day.fees),
       adSpend: round2(spend),
-      profit: round2(day.revenue - day.cogs - day.fees - spend),
+      profit: round2(day.revenue - day.cogs - day.fees - spend - spend * AD_SUPPLIER_FEE_PERCENT),
     });
   }
 
@@ -529,29 +535,37 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
   const singleDay = dateFrom === dateTo;
   let revenueChart;
   if (singleDay) {
-    const hourly = {};
-    for (const order of currentOrders) {
-      const h = new Date(order.createdAt).toLocaleString("en-GB", {
-        timeZone: STORE_TIMEZONE,
-        hour: "2-digit",
-        hourCycle: "h23",
-      });
-      const gross = parseFloat(order.currentTotalPriceSet.shopMoney.amount);
-      const refunded = parseFloat(order.totalRefundedSet?.shopMoney?.amount || 0);
-      if (!hourly[h]) hourly[h] = { revenue: 0, orders: 0 };
-      hourly[h].revenue += gross - refunded;
-      hourly[h].orders++;
-    }
-    const points = [];
-    for (let h = 0; h < 24; h++) {
-      const key = String(h).padStart(2, "0");
-      points.push({
-        label: `${key}:00`,
-        revenue: round2(hourly[key]?.revenue || 0),
-        orders: hourly[key]?.orders || 0,
-      });
-    }
-    revenueChart = { granularity: "hour", points };
+    const buildHourly = (orderList) => {
+      const hourly = {};
+      for (const order of orderList) {
+        const h = new Date(order.createdAt).toLocaleString("en-GB", {
+          timeZone: STORE_TIMEZONE,
+          hour: "2-digit",
+          hourCycle: "h23",
+        });
+        const gross = parseFloat(order.currentTotalPriceSet.shopMoney.amount);
+        const refunded = parseFloat(order.totalRefundedSet?.shopMoney?.amount || 0);
+        if (!hourly[h]) hourly[h] = { revenue: 0, orders: 0 };
+        hourly[h].revenue += gross - refunded;
+        hourly[h].orders++;
+      }
+      const points = [];
+      for (let h = 0; h < 24; h++) {
+        const key = String(h).padStart(2, "0");
+        points.push({
+          label: `${key}:00`,
+          revenue: round2(hourly[key]?.revenue || 0),
+          orders: hourly[key]?.orders || 0,
+        });
+      }
+      return points;
+    };
+    // Vergelijkingslijn: de dag ervoor (prevOrders = prevFrom..prevTo = 1 dag)
+    revenueChart = {
+      granularity: "hour",
+      points: buildHourly(currentOrders),
+      compare: buildHourly(prevOrders),
+    };
   } else {
     revenueChart = {
       granularity: "day",
@@ -590,6 +604,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
     avgOrderValue: round2(avgOrderValue),
     aovChange: round1(pctChange(avgOrderValue, prevAOV)),
     adSpend: round2(adSpend),
+    adSupplierFee: round2(adSupplierFee),
     adSpendPercent:
       cur.revenue > 0 ? round1((adSpend / cur.revenue) * 100) : 0,
     roas: adSpend > 0 ? round2(cur.revenue / adSpend) : 0,
