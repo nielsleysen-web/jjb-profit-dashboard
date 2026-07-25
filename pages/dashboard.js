@@ -222,8 +222,13 @@ export default function Dashboard() {
               {formatCurrency(data.revenue)}
             </div>
           </div>
-          <span style={{ fontSize: "11px", color: "#8a92a3" }}>
+          <span style={{ fontSize: "11px", color: "#8a92a3", textAlign: "right" }}>
             net profit: <b style={{ color: data.netProfit >= 0 ? "#16a34a" : "#dc2626" }}>{formatCurrency(data.netProfit)}</b>
+            {data.revenueChart?.granularity === "hour" && (
+              <span style={{ display: "block", marginTop: "2px", color: "#a4adbd" }}>
+                ─ today &nbsp;·&nbsp; ╌ yesterday
+              </span>
+            )}
           </span>
         </div>
         <RevenueChart chart={data.revenueChart} formatCurrency={formatCurrency} />
@@ -241,7 +246,7 @@ export default function Dashboard() {
         <Card small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
         <Card small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
         <Card small label="COGS + Fees" value={formatCurrency(data.cogsAndFees)} sub={`COGS ${formatCurrency(data.cogs)} · fees ${formatCurrency(data.fees)}`} />
-        <Card small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue`} />
+        <Card small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue · +${formatCurrency(data.adSupplierFee)} supplier fee (2.5%)`} />
       </div>
 
       {/* Products */}
@@ -660,6 +665,7 @@ function niceTicks(maxValue) {
 function RevenueChart({ chart, formatCurrency }) {
   const [hover, setHover] = useState(null);
   const days = chart?.points || [];
+  const compare = chart?.compare || null; // gisteren, per uur
   const isHourly = chart?.granularity === "hour";
 
   if (!days.length) {
@@ -677,7 +683,8 @@ function RevenueChart({ chart, formatCurrency }) {
   const ih = H - PAD.top - PAD.bottom;
 
   const revenues = days.map((d) => d.revenue);
-  const ticks = niceTicks(Math.max(...revenues));
+  const compareRevenues = compare ? compare.map((d) => d.revenue) : [0];
+  const ticks = niceTicks(Math.max(...revenues, ...compareRevenues));
   const min = 0;
   const max = ticks[ticks.length - 1];
   const span = max - min || 1;
@@ -692,12 +699,16 @@ function RevenueChart({ chart, formatCurrency }) {
   const pts = days.map((d, i) => [x(i), y(d.revenue)]);
 
   // Smooth cubic bezier pad
-  const linePath = pts.reduce((acc, [px, py], i) => {
-    if (i === 0) return `M ${px},${py}`;
-    const [prevX, prevY] = pts[i - 1];
-    const cx = (prevX + px) / 2;
-    return `${acc} C ${cx},${prevY} ${cx},${py} ${px},${py}`;
-  }, "");
+  const smoothPath = (points) =>
+    points.reduce((acc, [px, py], i) => {
+      if (i === 0) return `M ${px},${py}`;
+      const [prevX, prevY] = points[i - 1];
+      const cx = (prevX + px) / 2;
+      return `${acc} C ${cx},${prevY} ${cx},${py} ${px},${py}`;
+    }, "");
+
+  const linePath = smoothPath(pts);
+  const comparePath = compare ? smoothPath(compare.map((d, i) => [x(i), y(d.revenue)])) : null;
 
   const areaPath = `${linePath} L ${pts[pts.length - 1][0]},${zeroY} L ${pts[0][0]},${zeroY} Z`;
 
@@ -755,6 +766,11 @@ function RevenueChart({ chart, formatCurrency }) {
           </g>
         ))}
 
+        {/* gisteren: lichte onderbroken lijn achter de volle lijn */}
+        {comparePath && (
+          <path d={comparePath} fill="none" stroke="#3b82f6" strokeWidth="1.1" strokeLinecap="round" strokeDasharray="4,4" opacity="0.32" />
+        )}
+
         {/* area + lijn */}
         <path d={areaPath} fill="url(#revenueFill)" />
         <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="1.2" strokeLinecap="round" />
@@ -801,6 +817,11 @@ function RevenueChart({ chart, formatCurrency }) {
           <div>
             Revenue: <b style={{ color: "#93c5fd" }}>{formatCurrency(days[hover].revenue)}</b>
           </div>
+          {compare && compare[hover] && (
+            <div style={{ color: "#cbd5e1" }}>
+              Yesterday: {formatCurrency(compare[hover].revenue)}
+            </div>
+          )}
           {days[hover].profit != null && (
             <div style={{ color: "#cbd5e1" }}>
               Profit:{" "}
