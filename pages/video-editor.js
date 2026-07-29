@@ -72,8 +72,8 @@ const btnGhost = {
   fontWeight: 600,
 };
 
-const STATUSES = ["Task Start", "Ready To Work", "QA Check", "Revisions", "Ready to launch", "Launched"];
-const BOARD_STATUSES = STATUSES.slice(0, 5); // Launched verhuist naar het Launched-tabblad
+const STATUSES = ["Task Start", "Ready To Work", "In Production", "QA Check", "Revisions", "Ready to launch", "Launched"];
+const BOARD_STATUSES = STATUSES.slice(0, 6); // Launched verhuist naar het Launched-tabblad
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
 const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
@@ -89,6 +89,7 @@ const SUBTITLE_STYLES = ["White Text, Shadowed Background", "Documentary Text", 
 const STATUS_META = {
   "Task Start": { color: "#c2410c", bg: "#ffedd5" },
   "Ready To Work": { color: "#1d4ed8", bg: "#dbeafe" },
+  "In Production": { color: "#6d28d9", bg: "#ede9fe" },
   "QA Check": { color: "#b45309", bg: "#fef3c7" },
   "Revisions": { color: "#be123c", bg: "#ffe4e6" },
   "Ready to launch": { color: "#0f766e", bg: "#ccfbf1" },
