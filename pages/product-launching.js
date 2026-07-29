@@ -133,6 +133,8 @@ export default function ProductLaunching() {
   const [error, setError] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [dragId, setDragId] = useState(null);
+  const [dragOver, setDragOver] = useState(null);
   const isMobile = useIsMobile();
 
   const load = () =>
@@ -178,6 +180,19 @@ export default function ProductLaunching() {
     if (res?.createdId) setOpenTaskId(res.createdId);
   };
 
+  // Drag & drop: kaart naar een andere kolom slepen wijzigt de status
+  // (met dezelfde meldingen en log-entries als via de dropdown)
+  const onDropTask = async (status) => {
+    setDragOver(null);
+    if (!dragId) return;
+    const task = tasks.find((x) => x.id === dragId);
+    setDragId(null);
+    if (!task || task.status === status) return;
+    // Optimistisch verplaatsen voor een vlot gevoel
+    setTasks((prev) => prev.map((x) => (x.id === task.id ? { ...x, status } : x)));
+    await post({ action: "status", taskId: task.id, status });
+  };
+
   if (loading)
     return (
       <div style={{ ...ui.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -218,7 +233,30 @@ export default function ProductLaunching() {
             .filter((t) => t.status === status)
             .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
           return (
-            <div key={status} style={{ minWidth: isMobile ? "250px" : "272px", width: isMobile ? "250px" : "272px", flexShrink: 0 }}>
+            <div
+              key={status}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragOver !== status) setDragOver(status);
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                onDropTask(status);
+              }}
+              style={{
+                minWidth: isMobile ? "250px" : "272px",
+                width: isMobile ? "250px" : "272px",
+                flexShrink: 0,
+                borderRadius: "14px",
+                padding: "4px",
+                background: dragOver === status && dragId ? meta.bg : "transparent",
+                outline: dragOver === status && dragId ? `2px dashed ${meta.color}` : "2px dashed transparent",
+                transition: "background 0.15s, outline 0.15s",
+              }}
+            >
               {/* Kolomkop */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", padding: "0 2px" }}>
                 <span style={{ fontSize: "11px", fontWeight: 700, color: meta.color, background: meta.bg, padding: "4px 10px", borderRadius: "999px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
@@ -228,12 +266,26 @@ export default function ProductLaunching() {
               </div>
 
               {/* Kaarten */}
-              <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ display: "grid", gap: "8px", minHeight: "40px" }}>
                 {columnTasks.map((t) => (
                   <div
                     key={t.id}
+                    draggable={!!me?.canStatus}
+                    onDragStart={(e) => {
+                      setDragId(t.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragEnd={() => {
+                      setDragId(null);
+                      setDragOver(null);
+                    }}
                     onClick={() => setOpenTaskId(t.id)}
-                    style={{ ...ui.card, padding: "12px 14px", cursor: "pointer" }}
+                    style={{
+                      ...ui.card,
+                      padding: "12px 14px",
+                      cursor: me?.canStatus ? "grab" : "pointer",
+                      opacity: dragId === t.id ? 0.4 : 1,
+                    }}
                   >
                     <div style={{ fontSize: "13px", fontWeight: 700, lineHeight: 1.4 }}>{t.productName}</div>
                     {t.funnelAngle && (
