@@ -1,6 +1,6 @@
 // pages/launched.js
-// Launched overview — all launched products.
-// Winner/Loser categorisation (based on Ads Manager data) comes in phase 2.
+// Launched overview — funnels and creatives.
+// Winner/Loser categorisation (Ads Manager data) comes in phase 2.
 
 import { useState, useEffect } from "react";
 
@@ -10,69 +10,99 @@ const ui = {
 };
 
 export default function Launched() {
-  const [tasks, setTasks] = useState([]);
+  const [funnels, setFunnels] = useState([]);
+  const [creatives, setCreatives] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/launch-tasks")
-      .then((r) => r.json())
-      .then((res) => {
-        if (!res.success) throw new Error(res.error);
-        setTasks(res.tasks);
+    Promise.all([
+      fetch("/api/launch-tasks").then((r) => r.json()).catch(() => null),
+      fetch("/api/creative-tasks").then((r) => r.json()).catch(() => null),
+    ])
+      .then(([f, c]) => {
+        if (f?.success) setFunnels(f.tasks);
+        if (c?.success) setCreatives(c.tasks);
       })
-      .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading)
     return <div style={{ ...ui.page, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ color: "#8a92a3" }}>Loading…</span></div>;
-  if (error)
-    return <div style={ui.page}><div style={{ ...ui.card, padding: "24px", color: "#dc2626" }}>Error: {error}</div></div>;
 
-  const launched = tasks
-    .filter((t) => t.status === "Launched")
-    .sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
+  const launchedFunnels = funnels.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
+  const launchedCreatives = creatives.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
+  const total = launchedFunnels.length + launchedCreatives.length;
+
+  const Row = ({ title, image, sub, by, date }) => (
+    <div style={{ ...ui.card, padding: "16px 20px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+      {image && <img src={image} alt="" style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />}
+      <div style={{ flex: 1, minWidth: "200px" }}>
+        <div style={{ fontSize: "14px", fontWeight: 700 }}>{title}</div>
+        {sub && <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "2px" }}>{sub}</div>}
+      </div>
+      {by && <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>👤 {by}</span>}
+      {date && (
+        <span style={{ fontSize: "12px", color: "#166534", fontWeight: 700 }}>
+          🚀 {new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+        </span>
+      )}
+      <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", background: "#f1f5f9", padding: "3px 10px", borderRadius: "999px" }}>
+        Winner/Loser: pending
+      </span>
+    </div>
+  );
 
   return (
     <div style={ui.page}>
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>
           ✅ Launched
-          <span style={{ marginLeft: "10px", fontSize: "14px", fontWeight: 700, color: "#166534", background: "#dcfce7", padding: "3px 12px", borderRadius: "999px", verticalAlign: "middle" }}>{launched.length}</span>
+          <span style={{ marginLeft: "10px", fontSize: "14px", fontWeight: 700, color: "#166534", background: "#dcfce7", padding: "3px 12px", borderRadius: "999px", verticalAlign: "middle" }}>{total}</span>
         </h1>
         <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
           Winner / Loser categorisation based on Ads Manager data coming soon (phase 2)
         </p>
       </div>
 
-      {launched.length === 0 ? (
+      {total === 0 && (
         <div style={{ ...ui.card, padding: "48px", textAlign: "center" }}>
           <p style={{ margin: 0, color: "#8a92a3", fontSize: "13.5px" }}>No launched products yet.</p>
         </div>
-      ) : (
-        <div style={{ display: "grid", gap: "10px" }}>
-          {launched.map((t) => (
-            <div key={t.id} style={{ ...ui.card, padding: "16px 20px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
-              <div style={{ flex: 1, minWidth: "200px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 700 }}>
-                  {t.productName}
-                  {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "10.5px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "2px 8px", borderRadius: "999px" }}>{t.countryCode}</span>}
-                </div>
-                {t.funnelAngle && <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "2px" }}>{t.funnelAngle}</div>}
-              </div>
-              {t.assigneeName && <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>👤 {t.assigneeName}</span>}
-              {t.launchedDate && (
-                <span style={{ fontSize: "12px", color: "#166534", fontWeight: 700 }}>
-                  🚀 {new Date(t.launchedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                </span>
-              )}
-              <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", background: "#f1f5f9", padding: "3px 10px", borderRadius: "999px" }}>
-                Winner/Loser: pending
-              </span>
-            </div>
-          ))}
-        </div>
+      )}
+
+      {launchedFunnels.length > 0 && (
+        <>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🚀 Funnels ({launchedFunnels.length})</h2>
+          <div style={{ display: "grid", gap: "10px", marginBottom: "26px" }}>
+            {launchedFunnels.map((t) => (
+              <Row
+                key={t.id}
+                title={`${t.productName}${t.countryCode ? ` · ${t.countryCode}` : ""}`}
+                sub={t.funnelAngle}
+                by={t.assigneeName}
+                date={t.launchedDate}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {launchedCreatives.length > 0 && (
+        <>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🎬 Creatives ({launchedCreatives.length})</h2>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {launchedCreatives.map((t) => (
+              <Row
+                key={t.id}
+                title={`${t.product?.title || "Creative"}${t.videoFormat ? ` · ${t.videoFormat}` : ""}`}
+                image={t.product?.image}
+                sub={t.angle}
+                by={t.assigneeName}
+                date={t.launchedDate}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
