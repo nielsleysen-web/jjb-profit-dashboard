@@ -303,16 +303,6 @@ export default function ProductLaunching() {
                       </div>
                     )}
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
-                      {t.countryCode && (
-                        <span style={{ fontSize: "10px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "2px 7px", borderRadius: "999px" }}>
-                          {t.countryCode}
-                        </span>
-                      )}
-                      {t.readyForAI === "YES" && (
-                        <span style={{ fontSize: "10px", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "2px 7px", borderRadius: "999px" }}>
-                          AI
-                        </span>
-                      )}
                       {t.assigneeName && (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#475569" }}>
                           <span style={{ width: "18px", height: "18px", borderRadius: "999px", background: personColor(t.assigneeEmail), color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "9.5px", fontWeight: 700 }}>
