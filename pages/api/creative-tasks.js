@@ -313,6 +313,26 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, tasks: store.tasks });
     }
 
+    /* --- duplicate (admin + creative strategist) --- */
+    if (action === "duplicate") {
+      if (!canEdit) return res.status(403).json({ success: false, error: "No permission to duplicate tasks" });
+      const copy = {
+        ...JSON.parse(JSON.stringify(task)),
+        id: uid(),
+        status: "Task Start",
+        launchedDate: null,
+        frameioLink: "",
+        finalOutputLink: "",
+        activity: [],
+        createdAt: new Date().toISOString(),
+        createdBy: session.name,
+      };
+      addLog(copy, session, `duplicated this task from "${task.product?.title || "a video task"}"`);
+      store.tasks.push(copy);
+      await writeData("creative-tasks", store);
+      return res.status(200).json({ success: true, tasks: store.tasks, createdId: copy.id });
+    }
+
     /* --- delete (admin + creative strategist) --- */
     if (action === "delete") {
       if (!canEdit) return res.status(403).json({ success: false, error: "Only admin and Creative Strategists can delete tasks" });
