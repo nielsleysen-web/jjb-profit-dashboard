@@ -127,8 +127,14 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers) {
   if (newStatus === "Ready To Work" && task.assigneeEmail && task.assigneeEmail !== session.email) {
     notifications.push({ email: task.assigneeEmail, text: `"${productName}" is Ready To Work — you can start editing` });
   }
-  if (newStatus === "QA Check" && session.email !== ADMIN_EMAIL) {
-    notifications.push({ email: ADMIN_EMAIL, text: `Video for "${productName}" is ready for QA Check` });
+  if (newStatus === "QA Check") {
+    // Zowel de admin als de verantwoordelijke Creative Strategist krijgen de QA-melding
+    if (session.email !== ADMIN_EMAIL) {
+      notifications.push({ email: ADMIN_EMAIL, text: `Video for "${productName}" is ready for QA Check` });
+    }
+    if (task.strategistEmail && task.strategistEmail !== session.email && task.strategistEmail !== ADMIN_EMAIL) {
+      notifications.push({ email: task.strategistEmail, text: `Video for "${productName}" is ready for your QA Check` });
+    }
   }
   if (newStatus === "Revisions" && task.assigneeEmail && task.assigneeEmail !== session.email) {
     notifications.push({ email: task.assigneeEmail, text: `"${productName}" needs revisions — check the feedback` });
