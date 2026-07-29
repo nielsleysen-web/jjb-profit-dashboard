@@ -604,6 +604,11 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
   const canEdit = me?.canEdit;
   const canOutput = me?.canOutput;
 
+  // Activity: alleen tonen wat er gebeurde vanaf "Ready To Work"
+  // (zolang de taak nog in opbouw is, blijft alles zichtbaar)
+  const rtwEntry = (t.activity || []).find((a) => a.type === "log" && a.text.includes('changed status to "Ready To Work"'));
+  const visibleActivity = rtwEntry ? (t.activity || []).filter((a) => a.at >= rtwEntry.at) : t.activity || [];
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "nearest" });
   }, [t.activity?.length]);
@@ -920,6 +925,13 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               )}
             </Section>
           </div>
+
+          {/* Save & close onderaan */}
+          <div style={{ padding: isMobile ? "10px 18px" : "12px 30px", borderTop: "1px solid #eef0f3", background: "#ffffff", display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={onClose} style={{ ...btnPrimary, padding: "10px 24px", fontSize: "13px" }}>
+              💾 Save & Close
+            </button>
+          </div>
         </div>
 
         {/* ===== Rechts: activity + chat ===== */}
@@ -930,8 +942,8 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
           </div>
 
           <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px" }}>
-            {(t.activity || []).length === 0 && <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>No activity yet.</p>}
-            {(t.activity || []).map((a) =>
+            {visibleActivity.length === 0 && <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>No activity yet.</p>}
+            {visibleActivity.map((a) =>
               a.type === "chat" ? (
                 <div key={a.id} style={{ padding: "8px 12px", background: a.email === me?.email ? "#eff6ff" : "#ffffff", border: "1px solid #eef0f3", borderRadius: "10px", marginBottom: "6px" }}>
                   <div style={{ fontSize: "11px", marginBottom: "2px" }}>
