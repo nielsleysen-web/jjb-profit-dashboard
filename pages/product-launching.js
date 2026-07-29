@@ -578,11 +578,8 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               <Field label="Advertorial Link">
                 <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
               </Field>
-              <Field label="Alibaba Link">
+              <Field label="Alibaba Link" last>
                 <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
-              </Field>
-              <Field label="Funnelish Link" last>
-                <TextField value={t.funnelishLink} disabled={!canEdit} onSave={(v) => save("funnelishLink", v)} type="url" placeholder="https://…" />
               </Field>
             </Section>
 
@@ -619,32 +616,35 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               </div>
             </Section>
 
-            {/* ===== Sectie: First Creative Batch (onderaan) ===== */}
-            <Section title="🎨 First Creative Batch">
-              <Field label="First Creative Batch" last>
-                <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
-              </Field>
-            </Section>
-
-            {/* ===== Sectie: Funnel Name (onderaan) ===== */}
+            {/* ===== Sectie: Funnel Name + Funnelish Link (final output) ===== */}
             <Section title="🏷 Funnel Name">
               {showNaming && naming ? (
-                <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "10px 12px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "10px 12px", marginBottom: "8px" }}>
                   <code style={{ fontSize: "12px", color: "#0f172a", fontWeight: 600, flex: 1, overflowX: "auto", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{naming}</code>
                   <button onClick={copyNaming} style={{ ...btnGhost, padding: "5px 12px", fontSize: "11.5px", flexShrink: 0, background: copied ? "#dcfce7" : "#fff", color: copied ? "#166534" : "#334155" }}>
                     {copied ? "✓ Copied" : "Copy"}
                   </button>
                 </div>
               ) : (
-                <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+                <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
                   The funnel name is generated automatically once the status reaches "Ready For Build".
                 </p>
               )}
+              <Field label="Funnelish Link" last>
+                <TextField value={t.funnelishLink} disabled={!canEdit} onSave={(v) => save("funnelishLink", v)} type="url" placeholder="Final output of the funnel builder — https://…" />
+              </Field>
               {t.launchedDate && (
                 <div style={{ marginTop: "10px", fontSize: "12.5px", color: "#166534", fontWeight: 600 }}>
                   🚀 Launched {new Date(t.launchedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
                 </div>
               )}
+            </Section>
+
+            {/* ===== Sectie: First Creative Batch (helemaal onderaan) ===== */}
+            <Section title="🎨 First Creative Batch">
+              <Field label="First Creative Batch" last>
+                <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
+              </Field>
             </Section>
           </div>
         </div>
