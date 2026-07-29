@@ -74,9 +74,11 @@ export default async function handler(req, res) {
   }
 
   const session = getSession(req);
-  if (!session || !(session.finance || session.admin)) {
+  if (!session) {
     return res.status(401).json({ success: false, error: "No access" });
   }
+  // Zonder Finance-rechten: alleen naam + foto (geen prijzen of unit costs)
+  const basicOnly = !(session.finance || session.admin);
 
   try {
     const storeUrl = process.env.SHOPIFY_STORE_URL;
@@ -126,6 +128,12 @@ export default async function handler(req, res) {
       })),
     }));
 
+    if (basicOnly) {
+      return res.status(200).json({
+        success: true,
+        products: products.map((p) => ({ id: p.id, title: p.title, image: p.image, variants: [] })),
+      });
+    }
     return res.status(200).json({ success: true, products });
   } catch (error) {
     console.error("Products search error:", error.message);
