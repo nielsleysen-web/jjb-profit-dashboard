@@ -353,9 +353,20 @@ export default function ProductLaunching() {
 
 /* ================= veld-componenten ================= */
 
-function Field({ label, children }) {
+function Section({ title, children }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: "12px", alignItems: "center", padding: "9px 0", borderBottom: "1px solid #f4f5f7" }}>
+    <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "14px", padding: "14px 18px", marginBottom: "14px" }}>
+      <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "6px" }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children, last }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: "12px", alignItems: "center", padding: "9px 0", borderBottom: last ? "none" : "1px solid #f4f5f7" }}>
       <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#64748b" }}>{label}</span>
       <div>{children}</div>
     </div>
@@ -484,28 +495,19 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               <h2 style={{ margin: "10px 0 4px 0", fontSize: isMobile ? "20px" : "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>{t.productName}</h2>
             )}
 
-            {/* Naming convention */}
-            {showNaming && naming && (
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "8px 12px", margin: "8px 0 4px 0" }}>
-                <code style={{ fontSize: "11.5px", color: "#334155", flex: 1, overflowX: "auto", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{naming}</code>
-                <button onClick={copyNaming} style={{ ...btnGhost, padding: "4px 10px", fontSize: "11px", flexShrink: 0, background: copied ? "#dcfce7" : "#fff", color: copied ? "#166534" : "#334155" }}>
-                  {copied ? "✓ Copied" : "Copy"}
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Scrollbare velden */}
-          <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "6px 18px 18px 18px" : "8px 30px 26px 30px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "6px 18px 18px 18px" : "8px 30px 26px 30px", background: "#f7f8fa" }}>
             {/* Topblok: status / assignee / deadline */}
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: "10px", margin: "10px 0 16px 0" }}>
-              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "10px 14px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: "10px", margin: "14px 0 14px 0" }}>
+              <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "10px 14px" }}>
                 <div style={ui.label}>Status</div>
                 <select value={t.status} disabled={!me?.canStatus} onChange={(e) => post({ action: "status", taskId: t.id, status: e.target.value })} style={{ ...selectStyle, marginTop: "4px", fontWeight: 700 }}>
                   {STATUSES.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>
-              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "10px 14px" }}>
+              <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "10px 14px" }}>
                 <div style={ui.label}>Assignee</div>
                 {canEdit ? (
                   <select
@@ -523,7 +525,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                   <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "6px" }}>{t.assigneeName || "—"}</div>
                 )}
               </div>
-              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "10px 14px" }}>
+              <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "10px 14px" }}>
                 <div style={ui.label}>Deadline (your timezone)</div>
                 {canEdit ? (
                   <input
@@ -540,84 +542,106 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               </div>
             </div>
 
-            {/* Fields — netjes gestapeld zoals ClickUp */}
-            <div style={{ ...ui.label, marginBottom: "2px" }}>Fields</div>
-            <Field label="Market Country">
-              {canEdit ? (
-                <select
-                  value={t.marketCountry || ""}
-                  onChange={(e) => post({ action: "update", taskId: t.id, task: { marketCountry: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || t.countryCode } })}
-                  style={selectStyle}
-                >
-                  <option value="">—</option>
-                  {MARKETS.map((m) => <option key={m}>{m}</option>)}
-                </select>
-              ) : (
-                <span style={{ fontSize: "13px" }}>{t.marketCountry || "—"}</span>
-              )}
-            </Field>
-            <Field label="Country Code">
-              {canEdit ? (
-                <select value={t.countryCode || ""} onChange={(e) => save("countryCode", e.target.value)} style={selectStyle}>
-                  <option value="">—</option>
-                  {CODES.map((c) => <option key={c}>{c}</option>)}
-                </select>
-              ) : (
-                <span style={{ fontSize: "13px" }}>{t.countryCode || "—"}</span>
-              )}
-            </Field>
-            <Field label="Funnel Angle">
-              <TextField value={t.funnelAngle} disabled={!canEdit} onSave={(v) => save("funnelAngle", v)} />
-            </Field>
-            <Field label="Advertorial Link">
-              <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
-            </Field>
-            <Field label="Alibaba Link">
-              <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
-            </Field>
-            <Field label="First Creative Batch">
-              <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
-            </Field>
-            <Field label="Ready for AI Translation">
-              {canEdit ? (
-                <select value={t.readyForAI || "NO"} onChange={(e) => save("readyForAI", e.target.value)} style={selectStyle}>
-                  <option>NO</option>
-                  <option>YES</option>
-                </select>
-              ) : (
-                <span style={{ fontSize: "13px" }}>{t.readyForAI || "NO"}</span>
-              )}
-            </Field>
-            <Field label="Funnelish Link">
-              <TextField value={t.funnelishLink} disabled={!canEdit} onSave={(v) => save("funnelishLink", v)} type="url" placeholder="https://…" />
-            </Field>
-
-            {/* AI copy */}
-            <div style={{ marginTop: "16px" }}>
-              <div style={{ ...ui.label, marginBottom: "6px" }}>AI Copy</div>
-              {t.aiCopy ? (
-                <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
-                  <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.aiCopy}</pre>
-                  <a
-                    href={`data:text/plain;charset=utf-8,${encodeURIComponent(t.aiCopy)}`}
-                    download={`${naming || t.productName}.txt`}
-                    style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}
+            {/* ===== Sectie: Market ===== */}
+            <Section title="🌍 Market">
+              <Field label="Market Country">
+                {canEdit ? (
+                  <select
+                    value={t.marketCountry || ""}
+                    onChange={(e) => post({ action: "update", taskId: t.id, task: { marketCountry: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || t.countryCode } })}
+                    style={selectStyle}
                   >
-                    ⬇ Download .txt
-                  </a>
+                    <option value="">—</option>
+                    {MARKETS.map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                ) : (
+                  <span style={{ fontSize: "13px" }}>{t.marketCountry || "—"}</span>
+                )}
+              </Field>
+              <Field label="Country Code" last>
+                {canEdit ? (
+                  <select value={t.countryCode || ""} onChange={(e) => save("countryCode", e.target.value)} style={selectStyle}>
+                    <option value="">—</option>
+                    {CODES.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                ) : (
+                  <span style={{ fontSize: "13px" }}>{t.countryCode || "—"}</span>
+                )}
+              </Field>
+            </Section>
+
+            {/* ===== Sectie: Funnel ===== */}
+            <Section title="🧩 Funnel">
+              <Field label="Funnel Angle">
+                <TextField value={t.funnelAngle} disabled={!canEdit} onSave={(v) => save("funnelAngle", v)} />
+              </Field>
+              <Field label="Advertorial Link">
+                <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
+              </Field>
+              <Field label="Alibaba Link">
+                <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
+              </Field>
+              <Field label="Funnelish Link" last>
+                <TextField value={t.funnelishLink} disabled={!canEdit} onSave={(v) => save("funnelishLink", v)} type="url" placeholder="https://…" />
+              </Field>
+            </Section>
+
+            {/* ===== Sectie: Creatives & AI ===== */}
+            <Section title="✨ Creatives & AI">
+              <Field label="First Creative Batch">
+                <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
+              </Field>
+              <Field label="Ready for AI Translation" last>
+                {canEdit ? (
+                  <select value={t.readyForAI || "NO"} onChange={(e) => save("readyForAI", e.target.value)} style={selectStyle}>
+                    <option>NO</option>
+                    <option>YES</option>
+                  </select>
+                ) : (
+                  <span style={{ fontSize: "13px" }}>{t.readyForAI || "NO"}</span>
+                )}
+              </Field>
+              <div style={{ padding: "10px 0 2px 0" }}>
+                <div style={{ ...ui.label, marginBottom: "6px" }}>AI Copy</div>
+                {t.aiCopy ? (
+                  <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
+                    <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.aiCopy}</pre>
+                    <a
+                      href={`data:text/plain;charset=utf-8,${encodeURIComponent(t.aiCopy)}`}
+                      download={`${naming || t.productName}.txt`}
+                      style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}
+                    >
+                      ⬇ Download .txt
+                    </a>
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+                    AI-generated copy will appear here once the ChatGPT automation is connected (phase 2).
+                  </p>
+                )}
+              </div>
+            </Section>
+
+            {/* ===== Sectie: Funnel Name (onderaan) ===== */}
+            <Section title="🏷 Funnel Name">
+              {showNaming && naming ? (
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "10px 12px" }}>
+                  <code style={{ fontSize: "12px", color: "#0f172a", fontWeight: 600, flex: 1, overflowX: "auto", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{naming}</code>
+                  <button onClick={copyNaming} style={{ ...btnGhost, padding: "5px 12px", fontSize: "11.5px", flexShrink: 0, background: copied ? "#dcfce7" : "#fff", color: copied ? "#166534" : "#334155" }}>
+                    {copied ? "✓ Copied" : "Copy"}
+                  </button>
                 </div>
               ) : (
                 <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
-                  AI-generated copy will appear here once the ChatGPT automation is connected (phase 2).
+                  The funnel name is generated automatically once the status reaches "Ready For Build".
                 </p>
               )}
-            </div>
-
-            {t.launchedDate && (
-              <div style={{ marginTop: "12px", fontSize: "12.5px", color: "#166534", fontWeight: 600 }}>
-                🚀 Launched {new Date(t.launchedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-              </div>
-            )}
+              {t.launchedDate && (
+                <div style={{ marginTop: "10px", fontSize: "12.5px", color: "#166534", fontWeight: 600 }}>
+                  🚀 Launched {new Date(t.launchedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                </div>
+              )}
+            </Section>
           </div>
         </div>
 
