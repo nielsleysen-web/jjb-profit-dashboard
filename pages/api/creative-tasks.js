@@ -197,7 +197,7 @@ export default async function handler(req, res) {
     const mediaBuyers = activeUsers.filter((u) => (u.roles || []).includes("Media Buyer")).map((u) => ({ name: u.name, email: u.email }));
 
     const FIELDS = [
-      "product", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
+      "product", "scriptLink", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
       "angle", "advertorialLink", "market", "countryCode", "gender", "ageRange", "type",
       "videoIteration", "inspirationLink", "videoFormat", "aRoll", "aRollAvatarId", "aRollAvatarName",
       "aRollLink", "voiceId", "voiceName", "subtitles", "frameioLink", "finalOutputLink",
@@ -210,6 +210,7 @@ export default async function handler(req, res) {
       const t = {
         id: uid(),
         product: null,
+        scriptLink: "",
         deadline: "",
         strategistEmail: "",
         strategistName: "",
