@@ -196,7 +196,7 @@ export default async function handler(req, res) {
     const activeUsers = accounts.users.filter((u) => u.status === "active");
     const mediaBuyers = activeUsers.filter((u) => (u.roles || []).includes("Media Buyer")).map((u) => ({ name: u.name, email: u.email }));
 
-    const FIELDS = ["productName", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "marketCountry", "countryCode", "funnelAngle", "alibabaLink", "funnelishLink", "firstCreativeBatch", "readyForAI", "aiCopy"];
+    const FIELDS = ["productName", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "alibabaLink", "funnelishLink", "firstCreativeBatch", "readyForAI", "aiCopy"];
 
     /* --- create --- */
     if (action === "create") {
@@ -210,6 +210,7 @@ export default async function handler(req, res) {
         assigneeName: "",
         status: STATUSES.includes(input.status) ? input.status : "Task Start",
         advertorialLink: "",
+        funnelWorkspaceLink: "",
         marketCountry: "",
         countryCode: "",
         funnelAngle: "",
