@@ -526,7 +526,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                 )}
               </div>
               <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "10px 14px" }}>
-                <div style={ui.label}>Deadline (your timezone)</div>
+                <div style={ui.label}>Deadline</div>
                 {canEdit ? (
                   <input
                     type="datetime-local"
@@ -586,11 +586,8 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               </Field>
             </Section>
 
-            {/* ===== Sectie: Creatives & AI ===== */}
-            <Section title="✨ Creatives & AI">
-              <Field label="First Creative Batch">
-                <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
-              </Field>
+            {/* ===== Sectie: AI Translation ===== */}
+            <Section title="🤖 AI Translation">
               <Field label="Ready for AI Translation" last>
                 {canEdit ? (
                   <select value={t.readyForAI || "NO"} onChange={(e) => save("readyForAI", e.target.value)} style={selectStyle}>
@@ -602,7 +599,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                 )}
               </Field>
               <div style={{ padding: "10px 0 2px 0" }}>
-                <div style={{ ...ui.label, marginBottom: "6px" }}>AI Copy</div>
+                <div style={{ ...ui.label, marginBottom: "6px" }}>Sales Page Copy</div>
                 {t.aiCopy ? (
                   <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
                     <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.aiCopy}</pre>
@@ -616,10 +613,17 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                   </div>
                 ) : (
                   <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
-                    AI-generated copy will appear here once the ChatGPT automation is connected (phase 2).
+                    The AI-generated sales page copy will appear here once the ChatGPT automation is connected (phase 2).
                   </p>
                 )}
               </div>
+            </Section>
+
+            {/* ===== Sectie: First Creative Batch (onderaan) ===== */}
+            <Section title="🎨 First Creative Batch">
+              <Field label="First Creative Batch" last>
+                <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
+              </Field>
             </Section>
 
             {/* ===== Sectie: Funnel Name (onderaan) ===== */}
