@@ -99,6 +99,15 @@ async function writeData(handle, value) {
 
 const uid = () => crypto.randomBytes(8).toString("hex");
 
+// Verwijderde chatberichten: alleen de admin ziet de originele inhoud
+function viewTasks(tasks, isAdmin) {
+  if (isAdmin) return tasks;
+  return (tasks || []).map((t) => ({
+    ...t,
+    activity: (t.activity || []).map((a) => (a.type === "chat" && a.deleted ? { ...a, text: "", attachment: null, replyTo: null } : a)),
+  }));
+}
+
 /* ---------------- notifications ---------------- */
 async function pushNotifications(items) {
   if (!items.length) return;
@@ -109,6 +118,24 @@ async function pushNotifications(items) {
   }
   if (store.items.length > 400) store.items = store.items.slice(-400);
   await writeData("notifications", store);
+
+  // Slack: dezelfde meldingen in het notificatiekanaal, met tag via het gekoppelde Slack member ID
+  if (process.env.SLACK_WEBHOOK_URL) {
+    try {
+      const accounts = (await readData("accounts")) || { users: [] };
+      const slackByEmail = {};
+      for (const u of accounts.users || []) {
+        if (u.slackId) slackByEmail[(u.email || "").toLowerCase()] = u.slackId;
+      }
+      const lines = items.map((n) => {
+        const sid = slackByEmail[(n.email || "").toLowerCase()];
+        return `${sid ? `<@${sid}> ` : ""}${n.text}`;
+      });
+      await axios.post(process.env.SLACK_WEBHOOK_URL, { text: lines.join("\n") }, { timeout: 8000 });
+    } catch (e) {
+      console.error("Slack notify error:", e.message);
+    }
+  }
 }
 
 function addLog(task, session, text) {
@@ -186,7 +213,7 @@ export default async function handler(req, res) {
       const team = users.map((u) => ({ name: u.name, email: u.email }));
       return res.status(200).json({
         success: true,
-        tasks: store?.tasks || [],
+        tasks: viewTasks(store?.tasks || [], isAdmin),
         creativeStrategists,
         videoEditors,
         team,
@@ -196,7 +223,7 @@ export default async function handler(req, res) {
 
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const { action, taskId, task: input, status, message, attachment } = req.body || {};
+    const { action, taskId, task: input, status, message, attachment, messageId, replyTo } = req.body || {};
     const store = (await readData("creative-tasks")) || { tasks: [] };
     const accounts = (await readData("accounts")) || { users: [] };
     const activeUsers = accounts.users.filter((u) => u.status === "active");
@@ -259,7 +286,7 @@ export default async function handler(req, res) {
       store.tasks.push(t);
       await writeData("creative-tasks", store);
       await pushNotifications(notifs);
-      return res.status(200).json({ success: true, tasks: store.tasks, createdId: t.id });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin), createdId: t.id });
     }
 
     const task = store.tasks.find((t) => t.id === taskId);
@@ -287,7 +314,7 @@ export default async function handler(req, res) {
       if (changed.length) addLog(task, session, `updated ${changed.join(", ")}`);
       await writeData("creative-tasks", store);
       await pushNotifications(notifs);
-      return res.status(200).json({ success: true, tasks: store.tasks });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
     }
 
     /* --- status --- */
@@ -296,7 +323,7 @@ export default async function handler(req, res) {
       if (!STATUSES.includes(status)) return res.status(400).json({ success: false, error: "Invalid status" });
       await applyStatusChange(task, status, session, mediaBuyers);
       await writeData("creative-tasks", store);
-      return res.status(200).json({ success: true, tasks: store.tasks });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
     }
 
     /* --- chat --- */
@@ -310,11 +337,16 @@ export default async function handler(req, res) {
               name: String(attachment.name || "").slice(0, 120),
               mime: String(attachment.mime || "").slice(0, 80),
               kind: ["image", "audio", "file"].includes(attachment.kind) ? attachment.kind : "file",
+              transcript: String(attachment.transcript || "").slice(0, 1200),
             }
           : null;
       if (!text && !att) return res.status(400).json({ success: false, error: "Empty message" });
+      const reply =
+        replyTo && typeof replyTo.id === "string"
+          ? { id: String(replyTo.id).slice(0, 40), author: String(replyTo.author || "").slice(0, 80), text: String(replyTo.text || "").slice(0, 140) }
+          : null;
       task.activity = task.activity || [];
-      task.activity.push({ id: uid(), type: "chat", author: session.name, email: session.email, text, attachment: att, at: new Date().toISOString() });
+      task.activity.push({ id: uid(), type: "chat", author: session.name, email: session.email, text, attachment: att, replyTo: reply, at: new Date().toISOString() });
 
       const notifs = [];
       for (const u of activeUsers) {
@@ -326,7 +358,30 @@ export default async function handler(req, res) {
       }
       await writeData("creative-tasks", store);
       await pushNotifications(notifs);
-      return res.status(200).json({ success: true, tasks: store.tasks });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
+    }
+
+    /* --- chat bewerken (alleen eigen bericht; admin mag alles) --- */
+    if (action === "chatEdit") {
+      const entry = (task.activity || []).find((a) => a.id === messageId && a.type === "chat");
+      if (!entry) return res.status(404).json({ success: false, error: "Message not found" });
+      if (entry.email !== session.email && !isAdmin) return res.status(403).json({ success: false, error: "You can only edit your own messages" });
+      const text = (message || "").trim().slice(0, 1000);
+      if (!text) return res.status(400).json({ success: false, error: "Empty message" });
+      entry.text = text;
+      entry.edited = true;
+      await writeData("creative-tasks", store);
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
+    }
+
+    /* --- chat verwijderen (soft delete — admin blijft de inhoud zien) --- */
+    if (action === "chatDelete") {
+      const entry = (task.activity || []).find((a) => a.id === messageId && a.type === "chat");
+      if (!entry) return res.status(404).json({ success: false, error: "Message not found" });
+      if (entry.email !== session.email && !isAdmin) return res.status(403).json({ success: false, error: "You can only delete your own messages" });
+      entry.deleted = true;
+      await writeData("creative-tasks", store);
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
     }
 
     /* --- duplicate (admin + creative strategist) --- */
@@ -346,7 +401,7 @@ export default async function handler(req, res) {
       addLog(copy, session, `duplicated this task from "${task.product?.title || "a video task"}"`);
       store.tasks.push(copy);
       await writeData("creative-tasks", store);
-      return res.status(200).json({ success: true, tasks: store.tasks, createdId: copy.id });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin), createdId: copy.id });
     }
 
     /* --- delete (admin + creative strategist) --- */
@@ -354,7 +409,7 @@ export default async function handler(req, res) {
       if (!canEdit) return res.status(403).json({ success: false, error: "Only admin and Creative Strategists can delete tasks" });
       store.tasks = store.tasks.filter((t) => t.id !== taskId);
       await writeData("creative-tasks", store);
-      return res.status(200).json({ success: true, tasks: store.tasks });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
     }
 
     return res.status(400).json({ success: false, error: "Unknown action" });
