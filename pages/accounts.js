@@ -33,7 +33,7 @@ const STATUS_STYLE = {
   disabled: { text: "Blocked", color: "#991b1b", bg: "#fee2e2" },
 };
 
-const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor"];
+const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor", "Media Buyer"];
 
 export default function Accounts() {
   const [users, setUsers] = useState([]);
