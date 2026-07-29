@@ -41,30 +41,43 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, avatars: [], warning: "HEYGEN_API_KEY not set" });
     }
 
-    const response = await axios.get("https://api.heygen.com/v2/avatars", {
-      headers: { "X-Api-Key": key, Accept: "application/json" },
-      timeout: 15000,
+    const headers = { "X-Api-Key": key, Accept: "application/json" };
+
+    // Alleen EIGEN avatar-groepen ophalen (geen publieke library) — klein & snel
+    const groupsRes = await axios.get("https://api.heygen.com/v2/avatar_group.list?include_public=false", {
+      headers,
+      timeout: 20000,
     });
 
-    const rawAvatars = response.data?.data?.avatars || [];
-    const rawPhotos = response.data?.data?.talking_photos || [];
+    const groups = groupsRes.data?.data?.avatar_group_list || [];
+    const avatars = [];
 
-    const avatars = [
-      ...rawAvatars.map((a) => ({
-        id: a.avatar_id,
-        name: a.avatar_name || a.avatar_id,
-        preview: a.preview_image_url || null,
-      })),
-      // Instant/photo avatars (eigen uploads) tellen ook mee
-      ...rawPhotos.map((p) => ({
-        id: p.talking_photo_id,
-        name: p.talking_photo_name || p.talking_photo_id,
-        preview: p.preview_image_url || null,
-      })),
-    ];
+    // Per groep de avatars ophalen (max 15 groepen als vangrail)
+    for (const g of groups.slice(0, 15)) {
+      try {
+        const gRes = await axios.get(`https://api.heygen.com/v2/avatar_group/${g.id}/avatars`, {
+          headers,
+          timeout: 20000,
+        });
+        const list = gRes.data?.data?.avatar_list || [];
+        for (const a of list) {
+          avatars.push({
+            id: a.avatar_id || a.id,
+            name: a.avatar_name || a.name || g.name || a.avatar_id,
+            preview: a.preview_image_url || a.image_url || null,
+          });
+        }
+      } catch (err) {
+        console.warn(`HeyGen groep ${g.id} overslaan:`, err.message);
+      }
+    }
 
     cache = { avatars, at: Date.now() };
-    return res.status(200).json({ success: true, avatars });
+    return res.status(200).json({
+      success: true,
+      avatars,
+      ...(avatars.length === 0 ? { warning: "No own avatars found in HeyGen (avatar groups are empty)" } : {}),
+    });
   } catch (error) {
     const detail = error.response
       ? `HeyGen antwoordde ${error.response.status}: ${JSON.stringify(error.response.data).slice(0, 200)}`
