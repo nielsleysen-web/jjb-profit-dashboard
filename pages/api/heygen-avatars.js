@@ -46,17 +46,30 @@ export default async function handler(req, res) {
       timeout: 15000,
     });
 
-    const raw = response.data?.data?.avatars || [];
-    const avatars = raw.map((a) => ({
-      id: a.avatar_id,
-      name: a.avatar_name || a.avatar_id,
-      preview: a.preview_image_url || null,
-    }));
+    const rawAvatars = response.data?.data?.avatars || [];
+    const rawPhotos = response.data?.data?.talking_photos || [];
+
+    const avatars = [
+      ...rawAvatars.map((a) => ({
+        id: a.avatar_id,
+        name: a.avatar_name || a.avatar_id,
+        preview: a.preview_image_url || null,
+      })),
+      // Instant/photo avatars (eigen uploads) tellen ook mee
+      ...rawPhotos.map((p) => ({
+        id: p.talking_photo_id,
+        name: p.talking_photo_name || p.talking_photo_id,
+        preview: p.preview_image_url || null,
+      })),
+    ];
 
     cache = { avatars, at: Date.now() };
     return res.status(200).json({ success: true, avatars });
   } catch (error) {
-    console.error("HeyGen avatars error:", error.response?.data || error.message);
-    return res.status(200).json({ success: true, avatars: [], warning: "Could not load HeyGen avatars — check the API key" });
+    const detail = error.response
+      ? `HeyGen antwoordde ${error.response.status}: ${JSON.stringify(error.response.data).slice(0, 200)}`
+      : error.message;
+    console.error("HeyGen avatars error:", detail);
+    return res.status(200).json({ success: true, avatars: [], warning: `Could not load HeyGen avatars — ${detail}` });
   }
 }
