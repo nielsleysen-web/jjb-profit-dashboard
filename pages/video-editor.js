@@ -123,6 +123,15 @@ const isoToLocalInput = (iso) => {
 const localInputToIso = (val) => (val ? new Date(val).toISOString() : "");
 const isOverdue = (iso, status) => iso && status !== "Launched" && new Date(iso) < new Date();
 
+// Deadline-kleur: zwart → donkerrood → donkerder rood naarmate de deadline nadert
+const deadlineColor = (iso, status) => {
+  if (!iso || status === "Launched") return "#64748b";
+  const days = (new Date(iso) - new Date()) / 86400000;
+  if (days <= 2) return "#7f1d1d";
+  if (days <= 5) return "#b91c1c";
+  return "#334155";
+};
+
 // Naming: PRODUCT | CREATIVE STRATEGIST | ASSIGNEE | ANGLE | NET NEW/ITERATION | DEADLINE
 const namingConvention = (t) =>
   [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type, fmtDeadlineDate(t.deadline)]
@@ -151,6 +160,7 @@ export default function VideoEditor() {
   const [creating, setCreating] = useState(false);
   const [dragId, setDragId] = useState(null);
   const [dragOver, setDragOver] = useState(null);
+  const [menuId, setMenuId] = useState(null);
   const isMobile = useIsMobile();
 
   const load = () =>
@@ -199,6 +209,13 @@ export default function VideoEditor() {
     if (res?.createdId) setOpenTaskId(res.createdId);
   };
 
+  // Snel dupliceren voor kleine iteraties (⋯-menu op de kaart)
+  const duplicateTask = async (taskId) => {
+    setMenuId(null);
+    const res = await post({ action: "duplicate", taskId });
+    if (res?.createdId) setOpenTaskId(res.createdId);
+  };
+
   const onDropTask = async (status) => {
     setDragOver(null);
     if (!dragId) return;
@@ -240,6 +257,9 @@ export default function VideoEditor() {
           </button>
         )}
       </div>
+
+      {/* Klik buiten het ⋯-menu = sluiten */}
+      {menuId && <div onClick={() => setMenuId(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />}
 
       {/* Kanban */}
       <div style={{ display: "flex", gap: "12px", overflowX: "auto", alignItems: "flex-start", paddingBottom: "16px", WebkitOverflowScrolling: "touch" }}>
@@ -294,9 +314,29 @@ export default function VideoEditor() {
                       setDragOver(null);
                     }}
                     onClick={() => setOpenTaskId(t.id)}
-                    style={{ ...ui.card, padding: "12px 14px", cursor: me?.canStatus ? "grab" : "pointer", opacity: dragId === t.id ? 0.4 : 1 }}
+                    style={{ ...ui.card, padding: "12px 14px", cursor: me?.canStatus ? "grab" : "pointer", opacity: dragId === t.id ? 0.4 : 1, position: "relative" }}
                   >
-                    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                    {me?.canEdit && (
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuId(menuId === t.id ? null : t.id);
+                          }}
+                          style={{ position: "absolute", top: "6px", right: "6px", background: "none", border: "none", color: "#94a3b8", fontSize: "16px", cursor: "pointer", lineHeight: 1, padding: "2px 5px" }}
+                        >
+                          ⋯
+                        </button>
+                        {menuId === t.id && (
+                          <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: "26px", right: "6px", background: "#fff", border: "1px solid #eceef2", borderRadius: "10px", boxShadow: "0 10px 26px rgba(15,23,42,0.16)", zIndex: 50, overflow: "hidden" }}>
+                            <button onClick={() => duplicateTask(t.id)} style={{ display: "block", width: "100%", padding: "9px 16px", background: "none", border: "none", fontSize: "12px", fontWeight: 600, color: "#334155", cursor: "pointer", textAlign: "left", whiteSpace: "nowrap" }}>
+                              ⧉ Duplicate task
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", paddingRight: "18px" }}>
                       {t.product?.image && (
                         <img src={t.product.image} alt="" style={{ width: "34px", height: "34px", borderRadius: "8px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
                       )}
@@ -317,8 +357,8 @@ export default function VideoEditor() {
                         </span>
                       )}
                       {t.deadline && (
-                        <span style={{ fontSize: "10.5px", fontWeight: 600, color: isOverdue(t.deadline, t.status) ? "#dc2626" : "#64748b", marginLeft: "auto" }}>
-                          {fmtDeadline(t.deadline)}
+                        <span style={{ fontSize: "10.5px", fontWeight: 700, color: deadlineColor(t.deadline, t.status), marginLeft: "auto" }}>
+                          {fmtDeadline(t.deadline)}{isOverdue(t.deadline, t.status) ? " ⚠" : ""}
                         </span>
                       )}
                     </div>
@@ -780,8 +820,8 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                 {canEdit ? (
                   <input type="datetime-local" style={{ ...selectStyle, marginTop: "4px" }} value={isoToLocalInput(t.deadline)} onChange={(e) => save("deadline", localInputToIso(e.target.value))} />
                 ) : (
-                  <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "6px", color: isOverdue(t.deadline, t.status) ? "#dc2626" : "#0f172a" }}>
-                    {t.deadline ? fmtDeadline(t.deadline) : "—"}
+                  <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "6px", color: deadlineColor(t.deadline, t.status) }}>
+                    {t.deadline ? fmtDeadline(t.deadline) : "—"}{isOverdue(t.deadline, t.status) ? " ⚠" : ""}
                   </div>
                 )}
               </div>
