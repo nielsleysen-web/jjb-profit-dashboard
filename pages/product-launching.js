@@ -1,6 +1,7 @@
 // pages/product-launching.js
 // Product Launching Department — kanban pipeline for funnel builders.
-// Columns per status, task popup with fields + activity log & chat with @mentions.
+// "+ Add Task" opens the full task view immediately (ClickUp-style):
+// large popup, stacked fields on the left, activity log & chat on the right.
 
 import { useState, useEffect, useRef } from "react";
 
@@ -131,7 +132,7 @@ export default function ProductLaunching() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
-  const [createInStatus, setCreateInStatus] = useState(null);
+  const [creating, setCreating] = useState(false);
   const isMobile = useIsMobile();
 
   const load = () =>
@@ -162,10 +163,19 @@ export default function ProductLaunching() {
     }).then((r) => r.json());
     if (!res.success) {
       alert(res.error || "Something went wrong");
-      return false;
+      return null;
     }
     setTasks(res.tasks);
-    return true;
+    return res;
+  };
+
+  // ClickUp-stijl: taak wordt meteen aangemaakt en opent direct in de grote weergave
+  const createTask = async (status) => {
+    if (creating) return;
+    setCreating(true);
+    const res = await post({ action: "create", task: { productName: "New Product", status } });
+    setCreating(false);
+    if (res?.createdId) setOpenTaskId(res.createdId);
   };
 
   if (loading)
@@ -194,7 +204,9 @@ export default function ProductLaunching() {
           </p>
         </div>
         {me?.canEdit && (
-          <button onClick={() => setCreateInStatus("Task Start")} style={btnPrimary}>+ New product</button>
+          <button onClick={() => createTask("Task Start")} disabled={creating} style={btnPrimary}>
+            {creating ? "Creating…" : "+ New product"}
+          </button>
         )}
       </div>
 
@@ -258,7 +270,8 @@ export default function ProductLaunching() {
                 ))}
                 {me?.canEdit && (
                   <button
-                    onClick={() => setCreateInStatus(status)}
+                    onClick={() => createTask(status)}
+                    disabled={creating}
                     style={{ padding: "9px", background: "transparent", border: "1px dashed #d7dce3", borderRadius: "10px", color: "#8a92a3", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
                   >
                     + Add Task
@@ -270,7 +283,7 @@ export default function ProductLaunching() {
         })}
       </div>
 
-      {/* Task popup */}
+      {/* Grote taakweergave */}
       {openTask && (
         <TaskModal
           t={openTask}
@@ -282,19 +295,6 @@ export default function ProductLaunching() {
           isMobile={isMobile}
         />
       )}
-
-      {/* Create popup */}
-      {createInStatus && me?.canEdit && (
-        <CreateModal
-          defaultStatus={createInStatus}
-          funnelBuilders={funnelBuilders}
-          onClose={() => setCreateInStatus(null)}
-          onCreate={async (data) => {
-            const ok = await post({ action: "create", task: data });
-            if (ok) setCreateInStatus(null);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -303,8 +303,8 @@ export default function ProductLaunching() {
 
 function Field({ label, children }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: "10px", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #f4f5f7" }}>
-      <span style={{ fontSize: "12px", fontWeight: 600, color: "#64748b" }}>{label}</span>
+    <div style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: "12px", alignItems: "center", padding: "9px 0", borderBottom: "1px solid #f4f5f7" }}>
+      <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#64748b" }}>{label}</span>
       <div>{children}</div>
     </div>
   );
@@ -341,15 +341,18 @@ function TextField({ value, onSave, disabled, placeholder, type = "text" }) {
   );
 }
 
-/* ================= task popup ================= */
+/* ================= grote taakweergave (ClickUp-stijl) ================= */
 
 function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
+  const [title, setTitle] = useState(t.productName || "");
   const chatEndRef = useRef(null);
   const naming = namingConvention(t);
   const showNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf("Ready For Build");
   const canEdit = me?.canEdit;
+
+  useEffect(() => setTitle(t.productName || ""), [t.productName]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "nearest" });
@@ -374,175 +377,209 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: isMobile ? "1vh" : "3vh", zIndex: 100, overflowY: "auto" }}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "8px" : "3vh 3vw", zIndex: 100 }}
       onClick={onClose}
     >
       <div
-        style={{ background: "#ffffff", borderRadius: "18px", width: "min(980px, 96vw)", boxShadow: "0 24px 60px rgba(15,23,42,0.3)", marginBottom: "3vh", display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}
+        style={{
+          background: "#ffffff",
+          borderRadius: "18px",
+          width: "min(1280px, 100%)",
+          height: isMobile ? "96vh" : "92vh",
+          boxShadow: "0 24px 60px rgba(15,23,42,0.35)",
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          overflow: "hidden",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ===== Linkerkant: velden ===== */}
-        <div style={{ flex: 1.2, padding: isMobile ? "18px" : "24px", minWidth: 0 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "14px" }}>
-            <div style={{ minWidth: 0 }}>
-              <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>{t.productName}</h2>
-              <span style={{ display: "inline-block", marginTop: "6px", fontSize: "11px", fontWeight: 700, color: STATUS_META[t.status]?.color, background: STATUS_META[t.status]?.bg, padding: "3px 11px", borderRadius: "999px", textTransform: "uppercase" }}>
+        {/* ===== Linkerkant: titel + velden (scrollbaar) ===== */}
+        <div style={{ flex: 1.35, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          {/* Kop */}
+          <div style={{ padding: isMobile ? "16px 18px 0 18px" : "24px 30px 0 30px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: STATUS_META[t.status]?.color, background: STATUS_META[t.status]?.bg, padding: "4px 12px", borderRadius: "999px", textTransform: "uppercase" }}>
                 {t.status}
               </span>
+              <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                {me?.admin && (
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Delete this task?")) return;
+                      const ok = await post({ action: "delete", taskId: t.id });
+                      if (ok) onClose();
+                    }}
+                    style={{ ...btnGhost, padding: "6px 10px", color: "#dc2626", borderColor: "#fecaca" }}
+                  >
+                    Delete
+                  </button>
+                )}
+                {isMobile && <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕</button>}
+              </div>
             </div>
-            <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-              {me?.admin && (
-                <button
-                  onClick={async () => {
-                    if (!confirm("Delete this task?")) return;
-                    const ok = await post({ action: "delete", taskId: t.id });
-                    if (ok) onClose();
-                  }}
-                  style={{ ...btnGhost, padding: "6px 10px", color: "#dc2626", borderColor: "#fecaca" }}
-                >
-                  Delete
-                </button>
-              )}
-              {isMobile && <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕</button>}
-            </div>
-          </div>
 
-          {/* Naming convention */}
-          {showNaming && naming && (
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "8px 12px", marginBottom: "12px" }}>
-              <code style={{ fontSize: "11.5px", color: "#334155", flex: 1, overflowX: "auto", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{naming}</code>
-              <button onClick={copyNaming} style={{ ...btnGhost, padding: "4px 10px", fontSize: "11px", flexShrink: 0, background: copied ? "#dcfce7" : "#fff", color: copied ? "#166534" : "#334155" }}>
-                {copied ? "✓ Copied" : "Copy"}
-              </button>
-            </div>
-          )}
-
-          {/* Velden */}
-          <Field label="Product Name">
-            <TextField value={t.productName} disabled={!canEdit} onSave={(v) => save("productName", v)} />
-          </Field>
-          <Field label="Status">
-            <select value={t.status} disabled={!me?.canStatus} onChange={(e) => post({ action: "status", taskId: t.id, status: e.target.value })} style={selectStyle}>
-              {STATUSES.map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </Field>
-          <Field label="Deadline">
+            {/* Grote bewerkbare titel */}
             {canEdit ? (
               <input
-                type="datetime-local"
-                style={selectStyle}
-                value={isoToLocalInput(t.deadline)}
-                onChange={(e) => save("deadline", localInputToIso(e.target.value))}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => title.trim() && title !== t.productName && save("productName", title.trim())}
+                onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+                placeholder="Product name…"
+                style={{ width: "100%", boxSizing: "border-box", border: "none", outline: "none", fontSize: isMobile ? "20px" : "26px", fontWeight: 700, letterSpacing: "-0.5px", padding: "10px 0 4px 0", fontFamily: "inherit", background: "transparent" }}
               />
             ) : (
-              <span style={{ fontSize: "13px", color: isOverdue(t.deadline, t.status) ? "#dc2626" : "#0f172a" }}>
-                {t.deadline ? `${fmtDeadline(t.deadline)} (your timezone)` : "—"}
-              </span>
+              <h2 style={{ margin: "10px 0 4px 0", fontSize: isMobile ? "20px" : "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>{t.productName}</h2>
             )}
-          </Field>
-          <Field label="Assignee">
-            {canEdit ? (
-              <select
-                value={t.assigneeEmail || ""}
-                onChange={(e) => {
-                  const fb = funnelBuilders.find((u) => u.email === e.target.value);
-                  post({ action: "update", taskId: t.id, task: { assigneeEmail: e.target.value, assigneeName: fb?.name || "" } });
-                }}
-                style={selectStyle}
-              >
-                <option value="">— Select funnel builder —</option>
-                {funnelBuilders.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}
-              </select>
-            ) : (
-              <span style={{ fontSize: "13px" }}>{t.assigneeName || "—"}</span>
-            )}
-          </Field>
-          <Field label="Market Country">
-            {canEdit ? (
-              <select
-                value={t.marketCountry || ""}
-                onChange={(e) => post({ action: "update", taskId: t.id, task: { marketCountry: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || t.countryCode } })}
-                style={selectStyle}
-              >
-                <option value="">—</option>
-                {MARKETS.map((m) => <option key={m}>{m}</option>)}
-              </select>
-            ) : (
-              <span style={{ fontSize: "13px" }}>{t.marketCountry || "—"}</span>
-            )}
-          </Field>
-          <Field label="Country Code">
-            {canEdit ? (
-              <select value={t.countryCode || ""} onChange={(e) => save("countryCode", e.target.value)} style={selectStyle}>
-                <option value="">—</option>
-                {CODES.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            ) : (
-              <span style={{ fontSize: "13px" }}>{t.countryCode || "—"}</span>
-            )}
-          </Field>
-          <Field label="Funnel Angle">
-            <TextField value={t.funnelAngle} disabled={!canEdit} onSave={(v) => save("funnelAngle", v)} />
-          </Field>
-          <Field label="Advertorial Link">
-            <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" />
-          </Field>
-          <Field label="Alibaba Link">
-            <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" />
-          </Field>
-          <Field label="Funnelish Link">
-            <TextField value={t.funnelishLink} disabled={!canEdit} onSave={(v) => save("funnelishLink", v)} type="url" />
-          </Field>
-          <Field label="First Creative Batch">
-            <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
-          </Field>
-          <Field label="Ready for AI Translation">
-            {canEdit ? (
-              <select value={t.readyForAI || "NO"} onChange={(e) => save("readyForAI", e.target.value)} style={selectStyle}>
-                <option>NO</option>
-                <option>YES</option>
-              </select>
-            ) : (
-              <span style={{ fontSize: "13px" }}>{t.readyForAI || "NO"}</span>
-            )}
-          </Field>
 
-          {/* AI copy */}
-          <div style={{ marginTop: "14px" }}>
-            <div style={{ ...ui.label, marginBottom: "6px" }}>AI Copy</div>
-            {t.aiCopy ? (
-              <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
-                <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "180px", overflowY: "auto" }}>{t.aiCopy}</pre>
-                <a
-                  href={`data:text/plain;charset=utf-8,${encodeURIComponent(t.aiCopy)}`}
-                  download={`${naming || t.productName}.txt`}
-                  style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}
-                >
-                  ⬇ Download .txt
-                </a>
+            {/* Naming convention */}
+            {showNaming && naming && (
+              <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "8px 12px", margin: "8px 0 4px 0" }}>
+                <code style={{ fontSize: "11.5px", color: "#334155", flex: 1, overflowX: "auto", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{naming}</code>
+                <button onClick={copyNaming} style={{ ...btnGhost, padding: "4px 10px", fontSize: "11px", flexShrink: 0, background: copied ? "#dcfce7" : "#fff", color: copied ? "#166534" : "#334155" }}>
+                  {copied ? "✓ Copied" : "Copy"}
+                </button>
               </div>
-            ) : (
-              <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
-                AI-generated copy will appear here once the ChatGPT automation is connected (phase 2).
-              </p>
             )}
           </div>
 
-          {t.launchedDate && (
-            <div style={{ marginTop: "12px", fontSize: "12.5px", color: "#166534", fontWeight: 600 }}>
-              🚀 Launched {new Date(t.launchedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          {/* Scrollbare velden */}
+          <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "6px 18px 18px 18px" : "8px 30px 26px 30px" }}>
+            {/* Topblok: status / assignee / deadline */}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: "10px", margin: "10px 0 16px 0" }}>
+              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "10px 14px" }}>
+                <div style={ui.label}>Status</div>
+                <select value={t.status} disabled={!me?.canStatus} onChange={(e) => post({ action: "status", taskId: t.id, status: e.target.value })} style={{ ...selectStyle, marginTop: "4px", fontWeight: 700 }}>
+                  {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "10px 14px" }}>
+                <div style={ui.label}>Assignee</div>
+                {canEdit ? (
+                  <select
+                    value={t.assigneeEmail || ""}
+                    onChange={(e) => {
+                      const fb = funnelBuilders.find((u) => u.email === e.target.value);
+                      post({ action: "update", taskId: t.id, task: { assigneeEmail: e.target.value, assigneeName: fb?.name || "" } });
+                    }}
+                    style={{ ...selectStyle, marginTop: "4px" }}
+                  >
+                    <option value="">— Select funnel builder —</option>
+                    {funnelBuilders.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}
+                  </select>
+                ) : (
+                  <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "6px" }}>{t.assigneeName || "—"}</div>
+                )}
+              </div>
+              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "10px 14px" }}>
+                <div style={ui.label}>Deadline (your timezone)</div>
+                {canEdit ? (
+                  <input
+                    type="datetime-local"
+                    style={{ ...selectStyle, marginTop: "4px" }}
+                    value={isoToLocalInput(t.deadline)}
+                    onChange={(e) => save("deadline", localInputToIso(e.target.value))}
+                  />
+                ) : (
+                  <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "6px", color: isOverdue(t.deadline, t.status) ? "#dc2626" : "#0f172a" }}>
+                    {t.deadline ? fmtDeadline(t.deadline) : "—"}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+
+            {/* Fields — netjes gestapeld zoals ClickUp */}
+            <div style={{ ...ui.label, marginBottom: "2px" }}>Fields</div>
+            <Field label="Market Country">
+              {canEdit ? (
+                <select
+                  value={t.marketCountry || ""}
+                  onChange={(e) => post({ action: "update", taskId: t.id, task: { marketCountry: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || t.countryCode } })}
+                  style={selectStyle}
+                >
+                  <option value="">—</option>
+                  {MARKETS.map((m) => <option key={m}>{m}</option>)}
+                </select>
+              ) : (
+                <span style={{ fontSize: "13px" }}>{t.marketCountry || "—"}</span>
+              )}
+            </Field>
+            <Field label="Country Code">
+              {canEdit ? (
+                <select value={t.countryCode || ""} onChange={(e) => save("countryCode", e.target.value)} style={selectStyle}>
+                  <option value="">—</option>
+                  {CODES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              ) : (
+                <span style={{ fontSize: "13px" }}>{t.countryCode || "—"}</span>
+              )}
+            </Field>
+            <Field label="Funnel Angle">
+              <TextField value={t.funnelAngle} disabled={!canEdit} onSave={(v) => save("funnelAngle", v)} />
+            </Field>
+            <Field label="Advertorial Link">
+              <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
+            </Field>
+            <Field label="Alibaba Link">
+              <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
+            </Field>
+            <Field label="First Creative Batch">
+              <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
+            </Field>
+            <Field label="Ready for AI Translation">
+              {canEdit ? (
+                <select value={t.readyForAI || "NO"} onChange={(e) => save("readyForAI", e.target.value)} style={selectStyle}>
+                  <option>NO</option>
+                  <option>YES</option>
+                </select>
+              ) : (
+                <span style={{ fontSize: "13px" }}>{t.readyForAI || "NO"}</span>
+              )}
+            </Field>
+            <Field label="Funnelish Link">
+              <TextField value={t.funnelishLink} disabled={!canEdit} onSave={(v) => save("funnelishLink", v)} type="url" placeholder="https://…" />
+            </Field>
+
+            {/* AI copy */}
+            <div style={{ marginTop: "16px" }}>
+              <div style={{ ...ui.label, marginBottom: "6px" }}>AI Copy</div>
+              {t.aiCopy ? (
+                <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
+                  <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.aiCopy}</pre>
+                  <a
+                    href={`data:text/plain;charset=utf-8,${encodeURIComponent(t.aiCopy)}`}
+                    download={`${naming || t.productName}.txt`}
+                    style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}
+                  >
+                    ⬇ Download .txt
+                  </a>
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+                  AI-generated copy will appear here once the ChatGPT automation is connected (phase 2).
+                </p>
+              )}
+            </div>
+
+            {t.launchedDate && (
+              <div style={{ marginTop: "12px", fontSize: "12.5px", color: "#166534", fontWeight: 600 }}>
+                🚀 Launched {new Date(t.launchedDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* ===== Rechterkant: activity log + chat ===== */}
-        <div style={{ flex: 1, background: "#fafbfc", borderLeft: isMobile ? "none" : "1px solid #eceef2", borderTop: isMobile ? "1px solid #eceef2" : "none", display: "flex", flexDirection: "column", minWidth: 0, maxHeight: isMobile ? "420px" : "none" }}>
-          <div style={{ padding: "16px 18px 10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        {/* ===== Rechterkant: activity log + chat over volledige hoogte ===== */}
+        <div style={{ flex: 1, background: "#fafbfc", borderLeft: isMobile ? "none" : "1px solid #eceef2", borderTop: isMobile ? "1px solid #eceef2" : "none", display: "flex", flexDirection: "column", minWidth: 0, minHeight: isMobile ? "280px" : "auto", maxWidth: isMobile ? "none" : "420px" }}>
+          <div style={{ padding: "16px 18px 10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #eef0f3" }}>
             <span style={{ fontSize: "13px", fontWeight: 700 }}>Activity</span>
             {!isMobile && <button onClick={onClose} style={{ ...btnGhost, padding: "5px 11px" }}>✕</button>}
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "0 18px", minHeight: isMobile ? "200px" : "380px", maxHeight: isMobile ? "260px" : "480px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px" }}>
+            {(t.activity || []).length === 0 && (
+              <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>No activity yet.</p>
+            )}
             {(t.activity || []).map((a) =>
               a.type === "chat" ? (
                 <div key={a.id} style={{ padding: "8px 12px", background: a.email === me?.email ? "#eff6ff" : "#ffffff", border: "1px solid #eef0f3", borderRadius: "10px", marginBottom: "6px" }}>
@@ -565,8 +602,8 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Tag-knoppen + input */}
-          <div style={{ padding: "10px 18px 16px 18px" }}>
+          {/* Tag-knoppen + input onderaan vastgepind */}
+          <div style={{ padding: "10px 18px 16px 18px", borderTop: "1px solid #eef0f3", background: "#fafbfc" }}>
             <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "6px" }}>
               {team
                 .filter((u) => u.email !== me?.email)
@@ -584,134 +621,13 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
             <div style={{ display: "flex", gap: "7px" }}>
               <input
                 style={{ ...ui.input, flex: 1 }}
-                placeholder="Write a message… tag with @Name"
+                placeholder="Write a comment… tag with @Name"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendChat()}
               />
               <button onClick={sendChat} style={btnPrimary}>Send</button>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ================= create popup ================= */
-
-function CreateModal({ defaultStatus, funnelBuilders, onClose, onCreate }) {
-  const [form, setForm] = useState({
-    productName: "",
-    deadline: "",
-    assigneeEmail: "",
-    assigneeName: "",
-    status: defaultStatus,
-    advertorialLink: "",
-    marketCountry: "",
-    countryCode: "",
-    funnelAngle: "",
-    alibabaLink: "",
-    funnelishLink: "",
-    readyForAI: "NO",
-  });
-  const [saving, setSaving] = useState(false);
-  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-
-  const submit = async () => {
-    if (!form.productName.trim()) {
-      alert("Product Name is required");
-      return;
-    }
-    setSaving(true);
-    await onCreate({ ...form, deadline: form.deadline ? localInputToIso(form.deadline) : "" });
-    setSaving(false);
-  };
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "4vh", zIndex: 110, overflowY: "auto" }} onClick={onClose}>
-      <div style={{ background: "#ffffff", borderRadius: "18px", width: "min(560px, 94vw)", padding: "24px", boxShadow: "0 24px 60px rgba(15,23,42,0.25)", marginBottom: "4vh" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-          <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 700 }}>New product</h2>
-          <button onClick={onClose} style={{ ...btnGhost, padding: "6px 12px" }}>✕</button>
-        </div>
-
-        <div style={{ display: "grid", gap: "11px" }}>
-          <div>
-            <div style={{ ...ui.label, marginBottom: "5px" }}>Product Name *</div>
-            <input style={ui.input} value={form.productName} onChange={(e) => set("productName", e.target.value)} autoFocus />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "11px" }}>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "5px" }}>Deadline (your timezone)</div>
-              <input type="datetime-local" style={ui.input} value={form.deadline} onChange={(e) => set("deadline", e.target.value)} />
-            </div>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "5px" }}>Assignee</div>
-              <select
-                style={ui.input}
-                value={form.assigneeEmail}
-                onChange={(e) => {
-                  const fb = funnelBuilders.find((u) => u.email === e.target.value);
-                  setForm((f) => ({ ...f, assigneeEmail: e.target.value, assigneeName: fb?.name || "" }));
-                }}
-              >
-                <option value="">— Select funnel builder —</option>
-                {funnelBuilders.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "11px" }}>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "5px" }}>Market Country</div>
-              <select style={ui.input} value={form.marketCountry} onChange={(e) => setForm((f) => ({ ...f, marketCountry: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || "" }))}>
-                <option value="">—</option>
-                {MARKETS.map((m) => <option key={m}>{m}</option>)}
-              </select>
-            </div>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "5px" }}>Country Code</div>
-              <select style={ui.input} value={form.countryCode} onChange={(e) => set("countryCode", e.target.value)}>
-                <option value="">—</option>
-                {CODES.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "5px" }}>Status</div>
-              <select style={ui.input} value={form.status} onChange={(e) => set("status", e.target.value)}>
-                {STATUSES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <div style={{ ...ui.label, marginBottom: "5px" }}>Funnel Angle</div>
-            <input style={ui.input} value={form.funnelAngle} onChange={(e) => set("funnelAngle", e.target.value)} />
-          </div>
-          <div>
-            <div style={{ ...ui.label, marginBottom: "5px" }}>Advertorial Link</div>
-            <input style={ui.input} placeholder="https://…" value={form.advertorialLink} onChange={(e) => set("advertorialLink", e.target.value)} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "11px" }}>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "5px" }}>Alibaba Link</div>
-              <input style={ui.input} placeholder="https://…" value={form.alibabaLink} onChange={(e) => set("alibabaLink", e.target.value)} />
-            </div>
-            <div>
-              <div style={{ ...ui.label, marginBottom: "5px" }}>Funnelish Link</div>
-              <input style={ui.input} placeholder="https://…" value={form.funnelishLink} onChange={(e) => set("funnelishLink", e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <div style={{ ...ui.label, marginBottom: "5px" }}>Ready for AI Translation</div>
-            <select style={ui.input} value={form.readyForAI} onChange={(e) => set("readyForAI", e.target.value)}>
-              <option>NO</option>
-              <option>YES</option>
-            </select>
-          </div>
-
-          <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "4px" }}>
-            <button onClick={onClose} style={btnGhost}>Cancel</button>
-            <button onClick={submit} disabled={saving} style={btnPrimary}>{saving ? "Creating…" : "Create task"}</button>
           </div>
         </div>
       </div>
