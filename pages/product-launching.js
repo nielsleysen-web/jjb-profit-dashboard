@@ -124,10 +124,11 @@ const namingConvention = (t) =>
     .map((s) => String(s).toUpperCase())
     .join(" | ");
 
-// Taaktitel: vanaf "Ready For Build" automatisch de naming convention,
+// Taaktitel: vanaf "AI Translation" automatisch de naming convention,
 // daarvoor gewoon de product name.
+const NAMING_FROM_STATUS = "AI Translation";
 const taskTitle = (t) => {
-  const hasNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf("Ready For Build");
+  const hasNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf(NAMING_FROM_STATUS);
   const naming = namingConvention(t);
   return hasNaming && naming ? naming : t.productName || "New Product";
 };
@@ -419,7 +420,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
   const [copied, setCopied] = useState(false);
   const chatEndRef = useRef(null);
   const naming = namingConvention(t);
-  const showNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf("Ready For Build");
+  const showNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf(NAMING_FROM_STATUS);
   const canEdit = me?.canEdit;
 
   useEffect(() => {
@@ -580,6 +581,9 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               <Field label="Advertorial Link">
                 <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
               </Field>
+              <Field label="Funnel Workspace Link">
+                <TextField value={t.funnelWorkspaceLink} disabled={!canEdit} onSave={(v) => save("funnelWorkspaceLink", v)} type="url" placeholder="Workboard to build the sales page — https://…" />
+              </Field>
               <Field label="Alibaba Link" last>
                 <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
               </Field>
@@ -629,7 +633,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                 </div>
               ) : (
                 <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
-                  The funnel name is generated automatically once the status reaches "Ready For Build".
+                  The funnel name is generated automatically once the status reaches "AI Translation".
                 </p>
               )}
               <Field label="Funnelish Link" last>
