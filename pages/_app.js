@@ -38,6 +38,11 @@ const CATEGORIES = [
     items: [{ href: "/product-launching", label: "Product Pipeline", icon: "🚀" }],
   },
   {
+    name: "Marketing Creatives",
+    perm: "creatives",
+    items: [{ href: "/video-editor", label: "Video Editor", icon: "🎬" }],
+  },
+  {
     name: "Media Buying",
     perm: "mediabuying",
     items: [
@@ -155,6 +160,11 @@ export default function App({ Component, pageProps }) {
         ...user,
         launching: user.admin || userRoles.includes("Funnel Builder"),
         mediabuying: user.admin || userRoles.includes("Media Buyer"),
+        creatives:
+          user.admin ||
+          userRoles.includes("Creative Strategist") ||
+          userRoles.includes("Video Editor") ||
+          userRoles.includes("Graphic Designer"),
       }
     : null;
 
