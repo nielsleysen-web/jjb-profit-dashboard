@@ -12,16 +12,19 @@ const ui = {
 export default function Launched() {
   const [funnels, setFunnels] = useState([]);
   const [creatives, setCreatives] = useState([]);
+  const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/launch-tasks").then((r) => r.json()).catch(() => null),
       fetch("/api/creative-tasks").then((r) => r.json()).catch(() => null),
+      fetch("/api/design-tasks").then((r) => r.json()).catch(() => null),
     ])
-      .then(([f, c]) => {
+      .then(([f, c, d]) => {
         if (f?.success) setFunnels(f.tasks);
         if (c?.success) setCreatives(c.tasks);
+        if (d?.success) setDesigns(d.tasks);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -31,7 +34,8 @@ export default function Launched() {
 
   const launchedFunnels = funnels.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
   const launchedCreatives = creatives.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
-  const total = launchedFunnels.length + launchedCreatives.length;
+  const launchedDesigns = designs.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
+  const total = launchedFunnels.length + launchedCreatives.length + launchedDesigns.length;
 
   const Row = ({ title, image, sub, by, date }) => (
     <div style={{ ...ui.card, padding: "16px 20px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
@@ -90,11 +94,29 @@ export default function Launched() {
       {launchedCreatives.length > 0 && (
         <>
           <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🎬 Creatives ({launchedCreatives.length})</h2>
-          <div style={{ display: "grid", gap: "10px" }}>
+          <div style={{ display: "grid", gap: "10px", marginBottom: "26px" }}>
             {launchedCreatives.map((t) => (
               <Row
                 key={t.id}
                 title={`${t.product?.title || "Creative"}${t.videoFormat ? ` · ${t.videoFormat}` : ""}`}
+                image={t.product?.image}
+                sub={t.angle}
+                by={t.assigneeName}
+                date={t.launchedDate}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {launchedDesigns.length > 0 && (
+        <>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🎨 Designs ({launchedDesigns.length})</h2>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {launchedDesigns.map((t) => (
+              <Row
+                key={t.id}
+                title={`${t.product?.title || "Design"}${t.batchType ? ` · ${t.batchType}` : ""}`}
                 image={t.product?.image}
                 sub={t.angle}
                 by={t.assigneeName}
