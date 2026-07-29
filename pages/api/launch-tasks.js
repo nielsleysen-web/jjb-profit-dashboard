@@ -235,7 +235,7 @@ export default async function handler(req, res) {
       store.tasks.push(t);
       await writeData("launch-tasks", store);
       await pushNotifications(notifs);
-      return res.status(200).json({ success: true, tasks: store.tasks });
+      return res.status(200).json({ success: true, tasks: store.tasks, createdId: t.id });
     }
 
     const task = store.tasks.find((t) => t.id === taskId);
