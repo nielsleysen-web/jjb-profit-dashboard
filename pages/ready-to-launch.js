@@ -1,6 +1,6 @@
 // pages/ready-to-launch.js
-// Media Buyer worktable — every product with status "Ready to launch",
-// with everything needed to schedule the launch in Ads Manager.
+// Media Buyer worktable — everything with status "Ready to launch":
+// funnels (Product Launching) and video creatives (Marketing Creatives).
 
 import { useState, useEffect } from "react";
 
@@ -11,14 +11,27 @@ const ui = {
 };
 
 const firstName = (name) => (name || "").trim().split(/\s+/)[0] || "";
-const fmtDeadlineDate = (iso) => {
+const fmtDate = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
   const p = (n) => String(n).padStart(2, "0");
   return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
 };
-const namingConvention = (t) =>
-  [t.productName, t.countryCode, firstName(t.assigneeName), fmtDeadlineDate(t.deadline)]
+
+const funnelNaming = (t) =>
+  [t.productName, t.countryCode, firstName(t.assigneeName), fmtDate(t.deadline)]
+    .filter(Boolean)
+    .map((s) => String(s).toUpperCase())
+    .join(" | ");
+
+const creativeNaming = (t) =>
+  [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type, fmtDate(t.deadline)]
+    .filter(Boolean)
+    .map((s) => String(s).toUpperCase())
+    .join(" | ");
+
+const designNaming = (t) =>
+  [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.batchType, fmtDate(t.deadline)]
     .filter(Boolean)
     .map((s) => String(s).toUpperCase())
     .join(" | ");
@@ -32,23 +45,40 @@ function LinkChip({ label, url }) {
   );
 }
 
+function NamingBar({ naming, copied, onCopy }) {
+  return (
+    <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "8px 12px", marginTop: "12px" }}>
+      <code style={{ fontSize: "11.5px", color: "#334155", flex: 1, overflowX: "auto", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{naming}</code>
+      <button
+        onClick={onCopy}
+        style={{ padding: "4px 11px", background: copied ? "#dcfce7" : "#fff", color: copied ? "#166534" : "#334155", border: "1px solid #e2e6ec", borderRadius: "8px", fontSize: "11px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
+      >
+        {copied ? "✓ Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
 export default function ReadyToLaunch() {
-  const [tasks, setTasks] = useState([]);
-  const [me, setMe] = useState(null);
+  const [funnels, setFunnels] = useState([]);
+  const [creatives, setCreatives] = useState([]);
+  const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState(null);
 
-  const load = () =>
-    fetch("/api/launch-tasks")
-      .then((r) => r.json())
-      .then((res) => {
-        if (!res.success) throw new Error(res.error);
-        setTasks(res.tasks);
-        setMe(res.me);
+  const load = () => {
+    Promise.all([
+      fetch("/api/launch-tasks").then((r) => r.json()).catch(() => null),
+      fetch("/api/creative-tasks").then((r) => r.json()).catch(() => null),
+      fetch("/api/design-tasks").then((r) => r.json()).catch(() => null),
+    ])
+      .then(([f, c, d]) => {
+        if (f?.success) setFunnels(f.tasks);
+        if (c?.success) setCreatives(c.tasks);
+        if (d?.success) setDesigns(d.tasks);
       })
-      .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     load();
@@ -56,85 +86,162 @@ export default function ReadyToLaunch() {
     return () => clearInterval(iv);
   }, []);
 
-  const markLaunched = async (taskId) => {
-    const res = await fetch("/api/launch-tasks", {
+  const markLaunched = async (api, taskId) => {
+    const res = await fetch(api, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "status", taskId, status: "Launched" }),
     }).then((r) => r.json());
     if (!res.success) return alert(res.error);
-    setTasks(res.tasks);
+    load();
   };
 
-  const copyNaming = (t) => {
-    navigator.clipboard?.writeText(namingConvention(t)).then(() => {
-      setCopiedId(t.id);
+  const copy = (id, text) => {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopiedId(id);
       setTimeout(() => setCopiedId(null), 1800);
     });
   };
 
   if (loading)
     return <div style={{ ...ui.page, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ color: "#8a92a3" }}>Loading…</span></div>;
-  if (error)
-    return <div style={ui.page}><div style={{ ...ui.card, padding: "24px", color: "#dc2626" }}>Error: {error}</div></div>;
 
-  const ready = tasks
-    .filter((t) => t.status === "Ready to launch")
-    .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  const readyFunnels = funnels.filter((t) => t.status === "Ready to launch").sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  const readyCreatives = creatives.filter((t) => t.status === "Ready to launch").sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  const readyDesigns = designs.filter((t) => t.status === "Ready to launch").sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  const total = readyFunnels.length + readyCreatives.length + readyDesigns.length;
 
   return (
     <div style={ui.page}>
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>
           📣 Ready To Launch
-          <span style={{ marginLeft: "10px", fontSize: "14px", fontWeight: 700, color: "#0f766e", background: "#ccfbf1", padding: "3px 12px", borderRadius: "999px", verticalAlign: "middle" }}>{ready.length}</span>
+          <span style={{ marginLeft: "10px", fontSize: "14px", fontWeight: 700, color: "#0f766e", background: "#ccfbf1", padding: "3px 12px", borderRadius: "999px", verticalAlign: "middle" }}>{total}</span>
         </h1>
-        <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>Everything you need to schedule these launches in Ads Manager</p>
+        <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>Funnels and creatives ready to schedule in Ads Manager</p>
       </div>
 
-      {ready.length === 0 ? (
+      {total === 0 && (
         <div style={{ ...ui.card, padding: "48px", textAlign: "center" }}>
           <p style={{ margin: 0, color: "#8a92a3", fontSize: "13.5px" }}>Nothing ready to launch right now. 🎉</p>
         </div>
-      ) : (
-        <div style={{ display: "grid", gap: "14px" }}>
-          {ready.map((t) => (
-            <div key={t.id} style={{ ...ui.card, padding: "20px 24px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: "16px", fontWeight: 700 }}>
-                    {t.productName}
-                    {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
+      )}
+
+      {/* Funnels */}
+      {readyFunnels.length > 0 && (
+        <>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🚀 Funnels ({readyFunnels.length})</h2>
+          <div style={{ display: "grid", gap: "14px", marginBottom: "26px" }}>
+            {readyFunnels.map((t) => (
+              <div key={t.id} style={{ ...ui.card, padding: "20px 24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: "15px", fontWeight: 700 }}>
+                      {t.productName}
+                      {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
+                    </div>
+                    {t.funnelAngle && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{t.funnelAngle}</div>}
+                    <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "5px" }}>
+                      {t.assigneeName && <>Built by <b style={{ color: "#334155" }}>{t.assigneeName}</b></>}
+                      {t.deadline && <> · deadline {new Date(t.deadline).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</>}
+                    </div>
                   </div>
-                  {t.funnelAngle && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{t.funnelAngle}</div>}
-                  <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "5px" }}>
-                    {t.assigneeName && <>Built by <b style={{ color: "#334155" }}>{t.assigneeName}</b></>}
-                    {t.deadline && <> · deadline {new Date(t.deadline).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</>}
-                  </div>
+                  <button onClick={() => markLaunched("/api/launch-tasks", t.id)} style={{ padding: "10px 18px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                    🚀 Mark as Launched
+                  </button>
                 </div>
-                <button onClick={() => markLaunched(t.id)} style={{ padding: "10px 18px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
-                  🚀 Mark as Launched
-                </button>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
+                  <LinkChip label="Advertorial" url={t.advertorialLink} />
+                  <LinkChip label="Funnelish" url={t.funnelishLink} />
+                  <LinkChip label="Alibaba" url={t.alibabaLink} />
+                </div>
+                <NamingBar naming={funnelNaming(t)} copied={copiedId === t.id} onCopy={() => copy(t.id, funnelNaming(t))} />
               </div>
+            ))}
+          </div>
+        </>
+      )}
 
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
-                <LinkChip label="Advertorial" url={t.advertorialLink} />
-                <LinkChip label="Funnelish" url={t.funnelishLink} />
-                <LinkChip label="Alibaba" url={t.alibabaLink} />
+      {/* Creatives */}
+      {readyCreatives.length > 0 && (
+        <>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🎬 Creatives ({readyCreatives.length})</h2>
+          <div style={{ display: "grid", gap: "14px" }}>
+            {readyCreatives.map((t) => (
+              <div key={t.id} style={{ ...ui.card, padding: "20px 24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", minWidth: 0 }}>
+                    {t.product?.image && (
+                      <img src={t.product.image} alt="" style={{ width: "44px", height: "44px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "15px", fontWeight: 700 }}>
+                        {t.product?.title || "Creative"}
+                        {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
+                        {t.videoFormat && <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "3px 9px", borderRadius: "999px" }}>{t.videoFormat}</span>}
+                      </div>
+                      {t.angle && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{t.angle}</div>}
+                      <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "5px" }}>
+                        {t.assigneeName && <>Edited by <b style={{ color: "#334155" }}>{t.assigneeName}</b></>}
+                        {t.strategistName && <> · strategist <b style={{ color: "#334155" }}>{t.strategistName}</b></>}
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => markLaunched("/api/creative-tasks", t.id)} style={{ padding: "10px 18px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                    🚀 Mark as Launched
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
+                  <LinkChip label="Final Output" url={t.finalOutputLink} />
+                  <LinkChip label="Frame.io" url={t.frameioLink} />
+                  <LinkChip label="Advertorial" url={t.advertorialLink} />
+                </div>
+                <NamingBar naming={creativeNaming(t)} copied={copiedId === t.id} onCopy={() => copy(t.id, creativeNaming(t))} />
               </div>
+            ))}
+          </div>
+        </>
+      )}
 
-              <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "8px 12px", marginTop: "12px" }}>
-                <code style={{ fontSize: "11.5px", color: "#334155", flex: 1, overflowX: "auto", whiteSpace: "nowrap", fontFamily: "ui-monospace, monospace" }}>{namingConvention(t)}</code>
-                <button
-                  onClick={() => copyNaming(t)}
-                  style={{ padding: "4px 11px", background: copiedId === t.id ? "#dcfce7" : "#fff", color: copiedId === t.id ? "#166534" : "#334155", border: "1px solid #e2e6ec", borderRadius: "8px", fontSize: "11px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}
-                >
-                  {copiedId === t.id ? "✓ Copied" : "Copy"}
-                </button>
+      {/* Designs */}
+      {readyDesigns.length > 0 && (
+        <>
+          <h2 style={{ margin: "26px 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🎨 Designs ({readyDesigns.length})</h2>
+          <div style={{ display: "grid", gap: "14px" }}>
+            {readyDesigns.map((t) => (
+              <div key={t.id} style={{ ...ui.card, padding: "20px 24px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", minWidth: 0 }}>
+                    {t.product?.image && (
+                      <img src={t.product.image} alt="" style={{ width: "44px", height: "44px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
+                    )}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "15px", fontWeight: 700 }}>
+                        {t.product?.title || "Design"}
+                        {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
+                        {t.batchType && <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 700, color: "#be185d", background: "#fce7f3", padding: "3px 9px", borderRadius: "999px" }}>{t.batchType}</span>}
+                      </div>
+                      {t.angle && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{t.angle}</div>}
+                      <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "5px" }}>
+                        {t.assigneeName && <>Designed by <b style={{ color: "#334155" }}>{t.assigneeName}</b></>}
+                        {t.strategistName && <> · strategist <b style={{ color: "#334155" }}>{t.strategistName}</b></>}
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={() => markLaunched("/api/design-tasks", t.id)} style={{ padding: "10px 18px", background: "#16a34a", color: "#fff", border: "none", borderRadius: "10px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                    🚀 Mark as Launched
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
+                  <LinkChip label="Final Output" url={t.finalOutputLink} />
+                  <LinkChip label="Frame.io" url={t.frameioLink} />
+                  <LinkChip label="Advertorial" url={t.advertorialLink} />
+                </div>
+                <NamingBar naming={designNaming(t)} copied={copiedId === t.id} onCopy={() => copy(t.id, designNaming(t))} />
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
