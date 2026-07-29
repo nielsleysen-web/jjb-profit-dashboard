@@ -136,11 +136,6 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers) {
       lt.activity = lt.activity || [];
       lt.activity.push({ id: uid(), type: "log", author: session.name, email: session.email, text: `changed status to "Ready to launch" — the designer started working on the First Creative Batch`, at: new Date().toISOString() });
       await writeData("launch-tasks", launchStore);
-      for (const mb of mediaBuyers) {
-        if (mb.email !== session.email) {
-          notifications.push({ email: mb.email, text: `"${lt.productName}" is Ready to launch — check your Ready To Launch worktable`, href: "/ready-to-launch" });
-        }
-      }
     }
   }
   if (newStatus === "QA Check") {
