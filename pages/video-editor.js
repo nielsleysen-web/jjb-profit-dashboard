@@ -84,7 +84,7 @@ const VIDEO_ITERATIONS = ["Hook", "Lead", "A-roll", "B-roll", "Video format"];
 const VIDEO_FORMATS = ["Short Form", "VSL", "UGC Yap", "Podcast Yap", "3D Animations"];
 const AROLL_OPTIONS = ["Existing", "Net New", "Keep Current"];
 
-const SUBTITLE_STYLES = ["White Text, Shadowed Background", "Documentary Text", "TikTok Style", "TikTok Explanational"];
+const SUBTITLE_STYLES = ["White Text, Shadowed Background", "Documentary Text", "TikTok Style", "TikTok Explanational", "Keep the same"];
 
 const STATUS_META = {
   "Task Start": { color: "#c2410c", bg: "#ffedd5" },
@@ -601,6 +601,13 @@ function AvatarDropdown({ value, valueName, avatars, onSelect, disabled }) {
 
 // Nagemaakte previews van de echte subtitle-stijlen, op een mini videoframe.
 function SubtitlePreview({ style, small }) {
+  if (style === "Keep the same") {
+    return (
+      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#f1f5f9", border: "1px dashed #cbd5e1", borderRadius: small ? "5px" : "9px", width: small ? "92px" : "168px", height: small ? "28px" : "72px", flexShrink: 0, fontSize: small ? "8px" : "11px", fontWeight: 700, color: "#64748b" }}>
+        Keep the same
+      </span>
+    );
+  }
   const frame = {
     display: "flex",
     alignItems: "center",
@@ -812,6 +819,74 @@ function StatusDropdown({ value, onChange, disabled }) {
   );
 }
 
+const actStyle = { fontSize: "10.5px", fontWeight: 700, color: "#64748b", cursor: "pointer" };
+
+/* ---------- Voicebericht-speler met waveform + transcript ---------- */
+function VoiceNote({ url, transcript }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [dur, setDur] = useState(0);
+  const bars = [];
+  let seed = 7;
+  for (let i = 0; i < (url || "").length; i++) seed = (seed * 31 + url.charCodeAt(i)) % 997;
+  for (let i = 0; i < 28; i++) {
+    seed = (seed * 73 + 41) % 997;
+    bars.push(6 + (seed % 14));
+  }
+  const toggle = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) a.pause();
+    else a.play();
+  };
+  const fmt = (s) => (isFinite(s) && s > 0 ? `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}` : "0:00");
+  return (
+    <div style={{ marginTop: "6px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f1f5f9", borderRadius: "999px", padding: "5px 14px 5px 5px", maxWidth: "290px" }}>
+        <button onClick={toggle} style={{ width: "30px", height: "30px", borderRadius: "999px", background: "#0f172a", color: "#ffffff", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          {playing ? (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.5" /><rect x="14" y="4" width="5" height="16" rx="1.5" /></svg>
+          ) : (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8V4z" /></svg>
+          )}
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "2px", flex: 1, height: "24px", minWidth: 0 }}>
+          {bars.map((h, i) => (
+            <span key={i} style={{ width: "3px", height: `${h}px`, borderRadius: "2px", background: i / bars.length <= progress ? "#0f172a" : "#a8b3c2", flexShrink: 0 }} />
+          ))}
+        </div>
+        <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+          {fmt(playing || progress > 0 ? audioRef.current?.currentTime || 0 : dur)}
+        </span>
+      </div>
+      <audio
+        ref={audioRef}
+        src={url}
+        preload="metadata"
+        onLoadedMetadata={(e) => setDur(isFinite(e.target.duration) ? e.target.duration : 0)}
+        onTimeUpdate={(e) => {
+          if (isFinite(e.target.duration) && e.target.duration > 0) setProgress(e.target.currentTime / e.target.duration);
+          if (isFinite(e.target.duration) && !dur) setDur(e.target.duration);
+        }}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => {
+          setPlaying(false);
+          setProgress(0);
+        }}
+        style={{ display: "none" }}
+      />
+      {transcript && (
+        <div style={{ marginTop: "5px", fontSize: "11.5px", color: "#64748b", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "8px", padding: "6px 10px", maxWidth: "290px" }}>
+          <span style={{ fontWeight: 700, color: "#94a3b8", fontSize: "9.5px", textTransform: "uppercase", letterSpacing: "0.6px" }}>Transcript</span>
+          <div style={{ marginTop: "2px", lineHeight: 1.45 }}>{transcript}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Chat: tekst met @mentions en taak-verwijzingen ---------- */
 function ChatText({ text, openTask }) {
   const nodes = [];
@@ -840,7 +915,7 @@ function ChatText({ text, openTask }) {
 }
 
 /* ---------- Chat composer: @mensen, @@taken, bestanden & voice ---------- */
-function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, busy }) {
+function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, busy, dragActive, replyTo, onCancelReply, editing, onCancelEdit }) {
   const [recording, setRecording] = useState(false);
   const [recTime, setRecTime] = useState(0);
   const [levels, setLevels] = useState([]);
@@ -852,7 +927,6 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
   const rafRef = useRef(null);
   const timerRef = useRef(null);
 
-  // Suggesties: laatste @token (@ = mensen, @@ = taken); tabs kunnen wisselen
   const m = /(^|\s)(@{1,2})([^@\s]*)$/.exec(value || "");
   const tokenMode = m ? (m[2] === "@@" ? "tasks" : "people") : null;
   const mode = m ? (tab || tokenMode) : null;
@@ -864,6 +938,7 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
     setTab(null);
   };
   const tabBtn = (active) => ({ flex: 1, padding: "5px 0", borderRadius: "7px", border: "none", cursor: "pointer", fontSize: "11.5px", fontWeight: 700, background: active ? "#eef2ff" : "transparent", color: active ? "#4f46e5" : "#64748b" });
+  const iconBtn = { width: "30px", height: "30px", borderRadius: "8px", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#64748b" };
 
   const stopMeter = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -896,7 +971,6 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
       rec.start();
       setRecording(true);
       setRecTime(0);
-      // Live volume-meter (zoals WhatsApp) via de Web Audio analyser
       const Ctx = window.AudioContext || window.webkitAudioContext;
       if (Ctx) {
         const ctx = new Ctx();
@@ -914,7 +988,7 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
             sum += dv * dv;
           }
           const rms = Math.min(1, Math.sqrt(sum / buf.length) * 4);
-          setLevels((prev) => [...prev.slice(-35), rms]);
+          setLevels((prev) => [...prev.slice(-41), rms]);
           rafRef.current = requestAnimationFrame(tick);
         };
         tick();
@@ -961,56 +1035,76 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
           <div style={{ fontSize: "10px", color: "#94a3b8", padding: "4px 9px 2px 9px" }}>@ people {"\u00B7"} @@ tasks</div>
         </div>
       )}
-      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-        {recording ? (
-          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "10px", background: "#ffffff", border: "1px solid #fecaca", borderRadius: "10px", padding: "0 12px", height: "36px", boxSizing: "border-box" }}>
-            <span style={{ width: "9px", height: "9px", borderRadius: "999px", background: "#dc2626", animation: "jjbPulse 1.1s ease-in-out infinite", flexShrink: 0 }} />
-            <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#dc2626", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtRec(recTime)}</span>
-            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "2px", height: "26px", overflow: "hidden", justifyContent: "flex-end", minWidth: 0 }}>
+
+      <div style={{ background: "#ffffff", border: dragActive ? "2px dashed #3b82f6" : "1px solid #e5e8ee", borderRadius: "14px", padding: "9px 10px 7px 10px", boxShadow: "0 1px 3px rgba(15,23,42,0.06)", transition: "border-color 0.15s" }}>
+        {replyTo && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", borderLeft: "3px solid #6366f1", borderRadius: "6px", padding: "4px 9px", marginBottom: "7px" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "10px", fontWeight: 700, color: "#6366f1" }}>Replying to {replyTo.author}</div>
+              <div style={{ fontSize: "11px", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{replyTo.text}</div>
+            </div>
+            <a onClick={onCancelReply} style={{ cursor: "pointer", color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>{"\u2715"}</a>
+          </div>
+        )}
+        {editing && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#fffbeb", borderLeft: "3px solid #f59e0b", borderRadius: "6px", padding: "4px 9px", marginBottom: "7px" }}>
+            <span style={{ flex: 1, fontSize: "11px", fontWeight: 700, color: "#b45309" }}>Editing message</span>
+            <a onClick={onCancelEdit} style={{ cursor: "pointer", color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>{"\u2715"}</a>
+          </div>
+        )}
+
+        {dragActive ? (
+          <div style={{ padding: "13px 4px", textAlign: "center", fontSize: "12.5px", fontWeight: 700, color: "#1d4ed8" }}>Drop your file here</div>
+        ) : recording ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "4px 4px 8px 4px" }}>
+            <button title="Cancel recording" onClick={() => stopRecording(true)} style={{ width: "26px", height: "26px", borderRadius: "999px", background: "#f1f5f9", border: "none", cursor: "pointer", color: "#475569", fontSize: "12px", flexShrink: 0 }}>{"\u2715"}</button>
+            <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#0f172a", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtRec(recTime)}</span>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "2px", height: "24px", overflow: "hidden", minWidth: 0 }}>
               {levels.map((lv, i) => (
-                <span key={i} style={{ width: "3px", flexShrink: 0, height: `${Math.max(3, lv * 26)}px`, background: "#ef4444", borderRadius: "2px" }} />
+                <span key={i} style={{ width: "2.5px", flexShrink: 0, height: `${Math.max(3, lv * 24)}px`, background: "#334155", borderRadius: "2px" }} />
               ))}
             </div>
-            <button title="Cancel recording" onClick={() => stopRecording(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: "14px", padding: 0, flexShrink: 0 }}>{"\u2715"}</button>
+            <span style={{ width: "8px", height: "8px", borderRadius: "999px", background: "#dc2626", animation: "jjbPulse 1.1s ease-in-out infinite", flexShrink: 0 }} />
             <style>{`@keyframes jjbPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }`}</style>
           </div>
         ) : (
           <input
-            style={{ ...ui.input, flex: 1, minWidth: 0 }}
+            style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: "13px", color: "#0f172a", padding: "2px 4px 9px 4px", boxSizing: "border-box" }}
             placeholder="Write a comment… @ to tag, @@ for a task"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !mode && onSend()}
           />
         )}
-        <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onFile(f); }} />
-        {!recording && (
-          <button title="Attach a file (max 3 MB)" onClick={() => fileRef.current?.click()} disabled={busy} style={{ width: "32px", height: "32px", borderRadius: "8px", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#64748b" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+
+        <div style={{ display: "flex", alignItems: "center", gap: "2px", borderTop: "1px solid #f1f5f9", paddingTop: "7px" }}>
+          <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onFile(f); }} />
+          <button title="Attach a file (max 3 MB)" onClick={() => fileRef.current?.click()} disabled={busy || recording} style={iconBtn}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
             </svg>
           </button>
-        )}
-        <button title={recording ? "Stop" : "Record a voice message"} onClick={() => (recording ? stopRecording(false) : startRecording())} disabled={busy} style={{ width: "32px", height: "32px", borderRadius: "8px", background: recording ? "#fee2e2" : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: recording ? "#dc2626" : "#64748b" }}>
-          {recording ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-          ) : (
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
+          <button title={recording ? "Stop" : "Record a voice message"} onClick={() => (recording ? stopRecording(false) : startRecording())} disabled={busy} style={{ ...iconBtn, background: recording ? "#fee2e2" : "transparent", color: recording ? "#dc2626" : "#64748b" }}>
+            {recording ? (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            )}
+          </button>
+          {busy && <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "6px" }}>Uploading{"\u2026"}</span>}
+          <button title={recording ? "Stop & send" : editing ? "Save edit" : "Send"} onClick={() => (recording ? stopRecording(false) : onSend())} disabled={busy} style={{ marginLeft: "auto", width: "42px", height: "32px", borderRadius: "10px", background: "#0f172a", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: busy ? 0.55 : 1 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 2L11 13" />
+              <path d="M22 2l-7 20-4-9-9-4 20-7z" />
             </svg>
-          )}
-        </button>
-        <button title={recording ? "Stop & send" : "Send"} onClick={() => (recording ? stopRecording(false) : onSend())} disabled={busy} style={{ width: "40px", height: "34px", borderRadius: "10px", background: "#0f172a", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: busy ? 0.55 : 1 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 2L11 13" />
-            <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-          </svg>
-        </button>
+          </button>
+        </div>
       </div>
-      {busy && <p style={{ fontSize: "11px", color: "#8a92a3", margin: "5px 0 0 0" }}>Uploading{"\u2026"}</p>}
     </div>
   );
 }
@@ -1019,6 +1113,8 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
+  const [replyTo, setReplyTo] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
   const [query, setQuery] = useState("");
@@ -1070,8 +1166,30 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
 
   const sendChat = async () => {
     if (!chatInput.trim()) return;
-    const ok = await post({ action: "chat", taskId: t.id, message: chatInput });
-    if (ok) setChatInput("");
+    let ok;
+    if (editingId) {
+      ok = await post({ action: "chatEdit", taskId: t.id, messageId: editingId, message: chatInput });
+    } else {
+      ok = await post({ action: "chat", taskId: t.id, message: chatInput, replyTo: replyTo ? { id: replyTo.id, author: replyTo.author, text: replyTo.text } : null });
+    }
+    if (ok) {
+      setChatInput("");
+      setReplyTo(null);
+      setEditingId(null);
+    }
+  };
+
+  const startReply = (a) => {
+    setEditingId(null);
+    setReplyTo({ id: a.id, author: a.author, text: (a.text || (a.attachment ? a.attachment.kind === "audio" ? "Voice message" : a.attachment.name || "Attachment" : "")).slice(0, 140) });
+  };
+  const startEdit = (a) => {
+    setReplyTo(null);
+    setEditingId(a.id);
+    setChatInput(a.text || "");
+  };
+  const deleteMsg = (a) => {
+    if (confirm("Delete this message?")) post({ action: "chatDelete", taskId: t.id, messageId: a.id });
   };
 
   // Bestand of voicebericht uploaden naar Shopify Files en als chatbijlage versturen
@@ -1099,7 +1217,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
         return;
       }
       const kind = (file.type || "").startsWith("image/") ? "image" : (file.type || "").startsWith("audio/") ? "audio" : "file";
-      const ok = await post({ action: "chat", taskId: t.id, message: chatInput, attachment: { url: up.url, name: file.name, mime: file.type || "", kind } });
+      const ok = await post({ action: "chat", taskId: t.id, message: chatInput, attachment: { url: up.url, name: file.name, mime: file.type || "", kind, transcript: up.transcript || "" } });
       if (ok) setChatInput("");
     } finally {
       setChatBusy(false);
@@ -1133,13 +1251,6 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
         if (f) sendFile(f);
       }}
     >
-      {dragActive && (
-        <div style={{ position: "absolute", inset: "14px", border: "2px dashed #60a5fa", borderRadius: "20px", background: "rgba(59,130,246,0.10)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-          <span style={{ background: "#ffffff", padding: "12px 22px", borderRadius: "12px", fontSize: "13.5px", fontWeight: 700, color: "#1d4ed8", boxShadow: "0 12px 30px rgba(15,23,42,0.25)" }}>
-            Drop your file to attach it to the chat
-          </span>
-        </div>
-      )}
       <div
         style={{ background: "#ffffff", borderRadius: "18px", width: "min(1280px, 100%)", height: isMobile ? "96vh" : "92vh", boxShadow: "0 24px 60px rgba(15,23,42,0.35)", display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}
         onClick={(e) => e.stopPropagation()}
@@ -1348,23 +1459,25 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                   <TextField value={t.aRollLink} disabled={!canEdit} onSave={(v) => save("aRollLink", v)} type="url" placeholder="https://…" />
                 </Field>
               )}
-              <Field label="ElevenLabs Voice">
-                {canEdit ? (
-                  <select
-                    value={t.voiceId || ""}
-                    onChange={(e) => {
-                      const v = voices.find((x) => x.id === e.target.value);
-                      post({ action: "update", taskId: t.id, task: { voiceId: e.target.value, voiceName: v?.name || "" } });
-                    }}
-                    style={selectStyle}
-                  >
-                    <option value="">{voices.length ? "— Select voice —" : "No voices synced — check ELEVENLABS_API_KEY"}</option>
-                    {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                  </select>
-                ) : (
-                  <span style={{ fontSize: "13px" }}>{t.voiceName || "—"}</span>
-                )}
-              </Field>
+              {t.aRoll !== "Keep Current" && (
+                <Field label="ElevenLabs Voice">
+                  {canEdit ? (
+                    <select
+                      value={t.voiceId || ""}
+                      onChange={(e) => {
+                        const v = voices.find((x) => x.id === e.target.value);
+                        post({ action: "update", taskId: t.id, task: { voiceId: e.target.value, voiceName: v?.name || "" } });
+                      }}
+                      style={selectStyle}
+                    >
+                      <option value="">{voices.length ? "— Select voice —" : "No voices synced — check ELEVENLABS_API_KEY"}</option>
+                      {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                    </select>
+                  ) : (
+                    <span style={{ fontSize: "13px" }}>{t.voiceName || "—"}</span>
+                  )}
+                </Field>
+              )}
               <Field label="Type Subtitles" last>
                 <SubtitleDropdown value={t.subtitles} onSave={(v) => save("subtitles", v)} disabled={!canEdit} />
               </Field>
@@ -1421,24 +1534,45 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
             {visibleActivity.length === 0 && <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>No activity yet.</p>}
             {visibleActivity.map((a) =>
               a.type === "chat" ? (
-                <div key={a.id} style={{ padding: "8px 12px", background: a.email === me?.email ? "#eff6ff" : "#ffffff", border: "1px solid #eef0f3", borderRadius: "10px", marginBottom: "6px" }}>
-                  <div style={{ fontSize: "11px", marginBottom: "2px" }}>
-                    <b style={{ color: personColor(a.email) }}>{a.author}</b>
-                    <span style={{ color: "#94a3b8" }}> · {new Date(a.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                <div key={a.id} className="jjb-msg" style={{ padding: "9px 12px", background: a.email === me?.email ? "#eff6ff" : "#ffffff", border: "1px solid #eef0f3", borderRadius: "12px", marginBottom: "6px" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "6px", marginBottom: "2px", flexWrap: "wrap" }}>
+                    <b style={{ fontSize: "11px", color: personColor(a.email) }}>{a.author}</b>
+                    <span style={{ fontSize: "10.5px", color: "#94a3b8" }}>{new Date(a.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                    {a.edited && !a.deleted && <span style={{ fontSize: "10px", color: "#94a3b8" }}>(edited)</span>}
+                    {a.deleted && me?.admin && <span style={{ fontSize: "9.5px", fontWeight: 700, color: "#dc2626", background: "#fee2e2", padding: "1px 7px", borderRadius: "999px" }}>deleted</span>}
+                    <span className="jjb-acts" style={{ marginLeft: "auto", display: "flex", gap: "9px", transition: "opacity 0.15s" }}>
+                      {!a.deleted && <a onClick={() => startReply(a)} style={actStyle}>Reply</a>}
+                      {!a.deleted && a.email === me?.email && <a onClick={() => startEdit(a)} style={actStyle}>Edit</a>}
+                      {!a.deleted && (a.email === me?.email || me?.admin) && <a onClick={() => deleteMsg(a)} style={{ ...actStyle, color: "#dc2626" }}>Delete</a>}
+                    </span>
                   </div>
-                  <div style={{ fontSize: "12.5px", whiteSpace: "pre-wrap" }}><ChatText text={a.text} openTask={openTaskById} /></div>
-                  {a.attachment?.url &&
-                    (a.attachment.kind === "image" ? (
-                      <a href={a.attachment.url} target="_blank" rel="noreferrer">
-                        <img src={a.attachment.url} alt={a.attachment.name} style={{ maxWidth: "100%", maxHeight: "180px", borderRadius: "8px", marginTop: "6px", display: "block" }} />
-                      </a>
-                    ) : a.attachment.kind === "audio" ? (
-                      <audio controls src={a.attachment.url} style={{ width: "100%", marginTop: "6px", height: "36px" }} />
-                    ) : (
-                      <a href={a.attachment.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", padding: "4px 10px", borderRadius: "8px", textDecoration: "none" }}>
-                        📎 {a.attachment.name || "file"}
-                      </a>
-                    ))}
+                  {a.replyTo && !a.deleted && (
+                    <div style={{ borderLeft: "3px solid #c7d2fe", background: "#f8fafc", borderRadius: "6px", padding: "4px 9px", margin: "2px 0 6px 0" }}>
+                      <div style={{ fontSize: "10px", fontWeight: 700, color: "#6366f1" }}>{a.replyTo.author}</div>
+                      <div style={{ fontSize: "11px", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.replyTo.text}</div>
+                    </div>
+                  )}
+                  {a.deleted && !me?.admin ? (
+                    <div style={{ fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>This message was deleted</div>
+                  ) : (
+                    <>
+                      {a.text && (
+                        <div style={{ fontSize: "12.5px", whiteSpace: "pre-wrap" }}><ChatText text={a.text} openTask={openTaskById} /></div>
+                      )}
+                      {a.attachment?.url &&
+                        (a.attachment.kind === "image" ? (
+                          <a href={a.attachment.url} target="_blank" rel="noreferrer">
+                            <img src={a.attachment.url} alt={a.attachment.name} style={{ maxWidth: "100%", maxHeight: "180px", borderRadius: "8px", marginTop: "6px", display: "block" }} />
+                          </a>
+                        ) : a.attachment.kind === "audio" ? (
+                          <VoiceNote url={a.attachment.url} transcript={a.attachment.transcript} />
+                        ) : (
+                          <a href={a.attachment.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", padding: "4px 10px", borderRadius: "8px", textDecoration: "none" }}>
+                            📎 {a.attachment.name || "file"}
+                          </a>
+                        ))}
+                    </>
+                  )}
                 </div>
               ) : (
                 <div key={a.id} style={{ display: "flex", gap: "7px", alignItems: "flex-start", padding: "4px 0", fontSize: "11.5px", color: "#8a92a3" }}>
@@ -1454,7 +1588,8 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
           </div>
 
           <div style={{ padding: "10px 18px 16px 18px", borderTop: "1px solid #eef0f3", background: "#fafbfc" }}>
-            <ChatComposer team={team} me={me} taskOptions={taskOptions} value={chatInput} setValue={setChatInput} onSend={sendChat} onFile={sendFile} busy={chatBusy} />
+            <style>{`.jjb-msg .jjb-acts{opacity:0}.jjb-msg:hover .jjb-acts{opacity:1}`}</style>
+            <ChatComposer team={team} me={me} taskOptions={taskOptions} value={chatInput} setValue={setChatInput} onSend={sendChat} onFile={sendFile} busy={chatBusy} dragActive={dragActive} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} editing={!!editingId} onCancelEdit={() => { setEditingId(null); setChatInput(""); }} />
           </div>
         </div>
       </div>
