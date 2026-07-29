@@ -960,6 +960,8 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const dragDepth = useRef(0);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -1053,7 +1055,32 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
     <div
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: isMobile ? "8px" : "3vh 3vw", zIndex: 100 }}
       onClick={onClose}
+      onDragEnter={(e) => {
+        if (e.dataTransfer?.types?.includes("Files")) {
+          dragDepth.current += 1;
+          setDragActive(true);
+        }
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={() => {
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (!dragDepth.current) setDragActive(false);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDragActive(false);
+        const f = e.dataTransfer?.files?.[0];
+        if (f) sendFile(f);
+      }}
     >
+      {dragActive && (
+        <div style={{ position: "absolute", inset: "14px", border: "2px dashed #60a5fa", borderRadius: "20px", background: "rgba(59,130,246,0.10)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <span style={{ background: "#ffffff", padding: "12px 22px", borderRadius: "12px", fontSize: "13.5px", fontWeight: 700, color: "#1d4ed8", boxShadow: "0 12px 30px rgba(15,23,42,0.25)" }}>
+            Drop your file to attach it to the chat
+          </span>
+        </div>
+      )}
       <div
         style={{ background: "#ffffff", borderRadius: "18px", width: "min(1280px, 100%)", height: isMobile ? "96vh" : "92vh", boxShadow: "0 24px 60px rgba(15,23,42,0.35)", display: "flex", flexDirection: isMobile ? "column" : "row", overflow: "hidden" }}
         onClick={(e) => e.stopPropagation()}
@@ -1303,7 +1330,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
         </div>
 
         {/* ===== Rechts: activity + chat ===== */}
-        <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) sendFile(f); }} style={{ flex: 1, background: "#fafbfc", borderLeft: isMobile ? "none" : "1px solid #eceef2", borderTop: isMobile ? "1px solid #eceef2" : "none", display: "flex", flexDirection: "column", minWidth: 0, minHeight: isMobile ? "280px" : "auto", maxWidth: isMobile ? "none" : "420px" }}>
+        <div style={{ flex: 1, background: "#fafbfc", borderLeft: isMobile ? "none" : "1px solid #eceef2", borderTop: isMobile ? "1px solid #eceef2" : "none", display: "flex", flexDirection: "column", minWidth: 0, minHeight: isMobile ? "280px" : "auto", maxWidth: isMobile ? "none" : "420px" }}>
           <div style={{ padding: "16px 18px 10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #eef0f3" }}>
             <span style={{ fontSize: "13px", fontWeight: 700 }}>Activity</span>
             {!isMobile && <button onClick={onClose} style={{ ...btnGhost, padding: "5px 11px" }}>✕</button>}
