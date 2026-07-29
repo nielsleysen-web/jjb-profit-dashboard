@@ -756,6 +756,50 @@ function SubtitleDropdown({ value, onSave, disabled }) {
 
 /* ================= grote taakweergave ================= */
 
+/* ---------- Status dropdown met boardkleuren ---------- */
+function StatusDropdown({ value, onChange, disabled }) {
+  const [open, setOpen] = useState(false);
+  const meta = STATUS_META[value] || { color: "#334155", bg: "#f1f5f9" };
+  const pill = (s, m) => (
+    <span style={{ color: m.color, background: m.bg, padding: "3px 10px", borderRadius: "999px", fontSize: "11.5px", fontWeight: 700, whiteSpace: "nowrap" }}>{s}</span>
+  );
+  if (disabled) return <div style={{ marginTop: "6px" }}>{pill(value, meta)}</div>;
+  return (
+    <div style={{ position: "relative", marginTop: "4px" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "6px 10px", borderRadius: "8px", border: "1px solid #e5e8ee", background: "#ffffff", cursor: "pointer" }}
+      >
+        {pill(value, meta)}
+        <span style={{ color: "#64748b", fontSize: "11px" }}>{"\u25BE"}</span>
+      </button>
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 5 }} onClick={() => setOpen(false)} />
+          <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, minWidth: "100%", background: "#ffffff", border: "1px solid #e5e8ee", borderRadius: "10px", boxShadow: "0 10px 30px rgba(15,23,42,0.14)", padding: "6px", zIndex: 6, display: "grid", gap: "2px" }}>
+            {STATUSES.map((s) => {
+              const m = STATUS_META[s] || { color: "#334155", bg: "#f1f5f9" };
+              return (
+                <button
+                  key={s}
+                  onClick={() => {
+                    setOpen(false);
+                    if (s !== value) onChange(s);
+                  }}
+                  style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "6px 8px", background: s === value ? "#f6f8fa" : "transparent", border: "none", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}
+                >
+                  {pill(s, m)}
+                  {s === value && <span style={{ marginLeft: "auto", color: "#64748b", fontSize: "12px" }}>{"\u2713"}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, onClose, isMobile }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
@@ -856,9 +900,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "10px", margin: "14px 0 14px 0" }}>
               <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "10px 14px" }}>
                 <div style={ui.label}>Status</div>
-                <select value={t.status} disabled={!me?.canStatus} onChange={(e) => post({ action: "status", taskId: t.id, status: e.target.value })} style={{ ...selectStyle, marginTop: "4px", fontWeight: 700 }}>
-                  {STATUSES.map((s) => <option key={s}>{s}</option>)}
-                </select>
+                <StatusDropdown value={t.status} disabled={!me?.canStatus} onChange={(s) => post({ action: "status", taskId: t.id, status: s })} />
               </div>
               <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "10px 14px" }}>
                 <div style={ui.label}>Deadline</div>
