@@ -910,10 +910,28 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
           onKeyDown={(e) => e.key === "Enter" && !mode && onSend()}
         />
         <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onFile(f); }} />
-        <button title="Attach a file (max 3 MB)" onClick={() => fileRef.current?.click()} disabled={busy} style={{ width: "34px", height: "34px", borderRadius: "10px", background: "#ffffff", border: "1px solid #e5e8ee", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>{"\uD83D\uDCCE"}</button>
-        <button title={recording ? "Stop recording" : "Record a voice message"} onClick={toggleRecord} disabled={busy} style={{ width: "34px", height: "34px", borderRadius: "10px", background: recording ? "#fee2e2" : "#ffffff", border: recording ? "1px solid #fecaca" : "1px solid #e5e8ee", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>{recording ? "\u23F9" : "\uD83C\uDFA4"}</button>
+        <button title="Attach a file (max 3 MB)" onClick={() => fileRef.current?.click()} disabled={busy} style={{ width: "32px", height: "32px", borderRadius: "8px", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "#64748b" }}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+          </svg>
+        </button>
+        <button title={recording ? "Stop recording" : "Record a voice message"} onClick={toggleRecord} disabled={busy} style={{ width: "32px", height: "32px", borderRadius: "8px", background: recording ? "#fee2e2" : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: recording ? "#dc2626" : "#64748b" }}>
+          {recording ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+          ) : (
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          )}
+        </button>
         <button title="Send" onClick={onSend} disabled={busy} style={{ width: "40px", height: "34px", borderRadius: "10px", background: "#0f172a", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: busy ? 0.55 : 1 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24"><path d="M3 3l18 9-18 9 4.5-9L3 3z" fill="#ffffff" /></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 2L11 13" />
+            <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+          </svg>
         </button>
       </div>
       {busy && <p style={{ fontSize: "11px", color: "#8a92a3", margin: "5px 0 0 0" }}>Uploading{"\u2026"}</p>}
