@@ -33,6 +33,8 @@ const STATUS_STYLE = {
   disabled: { text: "Blocked", color: "#991b1b", bg: "#fee2e2" },
 };
 
+const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor"];
+
 export default function Accounts() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,7 +90,7 @@ export default function Accounts() {
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>👥 Account Management</h1>
         <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Approve new accounts and manage who has access to Finance, Strategy and Marketing
+          Approve new accounts and assign roles — every role has access to the Marketing assets
         </p>
       </div>
 
@@ -173,27 +175,29 @@ function UserCard({ user, update, busy }) {
         {status.text}
       </span>
 
-      {/* Rechten */}
-      <div style={{ display: "flex", gap: "14px", flexShrink: 0 }}>
-        <Toggle
-          label="Finance"
-          checked={isAdmin || user.finance}
-          disabled={isAdmin}
-          onChange={() => update(user.id, { updates: { finance: !user.finance } })}
-        />
-        <Toggle
-          label="Strategy"
-          checked={isAdmin || user.strategy}
-          disabled={isAdmin}
-          onChange={() => update(user.id, { updates: { strategy: !user.strategy } })}
-        />
-        <Toggle
-          label="Marketing"
-          checked={isAdmin || user.marketing}
-          disabled={isAdmin}
-          onChange={() => update(user.id, { updates: { marketing: !user.marketing } })}
-        />
-      </div>
+      {/* Rollen (meerdere mogelijk) */}
+      {isAdmin ? (
+        <span style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", flexShrink: 0 }}>Full access</span>
+      ) : (
+        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", flexShrink: 0, maxWidth: "460px" }}>
+          {ROLES.map((role) => {
+            const roles = Array.isArray(user.roles) ? user.roles : [];
+            const has = roles.includes(role);
+            return (
+              <Toggle
+                key={role}
+                label={role}
+                checked={has}
+                onChange={() =>
+                  update(user.id, {
+                    updates: { roles: has ? roles.filter((r) => r !== role) : [...roles, role] },
+                  })
+                }
+              />
+            );
+          })}
+        </div>
+      )}
 
       {/* Acties */}
       {!isAdmin && (
