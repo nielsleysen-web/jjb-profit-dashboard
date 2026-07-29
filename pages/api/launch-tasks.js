@@ -10,7 +10,7 @@ import crypto from "crypto";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 
-const STATUSES = ["Task Start", "AI Translation", "Ready For Build", "QA Check", "First Creative Batch", "Ready to launch", "Launched"];
+const STATUSES = ["Task Start", "AI Translation", "Ready For Build", "In Production", "QA Check", "First Creative Batch", "Ready to launch", "Launched"];
 const MARKETS = ["Italy", "France", "Israel"];
 const COUNTRY_CODES = ["IT", "FR", "IL"];
 
