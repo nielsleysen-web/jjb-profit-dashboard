@@ -420,6 +420,86 @@ function SelectField({ value, options, onSave, disabled, placeholder }) {
   );
 }
 
+/* ---------- HeyGen avatar dropdown met foto's ---------- */
+function AvatarDropdown({ value, valueName, avatars, onSelect, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const selected = avatars.find((a) => a.id === value) || null;
+
+  if (disabled) {
+    return valueName ? (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px" }}>
+        {selected?.preview && <img src={selected.preview} alt="" style={{ width: "24px", height: "24px", borderRadius: "999px", objectFit: "cover" }} />}
+        {valueName}
+      </span>
+    ) : (
+      <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
+    );
+  }
+
+  const shown = avatars.filter((a) => !filter.trim() || a.name.toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        type="button"
+        style={{ ...ui.input, padding: "6px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", cursor: "pointer", textAlign: "left" }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+          {selected?.preview && (
+            <img src={selected.preview} alt="" style={{ width: "26px", height: "26px", borderRadius: "999px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
+          )}
+          <span style={{ fontWeight: 600, color: selected ? "#0f172a" : "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12.5px" }}>
+            {selected ? selected.name : avatars.length ? "Select avatar…" : "No avatars synced — check HEYGEN_API_KEY"}
+          </span>
+        </span>
+        <span style={{ color: "#94a3b8", fontSize: "10px", flexShrink: 0 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+          <div style={{ position: "absolute", top: "42px", left: 0, right: 0, background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", boxShadow: "0 12px 32px rgba(15,23,42,0.16)", padding: "8px", zIndex: 50 }}>
+            {avatars.length > 6 && (
+              <input
+                style={{ ...ui.input, padding: "6px 10px", fontSize: "12px", marginBottom: "6px" }}
+                placeholder="Search avatars…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                autoFocus
+              />
+            )}
+            <div style={{ maxHeight: "280px", overflowY: "auto" }}>
+              {shown.length === 0 && <p style={{ fontSize: "12px", color: "#94a3b8", margin: "6px", textAlign: "center" }}>No avatars found</p>}
+              {shown.map((a) => (
+                <div
+                  key={a.id}
+                  onClick={() => {
+                    onSelect(a);
+                    setOpen(false);
+                    setFilter("");
+                  }}
+                  style={{ display: "flex", alignItems: "center", gap: "10px", padding: "6px 8px", borderRadius: "9px", cursor: "pointer", background: value === a.id ? "#eff6ff" : "transparent", marginBottom: "2px" }}
+                >
+                  {a.preview ? (
+                    <img src={a.preview} alt="" style={{ width: "34px", height: "34px", borderRadius: "999px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: "34px", height: "34px", borderRadius: "999px", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px", flexShrink: 0 }}>🧑</div>
+                  )}
+                  <span style={{ fontSize: "12.5px", fontWeight: 600, color: value === a.id ? "#1d4ed8" : "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {a.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ---------- subtitle-stijl dropdown met gedetailleerde CSS-previews ---------- */
 
 // Nagemaakte previews van de echte subtitle-stijlen, op een mini videoframe.
@@ -850,21 +930,13 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               </Field>
               {t.aRoll === "Existing" && (
                 <Field label="Avatar (HeyGen)">
-                  {canEdit ? (
-                    <select
-                      value={t.aRollAvatarId || ""}
-                      onChange={(e) => {
-                        const a = avatars.find((x) => x.id === e.target.value);
-                        post({ action: "update", taskId: t.id, task: { aRollAvatarId: e.target.value, aRollAvatarName: a?.name || "" } });
-                      }}
-                      style={selectStyle}
-                    >
-                      <option value="">{avatars.length ? "— Select avatar —" : "No avatars synced — check HEYGEN_API_KEY"}</option>
-                      {avatars.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                  ) : (
-                    <span style={{ fontSize: "13px" }}>{t.aRollAvatarName || "—"}</span>
-                  )}
+                  <AvatarDropdown
+                    value={t.aRollAvatarId}
+                    valueName={t.aRollAvatarName}
+                    avatars={avatars}
+                    disabled={!canEdit}
+                    onSelect={(a) => post({ action: "update", taskId: t.id, task: { aRollAvatarId: a.id, aRollAvatarName: a.name } })}
+                  />
                 </Field>
               )}
               {t.aRoll === "Net New" && (
