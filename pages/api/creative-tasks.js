@@ -196,7 +196,7 @@ export default async function handler(req, res) {
 
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const { action, taskId, task: input, status, message } = req.body || {};
+    const { action, taskId, task: input, status, message, attachment } = req.body || {};
     const store = (await readData("creative-tasks")) || { tasks: [] };
     const accounts = (await readData("accounts")) || { users: [] };
     const activeUsers = accounts.users.filter((u) => u.status === "active");
@@ -302,9 +302,19 @@ export default async function handler(req, res) {
     /* --- chat --- */
     if (action === "chat") {
       const text = (message || "").trim().slice(0, 1000);
-      if (!text) return res.status(400).json({ success: false, error: "Empty message" });
+      // Bijlage (bestand of voicebericht) — alleen https-URLs van de upload-endpoint
+      const att =
+        attachment && typeof attachment.url === "string" && attachment.url.startsWith("https://")
+          ? {
+              url: attachment.url.slice(0, 600),
+              name: String(attachment.name || "").slice(0, 120),
+              mime: String(attachment.mime || "").slice(0, 80),
+              kind: ["image", "audio", "file"].includes(attachment.kind) ? attachment.kind : "file",
+            }
+          : null;
+      if (!text && !att) return res.status(400).json({ success: false, error: "Empty message" });
       task.activity = task.activity || [];
-      task.activity.push({ id: uid(), type: "chat", author: session.name, email: session.email, text, at: new Date().toISOString() });
+      task.activity.push({ id: uid(), type: "chat", author: session.name, email: session.email, text, attachment: att, at: new Date().toISOString() });
 
       const notifs = [];
       for (const u of activeUsers) {
