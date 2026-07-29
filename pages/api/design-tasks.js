@@ -127,6 +127,22 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers) {
   if (newStatus === "Ready To Work" && task.assigneeEmail && task.assigneeEmail !== session.email) {
     notifications.push({ email: task.assigneeEmail, text: `"${productName}" is Ready To Work — you can start designing` });
   }
+  if (newStatus === "In Production" && task.batchType === "First Creative Batch" && task.sourceLaunchTaskId) {
+    // Designer is gestart met de First Creative Batch → de launch-taak verdwijnt van het funnel-board
+    const launchStore = (await readData("launch-tasks")) || { tasks: [] };
+    const lt = launchStore.tasks.find((x) => x.id === task.sourceLaunchTaskId);
+    if (lt && lt.status === "First Creative Batch") {
+      lt.status = "Ready to launch";
+      lt.activity = lt.activity || [];
+      lt.activity.push({ id: uid(), type: "log", author: session.name, email: session.email, text: `changed status to "Ready to launch" — the designer started working on the First Creative Batch`, at: new Date().toISOString() });
+      await writeData("launch-tasks", launchStore);
+      for (const mb of mediaBuyers) {
+        if (mb.email !== session.email) {
+          notifications.push({ email: mb.email, text: `"${lt.productName}" is Ready to launch — check your Ready To Launch worktable`, href: "/ready-to-launch" });
+        }
+      }
+    }
+  }
   if (newStatus === "QA Check") {
     // Zowel de admin als de verantwoordelijke Creative Strategist krijgen de QA-melding
     if (session.email !== ADMIN_EMAIL) {
