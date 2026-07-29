@@ -420,52 +420,118 @@ function SelectField({ value, options, onSave, disabled, placeholder }) {
   );
 }
 
-/* ---------- subtitle-stijl dropdown met CSS-previews ---------- */
+/* ---------- subtitle-stijl dropdown met gedetailleerde CSS-previews ---------- */
 
-// Eén woord in het design van de stijl — subtiel en klein
-function SubtitlePreview({ style }) {
-  const base = {
-    display: "inline-flex",
+// Nagemaakte previews van de echte subtitle-stijlen, op een mini videoframe.
+function SubtitlePreview({ style, small }) {
+  const frame = {
+    display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "linear-gradient(135deg, #334155, #1e293b)",
-    borderRadius: "7px",
-    padding: "5px 10px",
+    background: "linear-gradient(140deg, #46536a 0%, #232c3d 55%, #171e2b 100%)",
+    borderRadius: small ? "5px" : "9px",
+    width: small ? "92px" : "168px",
+    height: small ? "28px" : "72px",
     flexShrink: 0,
+    overflow: "hidden",
+    textAlign: "center",
   };
+
+  // 1. White Text, Shadowed Background — witte bold tekst op donkere schaduwband
   if (style === "White Text, Shadowed Background") {
     return (
-      <span style={base}>
-        <span style={{ background: "rgba(0,0,0,0.6)", color: "#ffffff", fontWeight: 700, fontSize: "10.5px", padding: "1px 7px", borderRadius: "3px", fontFamily: "Inter, sans-serif" }}>
-          Subtitle
+      <span style={frame}>
+        <span
+          style={{
+            background: "rgba(0,0,0,0.52)",
+            borderRadius: "4px",
+            padding: small ? "1px 7px" : "4px 10px",
+            color: "#ffffff",
+            fontWeight: 700,
+            fontSize: small ? "8.5px" : "9.5px",
+            lineHeight: 1.4,
+            fontFamily: "Inter, sans-serif",
+          }}
+        >
+          {small ? "werden zur Qual." : <>Laufen, Stehen oder<br />Schlafen werden zur Qual.</>}
         </span>
       </span>
     );
   }
+
+  // 2. Documentary Text — kleine cleane witte tekst met zachte schaduw, geen vlak
   if (style === "Documentary Text") {
     return (
-      <span style={base}>
-        <span style={{ color: "#ffffff", fontWeight: 600, fontSize: "10.5px", textShadow: "0 1px 3px rgba(0,0,0,0.95)", fontFamily: "Inter, sans-serif" }}>
-          subtitle
+      <span style={frame}>
+        <span
+          style={{
+            color: "#ffffff",
+            fontWeight: 500,
+            fontSize: small ? "9.5px" : "11.5px",
+            textShadow: "0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.5)",
+            fontFamily: "Inter, sans-serif",
+            letterSpacing: "0.2px",
+          }}
+        >
+          he was 27
         </span>
       </span>
     );
   }
+
+  // 3. TikTok Style — donkere tekst in een witte afgeronde box
   if (style === "TikTok Style") {
     return (
-      <span style={base}>
-        <span style={{ background: "#ffffff", color: "#111827", fontWeight: 700, fontSize: "10.5px", padding: "1px 8px", borderRadius: "5px", fontFamily: "Inter, sans-serif" }}>
-          subtitle
+      <span style={frame}>
+        <span
+          style={{
+            background: "#ffffff",
+            color: "#16181d",
+            fontWeight: 700,
+            fontSize: small ? "8.5px" : "10.5px",
+            padding: small ? "2px 8px" : "4px 11px",
+            borderRadius: small ? "5px" : "7px",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.45)",
+            fontFamily: "Inter, sans-serif",
+          }}
+        >
+          would happen
         </span>
       </span>
     );
   }
-  // TikTok Explanational
+
+  // 4. TikTok Explanational — vette caps met dikke zwarte outline + rood accentwoord
+  const outline =
+    "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, -2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000";
+  const capsLine = (text, red, size) => (
+    <span
+      style={{
+        display: "block",
+        color: red ? "#ef2d2d" : "#ffffff",
+        fontWeight: 900,
+        fontSize: size,
+        textTransform: "uppercase",
+        letterSpacing: "0.4px",
+        lineHeight: 1.2,
+        textShadow: outline,
+        fontFamily: "Inter, sans-serif",
+      }}
+    >
+      {text}
+    </span>
+  );
   return (
-    <span style={base}>
-      <span style={{ color: "#ef4444", fontWeight: 900, fontSize: "10.5px", textTransform: "uppercase", letterSpacing: "0.3px", textShadow: "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000", fontFamily: "Inter, sans-serif" }}>
-        Subtitle
-      </span>
+    <span style={{ ...frame, flexDirection: "column" }}>
+      {small ? (
+        capsLine("INFLAMMATORY", true, "8.5px")
+      ) : (
+        <>
+          {capsLine("SLUDGE AND", false, "9px")}
+          {capsLine("INFLAMMATORY", true, "9px")}
+          {capsLine("WASTE", false, "9px")}
+        </>
+      )}
     </span>
   );
 }
@@ -476,7 +542,7 @@ function SubtitleDropdown({ value, onSave, disabled }) {
   if (disabled) {
     return value ? (
       <span style={{ display: "inline-flex", alignItems: "center", gap: "8px", fontSize: "13px" }}>
-        <SubtitlePreview style={value} /> {value}
+        <SubtitlePreview style={value} small /> {value}
       </span>
     ) : (
       <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
@@ -488,10 +554,10 @@ function SubtitleDropdown({ value, onSave, disabled }) {
       <button
         onClick={() => setOpen(!open)}
         type="button"
-        style={{ ...ui.input, padding: "6px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", cursor: "pointer", textAlign: "left" }}
+        style={{ ...ui.input, padding: "5px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", cursor: "pointer", textAlign: "left" }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-          {value && <SubtitlePreview style={value} />}
+        <span style={{ display: "flex", alignItems: "center", gap: "9px", minWidth: 0 }}>
+          {value && <SubtitlePreview style={value} small />}
           <span style={{ fontWeight: 600, color: value ? "#0f172a" : "#94a3b8", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "12.5px" }}>
             {value || "Select subtitle style…"}
           </span>
@@ -510,7 +576,7 @@ function SubtitleDropdown({ value, onSave, disabled }) {
                   onSave(s);
                   setOpen(false);
                 }}
-                style={{ display: "flex", alignItems: "center", gap: "10px", padding: "7px 9px", borderRadius: "9px", cursor: "pointer", background: value === s ? "#eff6ff" : "transparent", marginBottom: "2px" }}
+                style={{ display: "flex", alignItems: "center", gap: "12px", padding: "7px 9px", borderRadius: "9px", cursor: "pointer", background: value === s ? "#eff6ff" : "transparent", marginBottom: "3px" }}
               >
                 <SubtitlePreview style={s} />
                 <span style={{ fontSize: "12.5px", fontWeight: 600, color: value === s ? "#1d4ed8" : "#334155" }}>{s}</span>
