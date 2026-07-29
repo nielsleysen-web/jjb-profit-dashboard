@@ -79,6 +79,29 @@ export default async function handler(req, res) {
     const safeName = String(filename).replace(/[^\w.\-]+/g, "_").slice(0, 100) || "file";
     const mt = String(mimeType || "application/octet-stream").slice(0, 100);
 
+    // Voicebericht? Start de transcriptie (ElevenLabs Scribe) parallel met de upload
+    const transcriptPromise = (async () => {
+      if (!mt.startsWith("audio/") || !process.env.ELEVENLABS_API_KEY) return "";
+      try {
+        const b2 = "----jjbstt" + crypto.randomBytes(6).toString("hex");
+        const tparts = [];
+        tparts.push(Buffer.from(`--${b2}\r\nContent-Disposition: form-data; name="model_id"\r\n\r\nscribe_v1\r\n`));
+        tparts.push(Buffer.from(`--${b2}\r\nContent-Disposition: form-data; name="file"; filename="${safeName}"\r\nContent-Type: ${mt}\r\n\r\n`));
+        tparts.push(buf);
+        tparts.push(Buffer.from(`\r\n--${b2}--\r\n`));
+        const tbody = Buffer.concat(tparts);
+        const tr = await axios.post("https://api.elevenlabs.io/v1/speech-to-text", tbody, {
+          headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY, "Content-Type": `multipart/form-data; boundary=${b2}` },
+          maxBodyLength: Infinity,
+          timeout: 20000,
+        });
+        return String(tr.data?.text || "").trim().slice(0, 1200);
+      } catch (e) {
+        console.error("Transcript error:", e.message);
+        return "";
+      }
+    })();
+
     // 1. Staged upload target aanvragen
     const staged = await shopifyGraphql(
       `mutation Stage($input: [StagedUploadInput!]!) {
@@ -127,8 +150,8 @@ export default async function handler(req, res) {
 
     // 4. Wachten tot de CDN-URL beschikbaar is
     let url = "";
-    for (let i = 0; i < 8 && !url; i++) {
-      await new Promise((r) => setTimeout(r, 900));
+    for (let i = 0; i < 10 && !url; i++) {
+      await new Promise((r) => setTimeout(r, i === 0 ? 350 : 600));
       const node = await shopifyGraphql(
         `query Get($id: ID!) { node(id: $id) { ... on GenericFile { url fileStatus } } }`,
         { id: fileId }
@@ -140,7 +163,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ success: false, error: "File is still processing — try again in a few seconds" });
     }
 
-    return res.status(200).json({ success: true, url });
+    const transcript = await transcriptPromise;
+    return res.status(200).json({ success: true, url, transcript });
   } catch (error) {
     console.error("Upload error:", error.message);
     return res.status(500).json({ success: false, error: error.message });
