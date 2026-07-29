@@ -120,6 +120,10 @@ export default async function handler(req, res) {
       } else if (updates) {
         if ("status" in updates) user.status = updates.status;
         if ("name" in updates) user.name = updates.name;
+        if ("slackId" in updates) {
+          // Slack member ID (bv. U0123ABCD) — <@...> of @ eromheen wordt weggehaald
+          user.slackId = String(updates.slackId || "").replace(/[<@>\s]/g, "").slice(0, 30);
+        }
         if ("roles" in updates && Array.isArray(updates.roles)) {
           user.roles = updates.roles.filter((r) => ROLES.includes(r));
         }
