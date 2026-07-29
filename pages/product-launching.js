@@ -124,6 +124,14 @@ const namingConvention = (t) =>
     .map((s) => String(s).toUpperCase())
     .join(" | ");
 
+// Taaktitel: vanaf "Ready For Build" automatisch de naming convention,
+// daarvoor gewoon de product name.
+const taskTitle = (t) => {
+  const hasNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf("Ready For Build");
+  const naming = namingConvention(t);
+  return hasNaming && naming ? naming : t.productName || "New Product";
+};
+
 export default function ProductLaunching() {
   const [tasks, setTasks] = useState([]);
   const [funnelBuilders, setFunnelBuilders] = useState([]);
@@ -287,7 +295,7 @@ export default function ProductLaunching() {
                       opacity: dragId === t.id ? 0.4 : 1,
                     }}
                   >
-                    <div style={{ fontSize: "13px", fontWeight: 700, lineHeight: 1.4 }}>{t.productName}</div>
+                    <div style={{ fontSize: "12.5px", fontWeight: 700, lineHeight: 1.45, wordBreak: "break-word" }}>{taskTitle(t)}</div>
                     {t.funnelAngle && (
                       <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {t.funnelAngle}
@@ -409,13 +417,10 @@ function TextField({ value, onSave, disabled, placeholder, type = "text" }) {
 function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
-  const [title, setTitle] = useState(t.productName || "");
   const chatEndRef = useRef(null);
   const naming = namingConvention(t);
   const showNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf("Ready For Build");
   const canEdit = me?.canEdit;
-
-  useEffect(() => setTitle(t.productName || ""), [t.productName]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "nearest" });
@@ -481,20 +486,10 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               </div>
             </div>
 
-            {/* Grote bewerkbare titel */}
-            {canEdit ? (
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => title.trim() && title !== t.productName && save("productName", title.trim())}
-                onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
-                placeholder="Product name…"
-                style={{ width: "100%", boxSizing: "border-box", border: "none", outline: "none", fontSize: isMobile ? "20px" : "26px", fontWeight: 700, letterSpacing: "-0.5px", padding: "10px 0 4px 0", fontFamily: "inherit", background: "transparent" }}
-              />
-            ) : (
-              <h2 style={{ margin: "10px 0 4px 0", fontSize: isMobile ? "20px" : "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>{t.productName}</h2>
-            )}
-
+            {/* Titel: automatisch de naming convention vanaf Ready For Build */}
+            <h2 style={{ margin: "10px 0 4px 0", fontSize: isMobile ? "18px" : "23px", fontWeight: 700, letterSpacing: "-0.5px", wordBreak: "break-word" }}>
+              {taskTitle(t)}
+            </h2>
           </div>
 
           {/* Scrollbare velden */}
@@ -541,6 +536,13 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                 )}
               </div>
             </div>
+
+            {/* ===== Sectie: Product ===== */}
+            <Section title="📦 Product">
+              <Field label="Product Name" last>
+                <TextField value={t.productName} disabled={!canEdit} onSave={(v) => save("productName", v)} placeholder="e.g. CircuMax Patches" />
+              </Field>
+            </Section>
 
             {/* ===== Sectie: Market ===== */}
             <Section title="🌍 Market">
