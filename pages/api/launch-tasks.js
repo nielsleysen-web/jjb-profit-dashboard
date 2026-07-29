@@ -93,6 +93,16 @@ async function writeData(handle, value) {
 
 const uid = () => crypto.randomBytes(8).toString("hex");
 
+// Eerstvolgende donderdag, einde van de dag (Europese avond)
+function nextThursday() {
+  const d = new Date();
+  let diff = (4 - d.getUTCDay() + 7) % 7;
+  if (diff === 0) diff = 7;
+  d.setUTCDate(d.getUTCDate() + diff);
+  d.setUTCHours(21, 59, 0, 0);
+  return d.toISOString();
+}
+
 /* ---------------- notifications helper ---------------- */
 async function pushNotifications(items) {
   // items: [{ email, text, href }]
@@ -114,7 +124,7 @@ function addLog(task, session, text) {
 }
 
 /* ---------------- status-change side effects ---------------- */
-async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicDesigners = []) {
+async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicDesigners = [], adminUser = null) {
   const notifications = [];
   task.status = newStatus;
   addLog(task, session, `changed status to "${newStatus}"`);
@@ -139,22 +149,24 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicD
     // Automation: automatisch een Graphic Designer-taak aanmaken in "Ready To Work"
     if (!task.designTaskId) {
       const at = new Date().toISOString();
+      // Random graphic designer (bij precies 1 designer: die ene)
+      const gd = graphicDesigners.length ? graphicDesigners[Math.floor(Math.random() * graphicDesigners.length)] : null;
       const designStore = (await readData("design-tasks")) || { tasks: [] };
       const d = {
         id: uid(),
-        product: { id: "", title: task.productName || "New Product", image: "", variants: [] },
-        deadline: "",
-        strategistEmail: "",
-        strategistName: "",
-        assigneeEmail: "",
-        assigneeName: "",
+        product: task.product || { id: "", title: task.productName || "New Product", image: "", variants: [] },
+        deadline: nextThursday(),
+        strategistEmail: adminUser?.email || "nielsleysen@gmail.com",
+        strategistName: adminUser?.name || "Niels Leysen",
+        assigneeEmail: gd?.email || "",
+        assigneeName: gd?.name || "",
         status: "Ready To Work",
         angle: task.funnelAngle || "",
         advertorialLink: task.advertorialLink || "",
         market: task.marketCountry || "",
         countryCode: task.countryCode || "",
-        gender: "",
-        ageRange: "",
+        gender: task.gender || "",
+        ageRange: task.ageRange || "",
         batchType: "First Creative Batch",
         visualBriefing: "",
         iterationType: "",
@@ -173,15 +185,13 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicD
       designStore.tasks.push(d);
       await writeData("design-tasks", designStore);
       task.designTaskId = d.id;
-      addLog(task, session, "🎨 Graphic Designer task automatically created in Ready To Work");
-      for (const gd of graphicDesigners) {
-        if (gd.email !== session.email) {
-          notifications.push({
-            email: gd.email,
-            text: `New First Creative Batch design task for "${task.productName}" is Ready To Work`,
-            href: "/graphic-designer",
-          });
-        }
+      addLog(task, session, `🎨 Graphic Designer task automatically created in Ready To Work${gd ? ` — assigned to ${gd.name}` : " — no active Graphic Designer account found"}`);
+      if (gd && gd.email !== session.email) {
+        notifications.push({
+          email: gd.email,
+          text: `First Creative Batch for "${task.productName}" is Ready To Work — deadline Thursday`,
+          href: "/graphic-designer",
+        });
       }
     }
   }
@@ -244,8 +254,9 @@ export default async function handler(req, res) {
     const activeUsers = accounts.users.filter((u) => u.status === "active");
     const mediaBuyers = activeUsers.filter((u) => (u.roles || []).includes("Media Buyer")).map((u) => ({ name: u.name, email: u.email }));
     const graphicDesigners = activeUsers.filter((u) => (u.roles || []).includes("Graphic Designer")).map((u) => ({ name: u.name, email: u.email }));
+    const adminUser = activeUsers.find((u) => (u.email || "").toLowerCase() === ADMIN_EMAIL) || { name: "Niels Leysen", email: ADMIN_EMAIL };
 
-    const FIELDS = ["productName", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "alibabaLink", "funnelishLink", "firstCreativeBatch", "readyForAI", "aiCopy"];
+    const FIELDS = ["productName", "product", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "gender", "ageRange", "alibabaLink", "funnelishLink", "firstCreativeBatch", "readyForAI", "aiCopy"];
 
     /* --- create --- */
     if (action === "create") {
@@ -254,6 +265,7 @@ export default async function handler(req, res) {
       const t = {
         id: uid(),
         productName: "",
+        product: null,
         deadline: "",
         assigneeEmail: "",
         assigneeName: "",
@@ -263,6 +275,8 @@ export default async function handler(req, res) {
         marketCountry: "",
         countryCode: "",
         funnelAngle: "",
+        gender: "",
+        ageRange: "",
         alibabaLink: "",
         funnelishLink: "",
         firstCreativeBatch: "",
@@ -280,7 +294,7 @@ export default async function handler(req, res) {
         notifs.push({ email: t.assigneeEmail, text: `You've been assigned to "${t.productName}"` });
       }
       if (t.status !== "Task Start") {
-        await applyStatusChange(t, t.status, session, mediaBuyers, graphicDesigners);
+        await applyStatusChange(t, t.status, session, mediaBuyers, graphicDesigners, adminUser);
       }
       store.tasks.push(t);
       await writeData("launch-tasks", store);
@@ -297,11 +311,13 @@ export default async function handler(req, res) {
       const notifs = [];
       const changed = [];
       for (const f of FIELDS) {
-        if (input && f in input && input[f] !== task[f]) {
+        if (input && f in input && JSON.stringify(input[f]) !== JSON.stringify(task[f])) {
           task[f] = input[f];
           changed.push(f);
         }
       }
+      // Shopify-product gekozen: productnaam automatisch overnemen
+      if (changed.includes("product") && task.product?.title) task.productName = task.product.title;
       if (changed.includes("assigneeEmail") && task.assigneeEmail && task.assigneeEmail !== session.email) {
         notifs.push({ email: task.assigneeEmail, text: `You've been assigned to "${task.productName}"` });
       }
@@ -319,7 +335,7 @@ export default async function handler(req, res) {
     if (action === "status") {
       if (!canStatus) return res.status(403).json({ success: false, error: "No permission to change status" });
       if (!STATUSES.includes(status)) return res.status(400).json({ success: false, error: "Invalid status" });
-      await applyStatusChange(task, status, session, mediaBuyers, graphicDesigners);
+      await applyStatusChange(task, status, session, mediaBuyers, graphicDesigners, adminUser);
       await writeData("launch-tasks", store);
       return res.status(200).json({ success: true, tasks: store.tasks });
     }
