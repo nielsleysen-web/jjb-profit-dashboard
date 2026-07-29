@@ -154,6 +154,10 @@ export default function ProductLaunching() {
   const [dragId, setDragId] = useState(null);
   const [dragOver, setDragOver] = useState(null);
   const [menuId, setMenuId] = useState(null);
+  // Filters
+  const [fAssignee, setFAssignee] = useState("");
+  const [fDeadline, setFDeadline] = useState("");
+  const [fProduct, setFProduct] = useState("");
   const isMobile = useIsMobile();
 
   const load = () =>
@@ -234,19 +238,55 @@ export default function ProductLaunching() {
 
   const openTask = tasks.find((t) => t.id === openTaskId) || null;
 
+  // Filters toepassen
+  const hasFilters = fAssignee || fDeadline || fProduct;
+  const filtered = tasks.filter(
+    (t) =>
+      (!fAssignee || t.assigneeEmail === fAssignee) &&
+      (!fDeadline || (t.deadline && new Date(t.deadline) <= new Date(`${fDeadline}T23:59:59`))) &&
+      (!fProduct || (t.productName || "").toLowerCase().includes(fProduct.toLowerCase()))
+  );
+  const filterStyle = { ...ui.input, width: "auto", padding: "7px 10px", fontSize: "12px" };
+
   return (
     <div style={{ ...ui.page, padding: isMobile ? "16px 12px" : ui.page.padding }}>
       {/* Header */}
-      <div style={{ marginBottom: "18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+      <div style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>🚀 Product Pipeline</h1>
           <p style={{ margin: "3px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-            Product Launching Department — {tasks.filter((t) => t.status !== "Launched").length} active tasks
+            Product Launching Department — {filtered.filter((t) => t.status !== "Launched").length} active tasks{hasFilters ? " (filtered)" : ""}
           </p>
         </div>
         {me?.canEdit && (
           <button onClick={() => createTask("Task Start")} disabled={creating} style={btnPrimary}>
             {creating ? "Creating…" : "+ New product"}
+          </button>
+        )}
+      </div>
+
+      {/* Filterbalk */}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "16px" }}>
+        <select value={fAssignee} onChange={(e) => setFAssignee(e.target.value)} style={filterStyle}>
+          <option value="">All funnel builders</option>
+          {funnelBuilders.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}
+        </select>
+        <input
+          style={{ ...filterStyle, width: "180px" }}
+          placeholder="Search product name…"
+          value={fProduct}
+          onChange={(e) => setFProduct(e.target.value)}
+        />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
+          <span style={{ fontSize: "11px", fontWeight: 600, color: "#8a92a3" }}>Due by</span>
+          <input type="date" value={fDeadline} onChange={(e) => setFDeadline(e.target.value)} style={filterStyle} />
+        </span>
+        {hasFilters && (
+          <button
+            onClick={() => { setFAssignee(""); setFDeadline(""); setFProduct(""); }}
+            style={{ ...btnGhost, padding: "7px 12px", fontSize: "11.5px", color: "#dc2626", borderColor: "#fecaca" }}
+          >
+            ✕ Clear filters
           </button>
         )}
       </div>
@@ -258,7 +298,7 @@ export default function ProductLaunching() {
       <div style={{ display: "flex", gap: "12px", overflowX: "auto", alignItems: "flex-start", paddingBottom: "16px", WebkitOverflowScrolling: "touch" }}>
         {BOARD_STATUSES.map((status) => {
           const meta = STATUS_META[status];
-          const columnTasks = tasks
+          const columnTasks = filtered
             .filter((t) => t.status === status)
             .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
           return (
