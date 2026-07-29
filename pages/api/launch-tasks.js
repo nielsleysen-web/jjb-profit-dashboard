@@ -114,7 +114,7 @@ function addLog(task, session, text) {
 }
 
 /* ---------------- status-change side effects ---------------- */
-async function applyStatusChange(task, newStatus, session, mediaBuyers) {
+async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicDesigners = []) {
   const notifications = [];
   task.status = newStatus;
   addLog(task, session, `changed status to "${newStatus}"`);
@@ -136,6 +136,54 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers) {
   }
   if (newStatus === "First Creative Batch") {
     addLog(task, session, "⚙️ First Creative Batch headlines queued — Stefan's Brain automation not connected yet (phase 2)");
+    // Automation: automatisch een Graphic Designer-taak aanmaken in "Ready To Work"
+    if (!task.designTaskId) {
+      const at = new Date().toISOString();
+      const designStore = (await readData("design-tasks")) || { tasks: [] };
+      const d = {
+        id: uid(),
+        product: { id: "", title: task.productName || "New Product", image: "", variants: [] },
+        deadline: "",
+        strategistEmail: "",
+        strategistName: "",
+        assigneeEmail: "",
+        assigneeName: "",
+        status: "Ready To Work",
+        angle: task.funnelAngle || "",
+        advertorialLink: task.advertorialLink || "",
+        market: task.marketCountry || "",
+        countryCode: task.countryCode || "",
+        gender: "",
+        ageRange: "",
+        batchType: "First Creative Batch",
+        visualBriefing: "",
+        iterationType: "",
+        creativeCopy: task.firstCreativeBatch || "",
+        frameioLink: "",
+        finalOutputLink: "",
+        launchedDate: null,
+        activity: [
+          { id: uid(), type: "log", author: session.name, email: session.email, text: `auto-created from Product Launching — "${task.productName}" reached First Creative Batch`, at },
+          { id: uid(), type: "log", author: session.name, email: session.email, text: `changed status to "Ready To Work"`, at },
+        ],
+        createdAt: at,
+        createdBy: session.name,
+        sourceLaunchTaskId: task.id,
+      };
+      designStore.tasks.push(d);
+      await writeData("design-tasks", designStore);
+      task.designTaskId = d.id;
+      addLog(task, session, "🎨 Graphic Designer task automatically created in Ready To Work");
+      for (const gd of graphicDesigners) {
+        if (gd.email !== session.email) {
+          notifications.push({
+            email: gd.email,
+            text: `New First Creative Batch design task for "${task.productName}" is Ready To Work`,
+            href: "/graphic-designer",
+          });
+        }
+      }
+    }
   }
   if (newStatus === "Ready to launch") {
     for (const mb of mediaBuyers) {
@@ -195,6 +243,7 @@ export default async function handler(req, res) {
     const accounts = (await readData("accounts")) || { users: [] };
     const activeUsers = accounts.users.filter((u) => u.status === "active");
     const mediaBuyers = activeUsers.filter((u) => (u.roles || []).includes("Media Buyer")).map((u) => ({ name: u.name, email: u.email }));
+    const graphicDesigners = activeUsers.filter((u) => (u.roles || []).includes("Graphic Designer")).map((u) => ({ name: u.name, email: u.email }));
 
     const FIELDS = ["productName", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "alibabaLink", "funnelishLink", "firstCreativeBatch", "readyForAI", "aiCopy"];
 
@@ -231,7 +280,7 @@ export default async function handler(req, res) {
         notifs.push({ email: t.assigneeEmail, text: `You've been assigned to "${t.productName}"` });
       }
       if (t.status !== "Task Start") {
-        await applyStatusChange(t, t.status, session, mediaBuyers);
+        await applyStatusChange(t, t.status, session, mediaBuyers, graphicDesigners);
       }
       store.tasks.push(t);
       await writeData("launch-tasks", store);
@@ -270,7 +319,7 @@ export default async function handler(req, res) {
     if (action === "status") {
       if (!canStatus) return res.status(403).json({ success: false, error: "No permission to change status" });
       if (!STATUSES.includes(status)) return res.status(400).json({ success: false, error: "Invalid status" });
-      await applyStatusChange(task, status, session, mediaBuyers);
+      await applyStatusChange(task, status, session, mediaBuyers, graphicDesigners);
       await writeData("launch-tasks", store);
       return res.status(200).json({ success: true, tasks: store.tasks });
     }
