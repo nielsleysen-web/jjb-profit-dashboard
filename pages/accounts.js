@@ -122,6 +122,26 @@ export default function Accounts() {
   );
 }
 
+function SlackIdField({ user, update }) {
+  const [val, setVal] = useState(user.slackId || "");
+  useEffect(() => setVal(user.slackId || ""), [user.slackId]);
+  const saveIt = () => {
+    const clean = val.replace(/[<@>\s]/g, "");
+    if (clean !== (user.slackId || "")) update({ updates: { slackId: clean } });
+  };
+  return (
+    <input
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={saveIt}
+      onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
+      placeholder="Slack ID (U…)"
+      title="Slack member ID — profiel > ⋯ > Copy member ID. Nodig voor de Slack-tag bij meldingen."
+      style={{ width: "130px", padding: "7px 10px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12px", fontFamily: "ui-monospace, monospace", flexShrink: 0, background: val ? "#f0fdf4" : "#ffffff", borderColor: val ? "#bbf7d0" : "#e2e6ec" }}
+    />
+  );
+}
+
 function RolesDropdown({ user, update }) {
   const [open, setOpen] = useState(false);
   const roles = Array.isArray(user.roles) ? user.roles : [];
@@ -251,6 +271,9 @@ function UserCard({ user, update, busy }) {
       <span style={{ fontSize: "11.5px", fontWeight: 700, color: status.color, background: status.bg, padding: "4px 10px", borderRadius: "999px", flexShrink: 0 }}>
         {status.text}
       </span>
+
+      {/* Slack member ID (voor meldingen + tag in het Slack-notificatiekanaal) */}
+      <SlackIdField user={user} update={update} />
 
       {/* Rollen (dropdown, meerdere selecteerbaar) */}
       {isAdmin ? (
