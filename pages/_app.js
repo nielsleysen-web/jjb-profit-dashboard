@@ -237,7 +237,20 @@ export default function App({ Component, pageProps }) {
       const containsActive = cat.items.some((i) => i.href === router.pathname);
       const isCollapsed = !horizontal && collapsed[cat.name] && !containsActive;
       return (
-      <div key={cat.name} style={horizontal ? { display: "flex", gap: "4px", alignItems: "center" } : { marginBottom: "12px" }}>
+      <div
+        key={cat.name}
+        style={
+          horizontal
+            ? { display: "flex", gap: "4px", alignItems: "center" }
+            : {
+                marginBottom: "10px",
+                background: "#f6f8fa",
+                border: "1px solid #eef1f5",
+                borderRadius: "12px",
+                padding: "6px",
+              }
+        }
+      >
         {!horizontal && (
           <button
             onClick={() => toggleCategory(cat.name)}
@@ -249,14 +262,14 @@ export default function App({ Component, pageProps }) {
               background: "none",
               border: "none",
               cursor: "pointer",
-              padding: "5px 12px",
-              marginBottom: "4px",
+              padding: "6px 8px",
+              marginBottom: isCollapsed ? 0 : "4px",
             }}
           >
-            <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+            <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px" }}>
               {cat.name}
             </span>
-            <span style={{ fontSize: "9px", color: "#b6bdc9" }}>{isCollapsed ? "▶" : "▼"}</span>
+            <span style={{ fontSize: "10px", color: "#475569", fontWeight: 700 }}>{isCollapsed ? "▶" : "▼"}</span>
           </button>
         )}
         {(horizontal || !isCollapsed) && cat.items.map((item) => {
@@ -270,15 +283,17 @@ export default function App({ Component, pageProps }) {
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: "6px",
-                  padding: horizontal ? "7px 10px" : "9px 12px",
-                  background: active ? "#0f172a" : "transparent",
-                  color: active ? "#ffffff" : "#64748b",
+                  padding: horizontal ? "7px 10px" : "8px 10px",
+                  background: active ? "#0f172a" : horizontal ? "transparent" : "#ffffff",
+                  border: horizontal ? "none" : active ? "1px solid #0f172a" : "1px solid #e8ecf1",
+                  color: active ? "#ffffff" : "#475569",
                   textDecoration: "none",
-                  fontSize: horizontal ? "12px" : "13px",
+                  fontSize: horizontal ? "12px" : "12.5px",
                   fontWeight: 600,
                   borderRadius: "9px",
                   whiteSpace: "nowrap",
-                  marginBottom: horizontal ? 0 : "2px",
+                  marginBottom: horizontal ? 0 : "4px",
+                  boxSizing: "border-box",
                 }}
               >
                 <span>{item.icon} {item.label}</span>
@@ -331,7 +346,7 @@ export default function App({ Component, pageProps }) {
           </button>
         </div>
       ) : (
-        <div style={{ width: "216px", background: "white", borderRight: "1px solid #eceef2", padding: "24px 12px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div style={{ width: "236px", background: "white", borderRight: "1px solid #eceef2", padding: "24px 14px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ paddingLeft: "12px", marginBottom: "26px" }}>
             <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>Just Jenny</h2>
             <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#8a92a3" }}>Operations Centre</p>
