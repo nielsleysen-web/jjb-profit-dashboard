@@ -40,7 +40,10 @@ const CATEGORIES = [
   {
     name: "Marketing Creatives",
     perm: "creatives",
-    items: [{ href: "/video-editor", label: "Video Editor", icon: "🎬" }],
+    items: [
+      { href: "/video-editor", label: "Video Editor", icon: "🎬" },
+      { href: "/graphic-designer", label: "Graphic Designer", icon: "🎨" },
+    ],
   },
   {
     name: "Media Buying",
