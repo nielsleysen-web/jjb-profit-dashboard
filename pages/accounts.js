@@ -122,12 +122,89 @@ export default function Accounts() {
   );
 }
 
-function Toggle({ label, checked, onChange, disabled }) {
+function RolesDropdown({ user, update }) {
+  const [open, setOpen] = useState(false);
+  const roles = Array.isArray(user.roles) ? user.roles : [];
+
+  const label =
+    roles.length === 0 ? "Select roles…" : roles.length <= 2 ? roles.join(", ") : `${roles.length} roles`;
+
   return (
-    <label style={{ display: "flex", alignItems: "center", gap: "7px", cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}>
-      <input type="checkbox" checked={!!checked} onChange={onChange} disabled={disabled} style={{ width: "15px", height: "15px", cursor: "inherit" }} />
-      <span style={{ fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>{label}</span>
-    </label>
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          padding: "8px 12px",
+          background: "#ffffff",
+          border: "1px solid #e2e6ec",
+          borderRadius: "10px",
+          fontSize: "12.5px",
+          fontWeight: 600,
+          color: roles.length ? "#0f172a" : "#94a3b8",
+          cursor: "pointer",
+          minWidth: "180px",
+          justifyContent: "space-between",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "220px" }}>{label}</span>
+        <span style={{ color: "#94a3b8", fontSize: "10px" }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <>
+          {/* klik buiten = sluiten */}
+          <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+          <div
+            style={{
+              position: "absolute",
+              top: "42px",
+              right: 0,
+              width: "220px",
+              background: "#ffffff",
+              border: "1px solid #eceef2",
+              borderRadius: "12px",
+              boxShadow: "0 12px 32px rgba(15,23,42,0.16)",
+              padding: "8px",
+              zIndex: 50,
+            }}
+          >
+            {ROLES.map((role) => {
+              const has = roles.includes(role);
+              return (
+                <label
+                  key={role}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "9px",
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    background: has ? "#eff6ff" : "transparent",
+                    marginBottom: "2px",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={has}
+                    onChange={() =>
+                      update(user.id, {
+                        updates: { roles: has ? roles.filter((r) => r !== role) : [...roles, role] },
+                      })
+                    }
+                    style={{ width: "15px", height: "15px", cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: "12.5px", fontWeight: 600, color: has ? "#1d4ed8" : "#334155" }}>{role}</span>
+                </label>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -175,28 +252,11 @@ function UserCard({ user, update, busy }) {
         {status.text}
       </span>
 
-      {/* Rollen (meerdere mogelijk) */}
+      {/* Rollen (dropdown, meerdere selecteerbaar) */}
       {isAdmin ? (
         <span style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", flexShrink: 0 }}>Full access</span>
       ) : (
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", flexShrink: 0, maxWidth: "460px" }}>
-          {ROLES.map((role) => {
-            const roles = Array.isArray(user.roles) ? user.roles : [];
-            const has = roles.includes(role);
-            return (
-              <Toggle
-                key={role}
-                label={role}
-                checked={has}
-                onChange={() =>
-                  update(user.id, {
-                    updates: { roles: has ? roles.filter((r) => r !== role) : [...roles, role] },
-                  })
-                }
-              />
-            );
-          })}
-        </div>
+        <RolesDropdown user={user} update={update} />
       )}
 
       {/* Acties */}
