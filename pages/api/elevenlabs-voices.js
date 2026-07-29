@@ -47,10 +47,13 @@ export default async function handler(req, res) {
     });
 
     const raw = response.data?.voices || [];
-    const voices = raw.map((v) => ({
-      id: v.voice_id,
-      name: v.name || v.voice_id,
-    }));
+    // Alleen "My Voices": de standaard premade library-stemmen worden uitgefilterd
+    const voices = raw
+      .filter((v) => v.category !== "premade")
+      .map((v) => ({
+        id: v.voice_id,
+        name: v.name || v.voice_id,
+      }));
 
     cache = { voices, at: Date.now() };
     return res.status(200).json({ success: true, voices });
