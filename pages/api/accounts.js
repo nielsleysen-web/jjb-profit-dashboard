@@ -8,6 +8,8 @@ import crypto from "crypto";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 
+const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor"];
+
 /* ---------------- sessie check ---------------- */
 function getSession(req) {
   const match = (req.headers.cookie || "").match(/(?:^|;\s*)jjb_session=([^;]+)/);
@@ -116,9 +118,10 @@ export default async function handler(req, res) {
       if (remove) {
         accounts.users = accounts.users.filter((u) => u.id !== userId);
       } else if (updates) {
-        const allowed = ["status", "finance", "strategy", "marketing", "name"];
-        for (const key of allowed) {
-          if (key in updates) user[key] = updates[key];
+        if ("status" in updates) user.status = updates.status;
+        if ("name" in updates) user.name = updates.name;
+        if ("roles" in updates && Array.isArray(updates.roles)) {
+          user.roles = updates.roles.filter((r) => ROLES.includes(r));
         }
       }
 
