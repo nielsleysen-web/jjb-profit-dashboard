@@ -149,9 +149,7 @@ export default async function handler(req, res) {
         salt,
         passwordHash: hashPassword(password, salt),
         status: isAdmin ? "active" : "pending",
-        finance: isAdmin,
-        strategy: isAdmin,
-        marketing: isAdmin,
+        roles: [],
         createdAt: new Date().toISOString(),
       };
       accounts.users.push(user);
@@ -162,13 +160,14 @@ export default async function handler(req, res) {
           email,
           name: user.name,
           admin: true,
+          roles: [],
           finance: true,
           strategy: true,
           marketing: true,
           exp: Date.now() + SESSION_HOURS * 3600000,
         });
         setSessionCookie(res, token);
-        return res.status(200).json({ success: true, user: { email, name: user.name, admin: true, finance: true, strategy: true, marketing: true } });
+        return res.status(200).json({ success: true, user: { email, name: user.name, admin: true, roles: [], finance: true, strategy: true, marketing: true } });
       }
       return res.status(200).json({ success: true, pending: true });
     }
@@ -187,13 +186,17 @@ export default async function handler(req, res) {
         return res.status(403).json({ success: false, error: "Your access has been revoked. Contact the administrator." });
       }
       const isAdmin = email === ADMIN_EMAIL;
+      const roles = Array.isArray(user.roles) ? user.roles : [];
       const payload = {
         email,
         name: user.name,
         admin: isAdmin,
-        finance: isAdmin || !!user.finance,
-        strategy: isAdmin || !!user.strategy,
-        marketing: isAdmin || !!user.marketing,
+        roles,
+        // Finance & Strategy zijn (voorlopig) alleen voor de admin.
+        // Marketing-toegang: elke toegewezen rol geeft toegang tot de marketing-assets.
+        finance: isAdmin,
+        strategy: isAdmin,
+        marketing: isAdmin || roles.length > 0,
         exp: Date.now() + SESSION_HOURS * 3600000,
       };
       setSessionCookie(res, signSession(payload));
