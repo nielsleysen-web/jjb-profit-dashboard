@@ -221,6 +221,12 @@ export default function VideoEditor() {
     const res = await post({ action: "duplicate", taskId });
     if (res?.createdId) setOpenTaskId(res.createdId);
   };
+  const deleteTask = async (taskId) => {
+    setMenuId(null);
+    if (!confirm("Delete this task? This cannot be undone.")) return;
+    await post({ action: "delete", taskId });
+  };
+
 
   const onDropTask = async (status) => {
     setDragOver(null);
@@ -378,6 +384,9 @@ export default function VideoEditor() {
                             <button onClick={() => duplicateTask(t.id)} style={{ display: "block", width: "100%", padding: "9px 16px", background: "none", border: "none", fontSize: "12px", fontWeight: 600, color: "#334155", cursor: "pointer", textAlign: "left", whiteSpace: "nowrap" }}>
                               ⧉ Duplicate task
                             </button>
+                            {<button onClick={() => deleteTask(t.id)} style={{ display: "block", width: "100%", padding: "9px 16px", background: "none", border: "none", fontSize: "12px", fontWeight: 600, color: "#dc2626", cursor: "pointer", textAlign: "left", whiteSpace: "nowrap", borderTop: "1px solid #f1f5f9" }}>
+                              🗑 Delete task
+                            </button>}
                           </div>
                         )}
                       </>
@@ -428,6 +437,8 @@ export default function VideoEditor() {
       {openTask && (
         <TaskModal
           t={openTask}
+          allTasks={tasks}
+          openTaskById={setOpenTaskId}
           me={me}
           strategists={strategists}
           editors={editors}
@@ -801,9 +812,119 @@ function StatusDropdown({ value, onChange, disabled }) {
   );
 }
 
-function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, onClose, isMobile }) {
+/* ---------- Chat: tekst met @mentions en taak-verwijzingen ---------- */
+function ChatText({ text, openTask }) {
+  const nodes = [];
+  const re = /\[task:([a-f0-9]+)\|([^\]]*)\]|@([A-Za-z0-9_.\-]+)/g;
+  const src = text || "";
+  let last = 0;
+  let mm;
+  let k = 0;
+  while ((mm = re.exec(src)) !== null) {
+    if (mm.index > last) nodes.push(<span key={k++}>{src.slice(last, mm.index)}</span>);
+    if (mm[1]) {
+      const refId = mm[1];
+      const refTitle = mm[2] || "task";
+      nodes.push(
+        <a key={k++} onClick={() => openTask && openTask(refId)} style={{ color: "#4f46e5", background: "#eef2ff", padding: "1px 7px", borderRadius: "6px", fontWeight: 700, cursor: "pointer" }}>
+          {"\u29C9"} {refTitle}
+        </a>
+      );
+    } else {
+      nodes.push(<b key={k++} style={{ color: "#2563eb" }}>@{mm[3]}</b>);
+    }
+    last = mm.index + mm[0].length;
+  }
+  if (last < src.length) nodes.push(<span key={k++}>{src.slice(last)}</span>);
+  return <span>{nodes}</span>;
+}
+
+/* ---------- Chat composer: @mensen, @@taken, bestanden & voice ---------- */
+function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, busy }) {
+  const [recording, setRecording] = useState(false);
+  const fileRef = useRef(null);
+  const recRef = useRef(null);
+
+  // Suggesties: laatste @token in het invoerveld (@ = mensen, @@ = taken)
+  const m = /(^|\s)(@{1,2})([^@\s]*)$/.exec(value || "");
+  const mode = m ? (m[2] === "@@" ? "tasks" : "people") : null;
+  const q = m ? m[3].toLowerCase() : "";
+  const people = mode === "people" ? team.filter((u) => !q || (u.name || "").toLowerCase().includes(q)).slice(0, 6) : [];
+  const taskSugs = mode === "tasks" ? (taskOptions || []).filter((o) => !q || o.title.toLowerCase().includes(q)).slice(0, 6) : [];
+  const replaceToken = (insert) => setValue(value.slice(0, m.index + m[1].length) + insert);
+
+  const toggleRecord = async () => {
+    if (recording) {
+      recRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      const chunks = [];
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      rec.onstop = () => {
+        stream.getTracks().forEach((tr) => tr.stop());
+        setRecording(false);
+        const type = rec.mimeType || "audio/webm";
+        const ext = type.includes("mp4") ? "m4a" : "webm";
+        onFile(new File(chunks, `voice-message-${Date.now()}.${ext}`, { type }));
+      };
+      recRef.current = rec;
+      rec.start();
+      setRecording(true);
+    } catch {
+      alert("Microphone access was denied");
+    }
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      {(people.length > 0 || taskSugs.length > 0) && (
+        <div style={{ position: "absolute", bottom: "calc(100% + 6px)", left: 0, right: 0, background: "#ffffff", border: "1px solid #e5e8ee", borderRadius: "12px", boxShadow: "0 12px 30px rgba(15,23,42,0.16)", padding: "6px", zIndex: 30, maxHeight: "230px", overflowY: "auto" }}>
+          {mode === "people" &&
+            people.map((u) => (
+              <button key={u.email} onClick={() => replaceToken(`@${firstName(u.name)} `)} style={{ display: "flex", alignItems: "center", gap: "9px", width: "100%", padding: "7px 9px", background: "none", border: "none", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}>
+                <span style={{ width: "24px", height: "24px", borderRadius: "999px", background: personColor(u.email), color: "#ffffff", fontSize: "11px", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {(u.name || "?").slice(0, 1).toUpperCase()}
+                </span>
+                <span style={{ fontSize: "12.5px", fontWeight: 600 }}>{u.name}</span>
+                {u.email === me?.email && <span style={{ fontSize: "10.5px", color: "#94a3b8" }}>(you)</span>}
+              </button>
+            ))}
+          {mode === "tasks" &&
+            taskSugs.map((o) => (
+              <button key={o.id} onClick={() => replaceToken(`[task:${o.id}|${o.title}] `)} style={{ display: "block", width: "100%", padding: "7px 9px", background: "none", border: "none", borderRadius: "8px", cursor: "pointer", textAlign: "left", fontSize: "12.5px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {"\u29C9"} {o.title}
+              </button>
+            ))}
+          <div style={{ fontSize: "10px", color: "#94a3b8", padding: "4px 9px 2px 9px" }}>@ people {"\u00B7"} @@ tasks</div>
+        </div>
+      )}
+      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        <input
+          style={{ ...ui.input, flex: 1, minWidth: 0 }}
+          placeholder="Write a comment… @ to tag, @@ for a task"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !mode && onSend()}
+        />
+        <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onFile(f); }} />
+        <button title="Attach a file (max 3 MB)" onClick={() => fileRef.current?.click()} disabled={busy} style={{ width: "34px", height: "34px", borderRadius: "10px", background: "#ffffff", border: "1px solid #e5e8ee", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>{"\uD83D\uDCCE"}</button>
+        <button title={recording ? "Stop recording" : "Record a voice message"} onClick={toggleRecord} disabled={busy} style={{ width: "34px", height: "34px", borderRadius: "10px", background: recording ? "#fee2e2" : "#ffffff", border: recording ? "1px solid #fecaca" : "1px solid #e5e8ee", cursor: "pointer", fontSize: "14px", flexShrink: 0 }}>{recording ? "\u23F9" : "\uD83C\uDFA4"}</button>
+        <button title="Send" onClick={onSend} disabled={busy} style={{ width: "40px", height: "34px", borderRadius: "10px", background: "#0f172a", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: busy ? 0.55 : 1 }}>
+          <svg width="15" height="15" viewBox="0 0 24 24"><path d="M3 3l18 9-18 9 4.5-9L3 3z" fill="#ffffff" /></svg>
+        </button>
+      </div>
+      {busy && <p style={{ fontSize: "11px", color: "#8a92a3", margin: "5px 0 0 0" }}>Uploading{"\u2026"}</p>}
+    </div>
+  );
+}
+
+function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, onClose, isMobile, allTasks, openTaskById }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
+  const [chatBusy, setChatBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -856,6 +977,40 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
     const ok = await post({ action: "chat", taskId: t.id, message: chatInput });
     if (ok) setChatInput("");
   };
+
+  // Bestand of voicebericht uploaden naar Shopify Files en als chatbijlage versturen
+  const sendFile = async (file) => {
+    if (!file || chatBusy) return;
+    if (file.size > 3 * 1024 * 1024) {
+      alert("Max file size is 3 MB");
+      return;
+    }
+    setChatBusy(true);
+    try {
+      const data = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",")[1]);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+      const up = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, mimeType: file.type || "application/octet-stream", data }),
+      }).then((r) => r.json());
+      if (!up.success) {
+        alert(up.error || "Upload failed");
+        return;
+      }
+      const kind = (file.type || "").startsWith("image/") ? "image" : (file.type || "").startsWith("audio/") ? "audio" : "file";
+      const ok = await post({ action: "chat", taskId: t.id, message: chatInput, attachment: { url: up.url, name: file.name, mime: file.type || "", kind } });
+      if (ok) setChatInput("");
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
+  const taskOptions = (allTasks || []).filter((x) => x.id !== t.id).map((x) => ({ id: x.id, title: taskTitle(x) }));
 
   const selectStyle = { ...ui.input, padding: "7px 10px" };
 
@@ -1128,14 +1283,14 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
 
           {/* Save & close onderaan */}
           <div style={{ padding: isMobile ? "10px 18px" : "12px 30px", borderTop: "1px solid #eef0f3", background: "#ffffff", display: "flex", justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{ ...btnPrimary, padding: "10px 24px", fontSize: "13px" }}>
+            <button onClick={onClose} style={{ ...btnPrimary, background: "#16a34a", padding: "10px 24px", fontSize: "13px" }}>
               💾 Save & Close
             </button>
           </div>
         </div>
 
         {/* ===== Rechts: activity + chat ===== */}
-        <div style={{ flex: 1, background: "#fafbfc", borderLeft: isMobile ? "none" : "1px solid #eceef2", borderTop: isMobile ? "1px solid #eceef2" : "none", display: "flex", flexDirection: "column", minWidth: 0, minHeight: isMobile ? "280px" : "auto", maxWidth: isMobile ? "none" : "420px" }}>
+        <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) sendFile(f); }} style={{ flex: 1, background: "#fafbfc", borderLeft: isMobile ? "none" : "1px solid #eceef2", borderTop: isMobile ? "1px solid #eceef2" : "none", display: "flex", flexDirection: "column", minWidth: 0, minHeight: isMobile ? "280px" : "auto", maxWidth: isMobile ? "none" : "420px" }}>
           <div style={{ padding: "16px 18px 10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #eef0f3" }}>
             <span style={{ fontSize: "13px", fontWeight: 700 }}>Activity</span>
             {!isMobile && <button onClick={onClose} style={{ ...btnGhost, padding: "5px 11px" }}>✕</button>}
@@ -1150,7 +1305,19 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                     <b style={{ color: personColor(a.email) }}>{a.author}</b>
                     <span style={{ color: "#94a3b8" }}> · {new Date(a.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
-                  <div style={{ fontSize: "12.5px", whiteSpace: "pre-wrap" }}>{a.text}</div>
+                  <div style={{ fontSize: "12.5px", whiteSpace: "pre-wrap" }}><ChatText text={a.text} openTask={openTaskById} /></div>
+                  {a.attachment?.url &&
+                    (a.attachment.kind === "image" ? (
+                      <a href={a.attachment.url} target="_blank" rel="noreferrer">
+                        <img src={a.attachment.url} alt={a.attachment.name} style={{ maxWidth: "100%", maxHeight: "180px", borderRadius: "8px", marginTop: "6px", display: "block" }} />
+                      </a>
+                    ) : a.attachment.kind === "audio" ? (
+                      <audio controls src={a.attachment.url} style={{ width: "100%", marginTop: "6px", height: "36px" }} />
+                    ) : (
+                      <a href={a.attachment.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "6px", fontSize: "12px", fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", padding: "4px 10px", borderRadius: "8px", textDecoration: "none" }}>
+                        📎 {a.attachment.name || "file"}
+                      </a>
+                    ))}
                 </div>
               ) : (
                 <div key={a.id} style={{ display: "flex", gap: "7px", alignItems: "flex-start", padding: "4px 0", fontSize: "11.5px", color: "#8a92a3" }}>
@@ -1166,30 +1333,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
           </div>
 
           <div style={{ padding: "10px 18px 16px 18px", borderTop: "1px solid #eef0f3", background: "#fafbfc" }}>
-            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "6px" }}>
-              {team
-                .filter((u) => u.email !== me?.email)
-                .slice(0, 8)
-                .map((u) => (
-                  <button
-                    key={u.email}
-                    onClick={() => setChatInput((c) => `${c}${c && !c.endsWith(" ") ? " " : ""}@${firstName(u.name)} `)}
-                    style={{ fontSize: "10.5px", fontWeight: 700, color: personColor(u.email), background: "#ffffff", border: "1px solid #eceef2", borderRadius: "999px", padding: "2px 8px", cursor: "pointer" }}
-                  >
-                    @{firstName(u.name)}
-                  </button>
-                ))}
-            </div>
-            <div style={{ display: "flex", gap: "7px" }}>
-              <input
-                style={{ ...ui.input, flex: 1 }}
-                placeholder="Write a comment… tag with @Name"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && sendChat()}
-              />
-              <button onClick={sendChat} style={btnPrimary}>Send</button>
-            </div>
+            <ChatComposer team={team} me={me} taskOptions={taskOptions} value={chatInput} setValue={setChatInput} onSend={sendChat} onFile={sendFile} busy={chatBusy} />
           </div>
         </div>
       </div>
