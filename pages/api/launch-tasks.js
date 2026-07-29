@@ -296,6 +296,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, tasks: store.tasks });
     }
 
+    /* --- duplicate (admin + funnel builders) --- */
+    if (action === "duplicate") {
+      if (!canEdit) return res.status(403).json({ success: false, error: "No permission to duplicate tasks" });
+      const copy = {
+        ...JSON.parse(JSON.stringify(task)),
+        id: uid(),
+        productName: task.productName ? `${task.productName} (Copy)` : "New Product",
+        status: "Task Start",
+        launchedDate: null,
+        activity: [],
+        createdAt: new Date().toISOString(),
+        createdBy: session.name,
+      };
+      addLog(copy, session, `duplicated this task from "${task.productName}"`);
+      store.tasks.push(copy);
+      await writeData("launch-tasks", store);
+      return res.status(200).json({ success: true, tasks: store.tasks, createdId: copy.id });
+    }
+
     /* --- delete (admin only) --- */
     if (action === "delete") {
       if (!isAdmin) return res.status(403).json({ success: false, error: "Only the administrator can delete tasks" });
