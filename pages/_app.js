@@ -1,8 +1,9 @@
 // pages/_app.js
 // Just Jenny Operations Centre — login met accounts, categorieën en rollen.
-// Finance: Dashboard, Daily Overview, Product Economics
-// Strategy: Constraint Focus
-// Admin (alleen beheerder): Account Management
+// Finance: Dashboard, Daily Overview, Product Economics (admin)
+// Product Launching: Product Pipeline (Funnel Builders)
+// Media Buying: Ready To Launch, Launched (Media Buyers)
+// Admin: Account Management
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
@@ -30,11 +31,6 @@ const CATEGORIES = [
       { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
       { href: "/product-economics", label: "Product Economics", icon: "📦" },
     ],
-  },
-  {
-    name: "Strategy",
-    perm: "strategy",
-    items: [{ href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" }],
   },
   {
     name: "Product Launching",
@@ -129,6 +125,23 @@ export default function App({ Component, pageProps }) {
     setUser(null);
   };
 
+  // Inklapbare categorieën in de sidebar (onthouden per apparaat)
+  const [collapsed, setCollapsed] = useState({});
+  useEffect(() => {
+    try {
+      setCollapsed(JSON.parse(localStorage.getItem("jjb_nav_collapsed") || "{}"));
+    } catch {}
+  }, []);
+  const toggleCategory = (name) => {
+    setCollapsed((c) => {
+      const next = { ...c, [name]: !c[name] };
+      try {
+        localStorage.setItem("jjb_nav_collapsed", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
   if (!checked) return null;
 
   const requiresAuth = ALL_PROTECTED.includes(router.pathname);
@@ -219,14 +232,34 @@ export default function App({ Component, pageProps }) {
     : [];
 
   const NavLinks = ({ horizontal }) =>
-    visibleCategories.map((cat) => (
-      <div key={cat.name} style={horizontal ? { display: "flex", gap: "4px", alignItems: "center" } : { marginBottom: "18px" }}>
+    visibleCategories.map((cat) => {
+      // Bevat deze categorie de actieve pagina? Dan altijd open tonen.
+      const containsActive = cat.items.some((i) => i.href === router.pathname);
+      const isCollapsed = !horizontal && collapsed[cat.name] && !containsActive;
+      return (
+      <div key={cat.name} style={horizontal ? { display: "flex", gap: "4px", alignItems: "center" } : { marginBottom: "12px" }}>
         {!horizontal && (
-          <div style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.8px", padding: "0 12px", marginBottom: "6px" }}>
-            {cat.name}
-          </div>
+          <button
+            onClick={() => toggleCategory(cat.name)}
+            style={{
+              width: "100%",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "5px 12px",
+              marginBottom: "4px",
+            }}
+          >
+            <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+              {cat.name}
+            </span>
+            <span style={{ fontSize: "9px", color: "#b6bdc9" }}>{isCollapsed ? "▶" : "▼"}</span>
+          </button>
         )}
-        {cat.items.map((item) => {
+        {(horizontal || !isCollapsed) && cat.items.map((item) => {
           const active = router.pathname === item.href;
           const count = null;
           return (
@@ -269,7 +302,8 @@ export default function App({ Component, pageProps }) {
           );
         })}
       </div>
-    ));
+      );
+    });
 
   return (
     <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", minHeight: "100vh", background: "#f7f8fa", fontFamily: "Inter, system-ui, sans-serif" }}>
