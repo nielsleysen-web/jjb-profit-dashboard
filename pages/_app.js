@@ -37,6 +37,19 @@ const CATEGORIES = [
     items: [{ href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" }],
   },
   {
+    name: "Product Launching",
+    perm: "launching",
+    items: [{ href: "/product-launching", label: "Product Pipeline", icon: "🚀" }],
+  },
+  {
+    name: "Media Buying",
+    perm: "mediabuying",
+    items: [
+      { href: "/ready-to-launch", label: "Ready To Launch", icon: "📣" },
+      { href: "/launched", label: "Launched", icon: "✅" },
+    ],
+  },
+  {
     name: "Admin",
     perm: "admin",
     items: [{ href: "/accounts", label: "Account Management", icon: "👥" }],
@@ -121,6 +134,17 @@ export default function App({ Component, pageProps }) {
   const requiresAuth = ALL_PROTECTED.includes(router.pathname);
   const perm = requiredPerm(router.pathname);
 
+  // Afgeleide rechten uit de rollen: elke Funnel Builder ziet Product Launching,
+  // elke Media Buyer ziet Media Buying. Admin ziet alles.
+  const userRoles = user?.roles || [];
+  const authUser = user
+    ? {
+        ...user,
+        launching: user.admin || userRoles.includes("Funnel Builder"),
+        mediabuying: user.admin || userRoles.includes("Media Buyer"),
+      }
+    : null;
+
   /* ---------- login / registratie ---------- */
   if (requiresAuth && !user) {
     return (
@@ -188,10 +212,10 @@ export default function App({ Component, pageProps }) {
   }
 
   /* ---------- geen rechten voor deze pagina ---------- */
-  const noAccess = requiresAuth && user && perm && !user[perm];
+  const noAccess = requiresAuth && authUser && perm && !authUser[perm];
 
-  const visibleCategories = user
-    ? CATEGORIES.filter((cat) => user[cat.perm] && cat.items.length > 0)
+  const visibleCategories = authUser
+    ? CATEGORIES.filter((cat) => authUser[cat.perm] && cat.items.length > 0)
     : [];
 
   const NavLinks = ({ horizontal }) =>
@@ -253,10 +277,10 @@ export default function App({ Component, pageProps }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
 
-      {/* Notificatie-bel: nieuwe account-aanvragen (alleen admin, rechtsboven) */}
-      {requiresAuth && user?.admin && !isMobile && (
+      {/* Notificatie-bel: meldingen voor iedereen, account-aanvragen voor admin */}
+      {requiresAuth && user && !isMobile && (
         <div style={{ position: "fixed", top: "18px", right: "24px", zIndex: 70 }}>
-          <NotificationBell />
+          <NotificationBell admin={user.admin} />
         </div>
       )}
 
@@ -267,7 +291,7 @@ export default function App({ Component, pageProps }) {
           <nav style={{ display: "flex", gap: "4px", overflowX: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>
             <NavLinks horizontal />
           </nav>
-          {user?.admin && <NotificationBell inline />}
+          {user && <NotificationBell inline admin={user.admin} />}
           <button onClick={logout} style={{ padding: "7px 10px", background: "#ffffff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "9px", fontSize: "11.5px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
             Log out
           </button>
@@ -327,35 +351,76 @@ export default function App({ Component, pageProps }) {
   );
 }
 
-/* ---------- notificatie-bel: nieuwe account-aanvragen (admin) ---------- */
+/* ---------- notificatie-bel: meldingen + account-aanvragen (admin) ---------- */
 
-function NotificationBell({ inline }) {
+function timeAgo(iso) {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function NotificationBell({ inline, admin }) {
   const router = useRouter();
+  const [items, setItems] = useState([]);
+  const [unread, setUnread] = useState(0);
   const [pending, setPending] = useState([]);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const load = () =>
-      fetch("/api/accounts")
+    const load = () => {
+      fetch("/api/notifications")
         .then((r) => (r.ok ? r.json() : null))
         .then((res) => {
-          if (res?.success) setPending(res.users.filter((u) => u.status === "pending"));
+          if (res?.success) {
+            setItems(res.notifications);
+            setUnread(res.unread);
+          }
         })
         .catch(() => {});
+      if (admin) {
+        fetch("/api/accounts")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((res) => {
+            if (res?.success) setPending(res.users.filter((u) => u.status === "pending"));
+          })
+          .catch(() => {});
+      }
+    };
     load();
-    const iv = setInterval(load, 60000);
+    const iv = setInterval(load, 45000);
     return () => clearInterval(iv);
-  }, [router.pathname]);
+  }, [router.pathname, admin]);
 
-  const goToAccounts = () => {
-    setOpen(false);
-    router.push("/accounts");
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    // Bij openen: eigen meldingen als gelezen markeren
+    if (next && unread > 0) {
+      fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "markRead" }),
+      })
+        .then(() => setUnread(0))
+        .catch(() => {});
+    }
   };
+
+  const go = (href) => {
+    setOpen(false);
+    router.push(href || "/product-launching");
+  };
+
+  const badge = unread + (admin ? pending.length : 0);
 
   return (
     <div style={{ position: "relative", flexShrink: 0 }}>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
         style={{
           position: "relative",
           width: inline ? "34px" : "40px",
@@ -372,7 +437,7 @@ function NotificationBell({ inline }) {
         }}
       >
         🔔
-        {pending.length > 0 && (
+        {badge > 0 && (
           <span
             style={{
               position: "absolute",
@@ -393,7 +458,7 @@ function NotificationBell({ inline }) {
               boxSizing: "border-box",
             }}
           >
-            {pending.length}
+            {badge}
           </span>
         )}
       </button>
@@ -404,46 +469,63 @@ function NotificationBell({ inline }) {
             position: "absolute",
             top: "48px",
             right: 0,
-            width: "300px",
+            width: "320px",
             background: "#ffffff",
             border: "1px solid #eceef2",
             borderRadius: "14px",
             boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
             padding: "14px",
             zIndex: 80,
+            maxHeight: "70vh",
+            overflowY: "auto",
           }}
         >
-          <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>
-            Account requests
-          </div>
-          {pending.length === 0 ? (
-            <p style={{ margin: 0, fontSize: "12.5px", color: "#94a3b8" }}>No new requests.</p>
-          ) : (
-            <div style={{ display: "grid", gap: "6px", maxHeight: "260px", overflowY: "auto" }}>
+          {/* Admin: nieuwe account-aanvragen */}
+          {admin && pending.length > 0 && (
+            <div style={{ marginBottom: "12px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: "#b45309", marginBottom: "8px" }}>
+                ⏳ Account requests ({pending.length})
+              </div>
               {pending.map((u) => (
                 <div
                   key={u.id}
-                  onClick={goToAccounts}
-                  style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "#fef9ec", borderRadius: "10px", cursor: "pointer" }}
+                  onClick={() => go("/accounts")}
+                  style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "#fef9ec", borderRadius: "10px", cursor: "pointer", marginBottom: "5px" }}
                 >
-                  <div style={{ width: "30px", height: "30px", borderRadius: "999px", background: "#fde68a", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12.5px", color: "#92400e", flexShrink: 0 }}>
+                  <div style={{ width: "28px", height: "28px", borderRadius: "999px", background: "#fde68a", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", color: "#92400e", flexShrink: 0 }}>
                     {(u.name || u.email).charAt(0).toUpperCase()}
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
-                    <div style={{ fontSize: "11px", color: "#8a92a3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                    <div style={{ fontSize: "12px", fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+                    <div style={{ fontSize: "10.5px", color: "#8a92a3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
                   </div>
                 </div>
               ))}
             </div>
           )}
-          {pending.length > 0 && (
-            <button
-              onClick={goToAccounts}
-              style={{ width: "100%", marginTop: "10px", padding: "9px", background: "#0f172a", color: "#ffffff", border: "none", borderRadius: "10px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
-            >
-              Review in Account Management →
-            </button>
+
+          {/* Eigen meldingen */}
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>Notifications</div>
+          {items.length === 0 ? (
+            <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>No notifications yet.</p>
+          ) : (
+            items.map((n) => (
+              <div
+                key={n.id}
+                onClick={() => go(n.href)}
+                style={{
+                  padding: "8px 10px",
+                  background: n.read ? "#ffffff" : "#eff6ff",
+                  border: "1px solid #eef0f3",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  marginBottom: "5px",
+                }}
+              >
+                <div style={{ fontSize: "12px", color: "#0f172a", lineHeight: 1.45 }}>{n.text}</div>
+                <div style={{ fontSize: "10.5px", color: "#94a3b8", marginTop: "2px" }}>{timeAgo(n.at)}</div>
+              </div>
+            ))
           )}
         </div>
       )}
