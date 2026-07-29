@@ -648,9 +648,25 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
 
             {/* ===== Sectie: First Creative Batch (helemaal onderaan) ===== */}
             <Section title="🎨 First Creative Batch">
-              <Field label="First Creative Batch" last>
-                <TextField value={t.firstCreativeBatch} disabled={!canEdit} onSave={(v) => save("firstCreativeBatch", v)} placeholder="Headlines via Stefan's Brain — automation coming soon" />
-              </Field>
+              <div style={{ padding: "2px 0" }}>
+                <div style={{ ...ui.label, marginBottom: "6px" }}>Creative Batch Headlines</div>
+                {t.firstCreativeBatch ? (
+                  <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
+                    <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.firstCreativeBatch}</pre>
+                    <a
+                      href={`data:text/plain;charset=utf-8,${encodeURIComponent(t.firstCreativeBatch)}`}
+                      download={`${naming || t.productName} - headlines.txt`}
+                      style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}
+                    >
+                      ⬇ Download .txt
+                    </a>
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+                    The generated headlines will appear here automatically once the Stefan's Brain automation is connected (phase 2).
+                  </p>
+                )}
+              </div>
             </Section>
           </div>
         </div>
