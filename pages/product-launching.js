@@ -77,6 +77,8 @@ const BOARD_STATUSES = STATUSES.slice(0, 6); // Launched verhuist naar het Launc
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
 const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
+const GENDERS = ["Male", "Female"];
+const AGE_RANGES = ["18-25", "25-40", "40-55", "55+"];
 
 const STATUS_META = {
   "Task Start": { color: "#c2410c", bg: "#ffedd5" },
@@ -486,10 +488,24 @@ function TextField({ value, onSave, disabled, placeholder, type = "text" }) {
 
 /* ================= grote taakweergave (ClickUp-stijl) ================= */
 
+function SelectField({ value, options, onSave, disabled, placeholder }) {
+  if (disabled) return <span style={{ fontSize: "13px" }}>{value || "—"}</span>;
+  return (
+    <select value={value || ""} onChange={(e) => onSave(e.target.value)} style={{ ...ui.input, padding: "7px 10px" }}>
+      <option value="">{placeholder || "—"}</option>
+      {options.map((o) => <option key={o}>{o}</option>)}
+    </select>
+  );
+}
+
 function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
   const chatEndRef = useRef(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef(null);
   const naming = namingConvention(t);
   const showNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf(NAMING_FROM_STATUS);
   const canEdit = me?.canEdit;
@@ -497,6 +513,25 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "nearest" });
   }, [t.activity?.length]);
+
+  // Shopify product search (basic: naam + foto)
+  useEffect(() => {
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/products-search?q=${encodeURIComponent(query)}`).then((r) => r.json());
+        if (res.success) setResults(res.products.slice(0, 8));
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [query]);
 
   const save = (field, value) => post({ action: "update", taskId: t.id, task: { [field]: value } });
 
@@ -609,11 +644,42 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
               </div>
             </div>
 
-            {/* ===== Sectie: Product ===== */}
+            {/* ===== Sectie: Product (Shopify search) ===== */}
             <Section title="📦 Product">
-              <Field label="Product Name" last>
-                <TextField value={t.productName} disabled={!canEdit} onSave={(v) => save("productName", v)} placeholder="e.g. CircuMax Patches" />
-              </Field>
+              {t.product ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc", borderRadius: "10px", padding: "8px 12px" }}>
+                  {t.product.image && <img src={t.product.image} alt="" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} />}
+                  <span style={{ fontSize: "13.5px", fontWeight: 700, flex: 1 }}>{t.product.title}</span>
+                  {canEdit && (
+                    <a onClick={() => save("product", null)} style={{ color: "#94a3b8", cursor: "pointer", fontSize: "12px" }}>change</a>
+                  )}
+                </div>
+              ) : canEdit ? (
+                <>
+                  <input style={ui.input} placeholder="Search your Shopify products…" value={query} onChange={(e) => setQuery(e.target.value)} />
+                  {searching && <p style={{ fontSize: "12px", color: "#8a92a3", margin: "6px 0 0 0" }}>Searching…</p>}
+                  {results.length > 0 && (
+                    <div style={{ display: "grid", gap: "4px", marginTop: "6px" }}>
+                      {results.map((p) => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            post({ action: "update", taskId: t.id, task: { product: { title: p.title, image: p.image }, productName: p.title } });
+                            setQuery("");
+                            setResults([]);
+                          }}
+                          style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "#ffffff", border: "1px solid #eef0f3", borderRadius: "10px", cursor: "pointer", textAlign: "left", fontSize: "13px" }}
+                        >
+                          {p.image ? <img src={p.image} alt="" style={{ width: "28px", height: "28px", borderRadius: "6px", objectFit: "cover" }} /> : <div style={{ width: "28px", height: "28px", borderRadius: "6px", background: "#f1f5f9" }} />}
+                          <span style={{ fontWeight: 600 }}>{p.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <span style={{ fontSize: "13px", color: "#cbd5e1" }}>{t.productName || "—"}</span>
+              )}
             </Section>
 
             {/* ===== Sectie: Market ===== */}
@@ -632,7 +698,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                   <span style={{ fontSize: "13px" }}>{t.marketCountry || "—"}</span>
                 )}
               </Field>
-              <Field label="Country Code" last>
+              <Field label="Country Code">
                 {canEdit ? (
                   <select value={t.countryCode || ""} onChange={(e) => save("countryCode", e.target.value)} style={selectStyle}>
                     <option value="">—</option>
@@ -641,6 +707,12 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile }) {
                 ) : (
                   <span style={{ fontSize: "13px" }}>{t.countryCode || "—"}</span>
                 )}
+              </Field>
+              <Field label="Target Gender">
+                <SelectField value={t.gender} options={GENDERS} onSave={(v) => save("gender", v)} disabled={!canEdit} />
+              </Field>
+              <Field label="Target Age Range" last>
+                <SelectField value={t.ageRange} options={AGE_RANGES} onSave={(v) => save("ageRange", v)} disabled={!canEdit} />
               </Field>
             </Section>
 
