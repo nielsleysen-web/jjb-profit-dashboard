@@ -195,17 +195,8 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicD
       }
     }
   }
-  if (newStatus === "Ready to launch") {
-    for (const mb of mediaBuyers) {
-      if (mb.email !== session.email) {
-        notifications.push({
-          email: mb.email,
-          text: `"${task.productName}" is Ready to launch — check your Ready To Launch worktable`,
-          href: "/ready-to-launch",
-        });
-      }
-    }
-  }
+  // "Ready to launch" bij funnels: geen media buyer melding — Media Buying draait alleen op
+  // creatives en designs uit de Video Editor en Graphic Designer tabbladen.
   if (newStatus === "Launched" && !task.launchedDate) {
     task.launchedDate = new Date().toISOString();
     addLog(task, session, "🚀 marked as Launched");
