@@ -10,7 +10,7 @@ import crypto from "crypto";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 
-const STATUSES = ["Task Start", "Ready To Work", "QA Check", "Ready to launch", "Launched"];
+const STATUSES = ["Task Start", "Ready To Work", "In Production", "QA Check", "Revisions", "Ready to launch", "Launched"];
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
 const GENDERS = ["Male", "Female"];
@@ -135,6 +135,9 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers) {
     if (task.strategistEmail && task.strategistEmail !== session.email && task.strategistEmail !== ADMIN_EMAIL) {
       notifications.push({ email: task.strategistEmail, text: `Design for "${productName}" is ready for your QA Check` });
     }
+  }
+  if (newStatus === "Revisions" && task.assigneeEmail && task.assigneeEmail !== session.email) {
+    notifications.push({ email: task.assigneeEmail, text: `Design for "${productName}" needs revisions — check the feedback` });
   }
   if (newStatus === "Ready to launch") {
     for (const mb of mediaBuyers) {
