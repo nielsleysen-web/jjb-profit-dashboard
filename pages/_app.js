@@ -37,15 +37,6 @@ const CATEGORIES = [
     items: [{ href: "/constraint-focus", label: "Constraint Focus", icon: "🎯" }],
   },
   {
-    name: "Marketing",
-    perm: "marketing",
-    items: [
-      { href: "/ready-to-work", label: "Ready To Work", icon: "🎬" },
-      { href: "/in-production", label: "In Production", icon: "🎨" },
-      { href: "/qa-check", label: "QA Check", icon: "✅" },
-    ],
-  },
-  {
     name: "Admin",
     perm: "admin",
     items: [{ href: "/accounts", label: "Account Management", icon: "👥" }],
@@ -53,13 +44,6 @@ const CATEGORIES = [
 ];
 
 const ALL_PROTECTED = CATEGORIES.flatMap((c) => c.items.map((i) => i.href));
-
-// Marketing-pagina → taakstatus (voor de tellers in het menu)
-const MARKETING_STATUS_BY_HREF = {
-  "/ready-to-work": "Ready to work",
-  "/in-production": "In production",
-  "/qa-check": "QA Check",
-};
 
 function requiredPerm(pathname) {
   for (const cat of CATEGORIES) {
@@ -88,26 +72,7 @@ export default function App({ Component, pageProps }) {
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [message, setMessage] = useState(null); // { type: "error"|"info", text }
   const [busy, setBusy] = useState(false);
-  const [taskCounts, setTaskCounts] = useState({});
   const isMobile = useIsMobile();
-
-  // Tellers voor de Marketing-boards in het menu
-  useEffect(() => {
-    if (!user?.marketing) return;
-    const loadCounts = () =>
-      fetch("/api/marketing-tasks")
-        .then((r) => r.json())
-        .then((res) => {
-          if (!res.success) return;
-          const counts = {};
-          for (const t of res.tasks || []) counts[t.status] = (counts[t.status] || 0) + 1;
-          setTaskCounts(counts);
-        })
-        .catch(() => {});
-    loadCounts();
-    const iv = setInterval(loadCounts, 60000);
-    return () => clearInterval(iv);
-  }, [user, router.pathname]);
 
   useEffect(() => {
     fetch("/api/auth?action=me")
@@ -239,8 +204,7 @@ export default function App({ Component, pageProps }) {
         )}
         {cat.items.map((item) => {
           const active = router.pathname === item.href;
-          const countStatus = MARKETING_STATUS_BY_HREF[item.href];
-          const count = countStatus ? taskCounts[countStatus] || 0 : null;
+          const count = null;
           return (
             <Link key={item.href} href={item.href}>
               <a
@@ -289,6 +253,13 @@ export default function App({ Component, pageProps }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
       </Head>
 
+      {/* Notificatie-bel: nieuwe account-aanvragen (alleen admin, rechtsboven) */}
+      {requiresAuth && user?.admin && !isMobile && (
+        <div style={{ position: "fixed", top: "18px", right: "24px", zIndex: 70 }}>
+          <NotificationBell />
+        </div>
+      )}
+
       {/* Navigatie */}
       {requiresAuth && user && (isMobile ? (
         <div style={{ background: "white", borderBottom: "1px solid #eceef2", padding: "10px 14px", display: "flex", alignItems: "center", gap: "8px", position: "sticky", top: 0, zIndex: 50 }}>
@@ -296,6 +267,7 @@ export default function App({ Component, pageProps }) {
           <nav style={{ display: "flex", gap: "4px", overflowX: "auto", flex: 1, WebkitOverflowScrolling: "touch" }}>
             <NavLinks horizontal />
           </nav>
+          {user?.admin && <NotificationBell inline />}
           <button onClick={logout} style={{ padding: "7px 10px", background: "#ffffff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "9px", fontSize: "11.5px", fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
             Log out
           </button>
@@ -351,6 +323,130 @@ export default function App({ Component, pageProps }) {
           text-decoration: none;
         }
       `}</style>
+    </div>
+  );
+}
+
+/* ---------- notificatie-bel: nieuwe account-aanvragen (admin) ---------- */
+
+function NotificationBell({ inline }) {
+  const router = useRouter();
+  const [pending, setPending] = useState([]);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/accounts")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((res) => {
+          if (res?.success) setPending(res.users.filter((u) => u.status === "pending"));
+        })
+        .catch(() => {});
+    load();
+    const iv = setInterval(load, 60000);
+    return () => clearInterval(iv);
+  }, [router.pathname]);
+
+  const goToAccounts = () => {
+    setOpen(false);
+    router.push("/accounts");
+  };
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          position: "relative",
+          width: inline ? "34px" : "40px",
+          height: inline ? "34px" : "40px",
+          borderRadius: "12px",
+          background: "#ffffff",
+          border: "1px solid #eceef2",
+          boxShadow: inline ? "none" : "0 2px 8px rgba(15,23,42,0.08)",
+          cursor: "pointer",
+          fontSize: inline ? "15px" : "17px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        🔔
+        {pending.length > 0 && (
+          <span
+            style={{
+              position: "absolute",
+              top: "-5px",
+              right: "-5px",
+              minWidth: "18px",
+              height: "18px",
+              borderRadius: "999px",
+              background: "#dc2626",
+              color: "#ffffff",
+              fontSize: "10.5px",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "0 4px",
+              border: "2px solid #ffffff",
+              boxSizing: "border-box",
+            }}
+          >
+            {pending.length}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "48px",
+            right: 0,
+            width: "300px",
+            background: "#ffffff",
+            border: "1px solid #eceef2",
+            borderRadius: "14px",
+            boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
+            padding: "14px",
+            zIndex: 80,
+          }}
+        >
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a", marginBottom: "10px" }}>
+            Account requests
+          </div>
+          {pending.length === 0 ? (
+            <p style={{ margin: 0, fontSize: "12.5px", color: "#94a3b8" }}>No new requests.</p>
+          ) : (
+            <div style={{ display: "grid", gap: "6px", maxHeight: "260px", overflowY: "auto" }}>
+              {pending.map((u) => (
+                <div
+                  key={u.id}
+                  onClick={goToAccounts}
+                  style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "#fef9ec", borderRadius: "10px", cursor: "pointer" }}
+                >
+                  <div style={{ width: "30px", height: "30px", borderRadius: "999px", background: "#fde68a", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12.5px", color: "#92400e", flexShrink: 0 }}>
+                    {(u.name || u.email).charAt(0).toUpperCase()}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
+                    <div style={{ fontSize: "11px", color: "#8a92a3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {pending.length > 0 && (
+            <button
+              onClick={goToAccounts}
+              style={{ width: "100%", marginTop: "10px", padding: "9px", background: "#0f172a", color: "#ffffff", border: "none", borderRadius: "10px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+            >
+              Review in Account Management →
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
