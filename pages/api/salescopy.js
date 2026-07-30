@@ -103,14 +103,21 @@ async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeout
     messages: [{ role: "user", content: prompt }],
   };
   if (webSearch) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
-  const response = await axios.post("https://api.anthropic.com/v1/messages", body, {
-    headers: {
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    timeout: timeoutMs,
-  });
+  let response;
+  try {
+    response = await axios.post("https://api.anthropic.com/v1/messages", body, {
+      headers: {
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      timeout: timeoutMs,
+    });
+  } catch (e) {
+    // Echte API-foutmelding tonen i.p.v. een kale statuscode
+    const apiMsg = e.response?.data?.error?.message;
+    throw new Error(apiMsg ? `Anthropic API: ${apiMsg}` : e.message);
+  }
   const blocks = response.data?.content || [];
   const text = blocks
     .filter((b) => b.type === "text")
