@@ -1018,12 +1018,19 @@ async function runStep(store, step, taskId) {
       await writeData("launch-tasks", launchStore);
     }
     const prompt = PROMPT_1.replace("[ADVERTORIAL]", adv);
-    store.researchDoc = await callClaude({ prompt, webSearch: true, maxTokens: 6000, timeoutMs: 240000 });
+    // Poging 1: met webresearch. Werd die afgebroken (timeout), dan draait poging 2
+    // automatisch zonder webresearch - sneller, en alle JSON-velden komen uit de advertorial zelf.
+    const useSearch = (store.attempts?.["1"] || 0) <= 1;
+    store.researchDoc = await callClaude({ prompt, webSearch: useSearch, maxTokens: useSearch ? 6000 : 5000, timeoutMs: 240000 });
     store.researchJson = null; // nieuw onderzoek maakt oude JSON ongeldig
     return;
   }
   if (step === "1b") {
-    if (!store.researchDoc?.trim()) throw new Error("Run step 1 (research) first");
+    if (!store.researchDoc?.trim()) {
+      // Research ontbreekt nog: draai die eerst, daarna alsnog de extractie
+      await runStep(store, "1", taskId);
+      store.stepStatus["1"] = "done";
+    }
     const prompt = PROMPT_1B.replace("[RESEARCH DOCUMENT]", store.researchDoc);
     const text = await callClaude({ prompt, maxTokens: 3000, timeoutMs: 120000 });
     store.researchJson = parseJsonLoose(text);
@@ -1061,7 +1068,7 @@ async function runStep(store, step, taskId) {
 function computePending(store) {
   const seq = [];
   if (!store.researchDoc) seq.push("1");
-  if (!store.researchJson) seq.push("1b");
+  if (store.researchDoc && !store.researchJson) seq.push("1b");
   if (store.researchJson) for (const st of STEPS) if (!store.outputs?.[st.key]) seq.push(st.key);
   const allCopy = STEPS.every((st) => store.outputs?.[st.key]);
   if (allCopy && !store.violations) seq.push("validate");
