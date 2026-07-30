@@ -157,7 +157,7 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicD
   addLog(task, session, `changed status to "${newStatus}"`);
 
   if (newStatus === "AI Translation") {
-    addLog(task, session, "⚙️ AI Translation queued — automation not connected yet (phase 2)");
+    addLog(task, session, "⚙️ AI Translation started — the Sales Page Copy pipeline is running");
   }
   if (newStatus === "Ready For Build" && task.assigneeEmail && task.assigneeEmail !== session.email) {
     notifications.push({
@@ -318,6 +318,11 @@ export default async function handler(req, res) {
       await writeData("launch-tasks", store);
       await pushNotifications(notifs);
       return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin), createdId: t.id });
+    }
+
+    /* --- refresh (alleen de takenlijst opnieuw ophalen) --- */
+    if (action === "refresh") {
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
     }
 
     const task = store.tasks.find((t) => t.id === taskId);
