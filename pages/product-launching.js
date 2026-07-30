@@ -904,7 +904,7 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
           if (res.success) {
             storeRef.current = res.store;
             setStore(res.store);
-            if (!res.store.queueActive) post({ action: "refresh" });
+            post({ action: "refresh" });
           }
         })
         .catch(() => {});
@@ -950,6 +950,7 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
       return;
     }
     await api({ action: "startQueue" });
+    setTimeout(() => post({ action: "refresh" }), 5000);
   };
 
   const stepState = (k) => {
