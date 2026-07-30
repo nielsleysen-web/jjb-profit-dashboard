@@ -1164,8 +1164,9 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
             ✓ All validator checks passed
           </div>
         ) : (
-          <div style={{ fontSize: "12px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
-            <b>Validator — {store.violations.length} issue(s):</b>
+          <div style={{ fontSize: "12px", color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
+            <b>Validator — {store.violations.length} warning(s)</b>
+            <span style={{ fontWeight: 400, color: "#b45309" }}> · does not stop the pipeline, the CSV is still delivered</span>
             {store.violations.map((x, i) => (
               <div key={i} style={{ marginTop: "3px" }}>• {x}</div>
             ))}
