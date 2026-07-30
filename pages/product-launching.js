@@ -978,6 +978,7 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
     return row.field ? out[row.step]?.[row.field] || "" : out[row.step] || "";
   };
   const hasOutputs = store && Object.keys(store.outputs || {}).length > 0;
+  const started = !!(store && (store.researchDoc || hasOutputs || Object.keys(store.stepStatus || {}).length > 0));
   const doneCount = SC_PIPE.filter(([k]) => stepState(k) === "done").length;
 
   const downloadCsv = () => {
@@ -1034,9 +1035,9 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", margin: "10px 0" }}>
-        {canEdit && (
+        {canEdit && (running || (started && !store?.csvUrl)) && (
           <button onClick={runPipeline} disabled={running} style={{ ...btnPrimary, padding: "8px 16px", fontSize: "12px", opacity: running ? 0.6 : 1 }}>
-            {running ? `Running… (${doneCount}/${SC_PIPE.length})` : hasOutputs ? "▶ Resume / rerun missing steps" : "▶ Generate Sales Page Copy"}
+            {running ? `Running… (${doneCount}/${SC_PIPE.length})` : "▶ Resume pipeline"}
           </button>
         )}
         {running && (
