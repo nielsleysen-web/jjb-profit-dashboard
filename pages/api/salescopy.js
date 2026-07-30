@@ -121,6 +121,9 @@ async function callClaude({ prompt, webSearch = false, maxTokens = 4000 }) {
 
 const uidLog = () => crypto.randomBytes(8).toString("hex");
 
+// Interne sleutel waarmee de keten zichzelf mag aanroepen (zonder sessie)
+const internalKey = (taskId) => crypto.createHmac("sha256", SESSION_SECRET).update(`salescopy-queue:${taskId}`).digest("base64url");
+
 /* ---------------- notificaties (zelfde patroon als de taken-API's, incl. Slack) ---------------- */
 async function pushNotifications(items) {
   if (!items.length) return;
@@ -821,7 +824,7 @@ function validate(store) {
 
 /* ================= RUNNER ================= */
 function emptyStore() {
-  return { advertorialText: "", researchDoc: "", researchJson: null, outputs: {}, stepStatus: {}, violations: null, translated: null, translatedLanguage: "", csvUrl: "", csvName: "", updatedAt: null };
+  return { advertorialText: "", researchDoc: "", researchJson: null, outputs: {}, stepStatus: {}, violations: null, translated: null, translatedLanguage: "", csvUrl: "", csvName: "", queueActive: false, attempts: {}, queueRuns: 0, updatedAt: null };
 }
 
 // Alle cellen als platte map: "step" of "step.field" → tekst
@@ -1054,21 +1057,46 @@ async function runStep(store, step, taskId) {
   }
 }
 
+/* ================= server-side queue ================= */
+function computePending(store) {
+  const seq = [];
+  if (!store.researchDoc) seq.push("1");
+  if (!store.researchJson) seq.push("1b");
+  if (store.researchJson) for (const st of STEPS) if (!store.outputs?.[st.key]) seq.push(st.key);
+  const allCopy = STEPS.every((st) => store.outputs?.[st.key]);
+  if (allCopy && !store.violations) seq.push("validate");
+  if (allCopy && !store.translated) seq.push("translate");
+  if (store.translated && !store.csvUrl) seq.push("finalize");
+  return seq;
+}
+
+// Volgende schakel van de keten aftrappen: request wordt afgeleverd, antwoord wachten we niet af
+async function kickQueue(req, taskId) {
+  const host = process.env.VERCEL_URL || req.headers.host;
+  if (!host) return;
+  const proto = String(host).startsWith("localhost") ? "http" : "https";
+  await axios
+    .post(`${proto}://${host}/api/salescopy`, { action: "runQueue", taskId, internalKey: internalKey(taskId) }, { timeout: 3000 })
+    .catch(() => {});
+}
+
 /* ================= handler ================= */
 export default async function handler(req, res) {
+  const rawTaskId = String((req.method === "GET" ? req.query.taskId : req.body?.taskId) || "").replace(/[^a-f0-9]/g, "");
+  const isInternal = req.method === "POST" && req.body?.action === "runQueue" && !!rawTaskId && req.body?.internalKey === internalKey(rawTaskId);
   const session = getSession(req);
   const roles = session?.roles || [];
   const isAdmin = !!session?.admin;
   const isFB = roles.includes("Funnel Builder");
   const isMB = roles.includes("Media Buyer");
-  if (!session || !(isAdmin || isFB || isMB)) {
+  if (!isInternal && (!session || !(isAdmin || isFB || isMB))) {
     return res.status(401).json({ success: false, error: "No access" });
   }
   res.setHeader("Cache-Control", "no-store");
-  const canRun = isAdmin || isFB;
+  const canRun = isInternal || isAdmin || isFB;
 
   try {
-    const taskId = String((req.method === "GET" ? req.query.taskId : req.body?.taskId) || "").replace(/[^a-f0-9]/g, "");
+    const taskId = rawTaskId;
     if (!taskId) return res.status(400).json({ success: false, error: "No taskId" });
     const handle = `salescopy-${taskId}`;
 
@@ -1112,6 +1140,69 @@ export default async function handler(req, res) {
       fresh.updatedAt = new Date().toISOString();
       await writeData(handle, fresh);
       return res.status(200).json({ success: true, store: fresh });
+    }
+
+    /* --- startQueue: pipeline server-side laten doorlopen, browser mag dicht --- */
+    if (action === "startQueue") {
+      if (store.queueActive && store.updatedAt && Date.now() - Date.parse(store.updatedAt) < 90000) {
+        return res.status(200).json({ success: true, store });
+      }
+      store.queueActive = true;
+      store.attempts = {};
+      store.queueRuns = 0;
+      store.updatedAt = new Date().toISOString();
+      await writeData(handle, store);
+      await kickQueue(req, taskId);
+      return res.status(200).json({ success: true, store });
+    }
+
+    if (action === "stopQueue") {
+      store.queueActive = false;
+      store.updatedAt = new Date().toISOString();
+      await writeData(handle, store);
+      return res.status(200).json({ success: true, store });
+    }
+
+    /* --- runQueue: een schakel van de keten (interne aanroep) --- */
+    if (action === "runQueue") {
+      if (!store.queueActive) return res.status(200).json({ success: true, halted: true });
+      store.queueRuns = (store.queueRuns || 0) + 1;
+      if (store.queueRuns > 60) {
+        store.queueActive = false;
+        await writeData(handle, store);
+        return res.status(200).json({ success: false, error: "Queue safety limit reached" });
+      }
+      store.attempts = store.attempts || {};
+      const pending = computePending(store).filter((k) => (store.attempts[k] || 0) < 2);
+      if (!pending.length) {
+        store.queueActive = false;
+        store.updatedAt = new Date().toISOString();
+        await writeData(handle, store);
+        if (computePending(store).length) {
+          const errs = Object.entries(store.stepStatus || {}).filter(([, v]) => String(v).startsWith("error"));
+          await pushNotifications([{ email: ADMIN_EMAIL, text: `Sales page copy pipeline stopped with ${errs.length} failed step(s) - open the task to retry` }]);
+        }
+        return res.status(200).json({ success: true, done: true });
+      }
+      const step = pending[0];
+      store.attempts[step] = (store.attempts[step] || 0) + 1;
+      try {
+        await runStep(store, step, taskId);
+        store.stepStatus[step] = "done";
+      } catch (e) {
+        store.stepStatus[step] = `error: ${e.message}`;
+      }
+      const remaining = computePending(store).filter((k) => (store.attempts[k] || 0) < 2);
+      if (!remaining.length) store.queueActive = false;
+      store.updatedAt = new Date().toISOString();
+      await writeData(handle, store);
+      if (remaining.length) {
+        await kickQueue(req, taskId);
+      } else if (computePending(store).length) {
+        const errs = Object.entries(store.stepStatus || {}).filter(([, v]) => String(v).startsWith("error"));
+        await pushNotifications([{ email: ADMIN_EMAIL, text: `Sales page copy pipeline stopped with ${errs.length} failed step(s) - open the task to retry` }]);
+      }
+      return res.status(200).json({ success: true });
     }
 
     if (action === "runStep") {
