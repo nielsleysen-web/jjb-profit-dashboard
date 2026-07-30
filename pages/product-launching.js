@@ -943,9 +943,11 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
 
   const firstPending = (() => {
     const st = store || {};
+    const att = st.attempts || {};
+    const blocked = (k) => (att[k] || 0) >= 3;
     if (!st.researchDoc) return "1";
     if (!st.researchJson) return "1b";
-    for (const [k] of SC_STEPS) if (!st.outputs?.[k]) return k;
+    for (const [k] of SC_STEPS) if (!st.outputs?.[k] && !blocked(k)) return k;
     if (!st.violations) return "validate";
     if (!st.translated) return "translate";
     if (!st.csvUrl) return "finalize";
