@@ -799,7 +799,8 @@ function validate(store) {
 
   // Stap 12: Step 1 headline max 4 woorden, column max 30 woorden
   const s12 = out["12"] || {};
-  if (s12.step1_headline && wordCount(s12.step1_headline) > 4) v.push(`Step-By-Step: Step 1 headline is above 4 words ("${s12.step1_headline}")`);
+  const mouthPattern = /^make sure .* is empty$/i.test(String(s12.step1_headline || "").trim());
+  if (s12.step1_headline && !mouthPattern && wordCount(s12.step1_headline) > 4) v.push(`Step-By-Step: Step 1 headline is above 4 words ("${s12.step1_headline}")`);
   if (s12.step1_column && wordCount(s12.step1_column) > 30) v.push(`Step-By-Step: Step 1 column is above 30 words`);
 
   // Reviews (stap 17): max 135 woorden, datums verschillend en max 20 dagen terug
