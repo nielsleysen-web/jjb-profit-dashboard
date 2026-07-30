@@ -1037,7 +1037,7 @@ async function runStep(store, step, taskId) {
       store.stepStatus["1"] = "done";
     }
     const prompt = PROMPT_1B.replace("[RESEARCH DOCUMENT]", store.researchDoc);
-    const text = await callClaude({ prompt, maxTokens: 3000, timeoutMs: 120000 });
+    const text = await callClaude({ prompt, maxTokens: 8000, timeoutMs: 180000 });
     store.researchJson = parseJsonLoose(text);
     return;
   }
@@ -1058,7 +1058,7 @@ async function runStep(store, step, taskId) {
     prompt += `\n\nOUTPUT FORMAT: return only the final output text. No explanation, no preamble, no markdown formatting.`;
   }
 
-  const text = await callClaude({ prompt, maxTokens: def.key === "17" ? 4000 : 2500 });
+  const text = await callClaude({ prompt, maxTokens: def.key === "17" ? 6000 : 4000, timeoutMs: 120000 });
   if (def.multi) {
     const obj = parseJsonLoose(text);
     const clean = {};
