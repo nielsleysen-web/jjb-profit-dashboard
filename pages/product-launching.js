@@ -905,6 +905,14 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
             storeRef.current = res.store;
             setStore(res.store);
             post({ action: "refresh" });
+            // Watchdog: keten actief maar >45s geen voortgang? Automatisch opnieuw aantrappen.
+            if (res.store.queueActive && res.store.updatedAt && Date.now() - Date.parse(res.store.updatedAt) > 45000) {
+              fetch("/api/salescopy", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ taskId: t.id, action: "startQueue" }),
+              }).catch(() => {});
+            }
           }
         })
         .catch(() => {});
