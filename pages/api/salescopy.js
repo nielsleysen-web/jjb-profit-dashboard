@@ -19,6 +19,8 @@ const MODEL = "claude-fable-5";
 
 // Market Country → doeltaal voor de vertaalkolom in de CSV
 const LANGUAGES = { Italy: "Italian", France: "French", Israel: "Hebrew" };
+// Max automatische pogingen per stap; daarna wordt de stap overgeslagen (lege cel, validator meldt het)
+const MAX_ATTEMPTS = 3;
 
 /* ---------------- session ---------------- */
 function getSession(req) {
@@ -966,8 +968,6 @@ async function getLaunchTask(taskId) {
 
 async function runStep(store, step, taskId) {
   if (step === "translate") {
-    const missing = STEPS.filter((s) => !store.outputs?.[s.key]).map((s) => s.key);
-    if (missing.length) throw new Error(`Finish copy steps first (missing: ${missing.join(", ")})`);
     const { task } = await getLaunchTask(taskId);
     const langName = LANGUAGES[task?.marketCountry || ""];
     if (!langName) throw new Error(`Set Market Country on the task first (${Object.keys(LANGUAGES).join(", ")}) — needed for the translation`);
@@ -1078,13 +1078,18 @@ async function runStep(store, step, taskId) {
 
 /* ================= server-side queue ================= */
 function computePending(store) {
+  const att = store.attempts || {};
+  const blocked = (k) => (att[k] || 0) >= MAX_ATTEMPTS;
   const seq = [];
   if (!store.researchDoc) seq.push("1");
   if (store.researchDoc && !store.researchJson) seq.push("1b");
   if (store.researchJson) for (const st of STEPS) if (!store.outputs?.[st.key]) seq.push(st.key);
-  const allCopy = STEPS.every((st) => store.outputs?.[st.key]);
-  if (allCopy && !store.violations) seq.push("validate");
-  if (allCopy && !store.translated) seq.push("translate");
+  // Staart mag door zodra elke copystap klaar is OF zijn pogingen heeft opgebruikt
+  // (mislukte stap = lege cel; de validator meldt hem, de rijen verschuiven nooit)
+  const anyCopy = STEPS.some((st) => store.outputs?.[st.key]);
+  const copyDoneOrBlocked = STEPS.every((st) => store.outputs?.[st.key] || blocked(st.key));
+  if (store.researchJson && anyCopy && copyDoneOrBlocked && !store.violations) seq.push("validate");
+  if (store.researchJson && anyCopy && copyDoneOrBlocked && !store.translated) seq.push("translate");
   if (store.translated && !store.csvUrl) seq.push("finalize");
   return seq;
 }
@@ -1194,7 +1199,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: false, error: "Queue safety limit reached" });
       }
       store.attempts = store.attempts || {};
-      const pending = computePending(store).filter((k) => (store.attempts[k] || 0) < 2);
+      const pending = computePending(store).filter((k) => (store.attempts[k] || 0) < MAX_ATTEMPTS);
       if (!pending.length) {
         store.queueActive = false;
         store.updatedAt = new Date().toISOString();
@@ -1216,7 +1221,7 @@ export default async function handler(req, res) {
       } catch (e) {
         store.stepStatus[step] = `error: ${e.message}`;
       }
-      const remaining = computePending(store).filter((k) => (store.attempts[k] || 0) < 2);
+      const remaining = computePending(store).filter((k) => (store.attempts[k] || 0) < MAX_ATTEMPTS);
       if (!remaining.length) store.queueActive = false;
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
