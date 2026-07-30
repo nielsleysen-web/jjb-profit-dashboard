@@ -1079,12 +1079,13 @@ function computePending(store) {
 
 // Volgende schakel van de keten aftrappen: request wordt afgeleverd, antwoord wachten we niet af
 async function kickQueue(req, taskId) {
-  const host = process.env.VERCEL_URL || req.headers.host;
+  // Publiek domein eerst: de interne VERCEL_URL kan door Deployment Protection geblokkeerd zijn
+  const host = req.headers.host || process.env.VERCEL_URL;
   if (!host) return;
   const proto = String(host).startsWith("localhost") ? "http" : "https";
   await axios
-    .post(`${proto}://${host}/api/salescopy`, { action: "runQueue", taskId, internalKey: internalKey(taskId) }, { timeout: 3000 })
-    .catch(() => {});
+    .post(`${proto}://${host}/api/salescopy`, { action: "runQueue", taskId, internalKey: internalKey(taskId) }, { timeout: 5000 })
+    .catch((e) => console.error("kickQueue error:", e.message));
 }
 
 /* ================= handler ================= */
@@ -1152,6 +1153,7 @@ export default async function handler(req, res) {
     /* --- startQueue: pipeline server-side laten doorlopen, browser mag dicht --- */
     if (action === "startQueue") {
       if (store.queueActive && store.updatedAt && Date.now() - Date.parse(store.updatedAt) < 90000) {
+        await kickQueue(req, taskId); // keten draait (of viel stil): geef een nieuwe zet
         return res.status(200).json({ success: true, store });
       }
       store.queueActive = true;
