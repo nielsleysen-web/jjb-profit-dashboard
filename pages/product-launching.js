@@ -877,11 +877,10 @@ const SC_LANGS = { Italy: "Italian", France: "French", Israel: "Hebrew" };
 
 function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
   const [store, setStore] = useState(null);
-  const [running, setRunning] = useState(false);
-  const [activeStep, setActiveStep] = useState(null);
+  const [retryStep, setRetryStep] = useState(null);
   const [showDoc, setShowDoc] = useState(false);
   const storeRef = useRef(null);
-  const stopRef = useRef(false);
+  const running = !!store?.queueActive;
 
   useEffect(() => {
     fetch(`/api/salescopy?taskId=${t.id}`)
@@ -893,10 +892,25 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
         }
       })
       .catch(() => {});
-    return () => {
-      stopRef.current = true;
-    };
   }, [t.id]);
+
+  // Live meekijken: de pipeline draait server-side door, ook als de taak dicht is
+  useEffect(() => {
+    if (!store?.queueActive) return;
+    const iv = setInterval(() => {
+      fetch(`/api/salescopy?taskId=${t.id}`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success) {
+            storeRef.current = res.store;
+            setStore(res.store);
+            if (!res.store.queueActive) post({ action: "refresh" });
+          }
+        })
+        .catch(() => {});
+    }, 6000);
+    return () => clearInterval(iv);
+  }, [store?.queueActive, t.id]);
 
   const api = async (body) => {
     const res = await fetch("/api/salescopy", {
@@ -912,48 +926,35 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
   };
 
   const runOne = async (step) => {
-    setActiveStep(step);
+    setRetryStep(step);
     const res = await api({ action: "runStep", step });
-    setActiveStep(null);
+    setRetryStep(null);
     return res.success;
   };
 
-  const pendingSteps = () => {
-    const st = storeRef.current || {};
-    const seq = [];
-    if (!st.researchDoc) seq.push("1");
-    if (!st.researchJson) seq.push("1b");
-    for (const [k] of SC_STEPS) if (!st.outputs?.[k]) seq.push(k);
-    seq.push("validate");
-    if (!st.translated) seq.push("translate");
-    if (!st.csvUrl) seq.push("finalize");
-    return seq;
-  };
+  const firstPending = (() => {
+    const st = store || {};
+    if (!st.researchDoc) return "1";
+    if (!st.researchJson) return "1b";
+    for (const [k] of SC_STEPS) if (!st.outputs?.[k]) return k;
+    if (!st.violations) return "validate";
+    if (!st.translated) return "translate";
+    if (!st.csvUrl) return "finalize";
+    return null;
+  })();
 
   const runPipeline = async () => {
     if (running) return;
     if (!(t.advertorialLink || "").trim() && !(storeRef.current?.advertorialText || "").trim()) {
-      alert("Fill in the Advertorial Link in the Funnel section first — step 1 fetches the advertorial from that page.");
+      alert("Fill in the Advertorial Link in the Funnel section first - step 1 fetches the advertorial from that page.");
       return;
     }
-    setRunning(true);
-    stopRef.current = false;
-    try {
-      for (const step of pendingSteps()) {
-        if (stopRef.current) break;
-        const ok = await runOne(step);
-        if (!ok && (step === "1" || step === "1b")) break; // zonder research/JSON kan niets verder
-      }
-    } finally {
-      setRunning(false);
-      setActiveStep(null);
-      post({ action: "refresh" });
-    }
+    await api({ action: "startQueue" });
   };
 
   const stepState = (k) => {
     const st = store || {};
-    if (activeStep === k) return "running";
+    if (retryStep === k || (running && k === firstPending)) return "running";
     if (k === "1") return st.researchDoc ? "done" : st.stepStatus?.["1"]?.startsWith("error") ? "error" : "todo";
     if (k === "1b") return st.researchJson ? "done" : st.stepStatus?.["1b"]?.startsWith("error") ? "error" : "todo";
     if (k === "validate") return st.violations ? "done" : "todo";
@@ -1041,7 +1042,10 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
           </button>
         )}
         {running && (
-          <button onClick={() => { stopRef.current = true; }} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px" }}>Stop</button>
+          <button onClick={() => api({ action: "stopQueue" })} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px" }}>Stop</button>
+        )}
+        {running && (
+          <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>Runs on the server - you can safely close this task.</span>
         )}
         {store?.csvUrl && (
           <a href={store.csvUrl} target="_blank" rel="noreferrer" style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px", textDecoration: "none", color: "#166534", borderColor: "#bbf7d0", background: "#f0fdf4", fontWeight: 700 }}>
