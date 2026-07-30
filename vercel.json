@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "pages/api/salescopy.js": {
+      "maxDuration": 300
+    },
+    "pages/api/upload.js": {
+      "maxDuration": 60
+    }
+  }
+}
