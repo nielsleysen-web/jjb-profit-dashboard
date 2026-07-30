@@ -875,10 +875,11 @@ for (const [k, label, fields] of SC_STEPS) {
 const SC_PIPE = [["1", "Research"], ["1b", "Extract JSON"], ...SC_STEPS.map(([k, l]) => [k, l]), ["validate", "Validate"], ["translate", "Translate"], ["finalize", "Deliver CSV"]];
 const SC_LANGS = { Italy: "Italian", France: "French", Israel: "Hebrew" };
 
-function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
+function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post }) {
   const [store, setStore] = useState(null);
   const [retryStep, setRetryStep] = useState(null);
   const [showDoc, setShowDoc] = useState(false);
+  const [showTable, setShowTable] = useState(false);
   const storeRef = useRef(null);
   const running = !!store?.queueActive && (!store?.updatedAt || Date.now() - Date.parse(store.updatedAt) < 240000);
 
@@ -1061,10 +1062,10 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
             📄 {store.csvName || "sales-page-copy.csv"}
           </a>
         )}
-        {hasOutputs && (
+        {isAdmin && hasOutputs && (
           <button onClick={downloadCsv} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px" }}>⬇ Download CSV</button>
         )}
-        {canEdit && hasOutputs && !running && (
+        {isAdmin && hasOutputs && !running && (
           <button
             onClick={async () => {
               if (confirm("Clear all pipeline outputs? The advertorial text stays.")) await api({ action: "reset" });
@@ -1076,20 +1077,63 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
         )}
       </div>
 
-      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "10px" }}>
-        {SC_PIPE.map(([k, label]) => {
-          const state = stepState(k);
-          return (
-            <span
-              key={k}
-              title={state === "error" ? `${store?.stepStatus?.[k] || "error"} — click to retry` : label}
-              onClick={() => state === "error" && canEdit && !running && runOne(k)}
-              style={chipStyle(state)}
-            >
-              {state === "running" ? "⏳ " : state === "done" ? "✓ " : state === "error" ? "✕ " : ""}{label}
+      {store?.csvUrl && (
+        <p style={{ fontSize: "12px", color: "#8a92a3", margin: "0 0 10px 0" }}>
+          English + {store.translatedLanguage || "translation"} side by side · task moved to Ready For Build · {t.assigneeName ? `${firstName(t.assigneeName)} notified` : "assignee notified"}
+        </p>
+      )}
+
+      {(running || started) && (
+        <div style={{ margin: "2px 0 10px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", fontWeight: 700, color: store?.csvUrl ? "#166534" : "#64748b", marginBottom: "5px" }}>
+            <span>
+              {store?.csvUrl
+                ? "✓ Sales page copy delivered"
+                : running
+                ? `Generating: ${(SC_PIPE.find(([k]) => k === firstPending) || ["", "…"])[1]}`
+                : "Paused — press Resume to continue"}
             </span>
-          );
-        })}
+            <span>{doneCount}/{SC_PIPE.length}</span>
+          </div>
+          <div style={{ height: "8px", background: "#eef0f3", borderRadius: "999px", overflow: "hidden" }}>
+            <div style={{ width: `${Math.round((doneCount / SC_PIPE.length) * 100)}%`, height: "100%", background: store?.csvUrl ? "#16a34a" : running ? "#3b82f6" : "#94a3b8", borderRadius: "999px", transition: "width 0.4s" }} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "10px" }}>
+        {(() => {
+          const items = SC_PIPE.map(([k, label]) => ({ k, label, state: stepState(k) }));
+          const shown = [];
+          let doneRun = [];
+          const flushDone = () => {
+            if (doneRun.length > 6) {
+              shown.push(...doneRun.slice(0, 4));
+              shown.push({ k: `_more_${shown.length}`, label: `… ${doneRun.length - 4} more`, state: "done", summary: true });
+            } else {
+              shown.push(...doneRun);
+            }
+            doneRun = [];
+          };
+          for (const it of items) {
+            if (it.state === "done") doneRun.push(it);
+            else {
+              flushDone();
+              shown.push(it);
+            }
+          }
+          flushDone();
+          return shown.map((it) => (
+            <span
+              key={it.k}
+              title={it.state === "error" ? `${store?.stepStatus?.[it.k] || "error"} — click to retry` : it.label}
+              onClick={() => it.state === "error" && canEdit && !running && runOne(it.k)}
+              style={chipStyle(it.state)}
+            >
+              {it.summary ? "✓ " : it.state === "running" ? "⏳ " : it.state === "done" ? "✓ " : it.state === "error" ? "✕ " : ""}{it.label}
+            </span>
+          ));
+        })()}
       </div>
 
       {Object.entries(store?.stepStatus || {}).some(([k, v]) => String(v).startsWith("error") && !(running && k === firstPending)) && (
@@ -1127,7 +1171,7 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
         )
       )}
 
-      {canEdit && !running && (
+      {isAdmin && !running && (
         <div style={{ marginBottom: "10px" }}>
           <a
             onClick={async () => {
@@ -1143,7 +1187,7 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
         </div>
       )}
 
-      {store?.researchDoc && (
+      {isAdmin && store?.researchDoc && (
         <div style={{ marginBottom: "10px" }}>
           <a onClick={() => setShowDoc(!showDoc)} style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}>
             {showDoc ? "▾ Hide" : "▸ View"} research document & JSON
@@ -1165,7 +1209,14 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
         </div>
       )}
 
-      {hasOutputs && (
+      {isAdmin && hasOutputs && (
+        <div style={{ marginBottom: "10px" }}>
+          <a onClick={() => setShowTable(!showTable)} style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}>
+            {showTable ? "▾ Hide" : "▸ View"} full copy table
+          </a>
+        </div>
+      )}
+      {isAdmin && hasOutputs && showTable && (
         <div style={{ border: "1px solid #eceef2", borderRadius: "10px", overflow: "hidden" }}>
           {SC_ROWS.map((row, i) => {
             const v = cellValue(row);
@@ -1631,7 +1682,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
             </Section>
 
             {/* ===== Sectie: Sales Page Copy pipeline ===== */}
-            <SalesCopyPanel t={t} canEdit={canEdit} save={save} selectStyle={selectStyle} csvName={naming || t.productName || "sales-copy"} post={post} />
+            <SalesCopyPanel t={t} canEdit={canEdit} isAdmin={!!me?.admin} save={save} selectStyle={selectStyle} csvName={naming || t.productName || "sales-copy"} post={post} />
 
             {/* ===== Sectie: First Creative Batch (helemaal onderaan) ===== */}
             <Section title="🎨 First Creative Batch">
