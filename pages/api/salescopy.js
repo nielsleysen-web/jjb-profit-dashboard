@@ -208,7 +208,7 @@ function parseJsonLoose(text) {
 /* ================= PROMPTS ================= */
 
 const LANGUAGE_NOTE = `
-The advertorial is written in Dutch. Write your entire analysis in English, including every quoted word and every extracted value.
+The advertorial may be written in any language (Dutch, Italian, French, ...). Write your entire analysis in English, including every quoted word and every extracted value.
 Where you give the avatar's own everyday words, give the natural English equivalent that a native English speaker in the same situation would actually use — not a literal translation. "Kraaienpootjes" becomes "crow's feet", not "chicken feet".`;
 
 const PROMPT_1 = `Hi there,
@@ -278,7 +278,7 @@ RULES
 
 LANGUAGE
 - Every value in the JSON is in English, including the word values that will end up in the copy.
-- The advertorial itself is written in Dutch. Where the research document quotes Dutch wording, give the natural English equivalent that a native English speaker in the same situation would actually use — not a literal translation. "Kraaienpootjes" becomes "crow's feet", not "chicken feet".
+- The advertorial itself may be written in any language. Where the research document quotes non-English wording, give the natural English equivalent that a native English speaker in the same situation would actually use — not a literal translation. "Kraaienpootjes" becomes "crow's feet", not "chicken feet".
 - Translation to the market language happens later, manually, outside this process. Do not translate anything into any language other than English.
 
 RESEARCH DOCUMENT:
@@ -920,6 +920,29 @@ INPUT JSON:
 ${JSON.stringify(flat, null, 2)}`;
 }
 
+// Advertorial-tekst ophalen van de live pagina (Advertorial Link in de Funnel-sectie)
+async function fetchAdvertorial(url) {
+  const res = await axios.get(url, {
+    timeout: 20000,
+    maxContentLength: 5 * 1024 * 1024,
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; JJB-Operations/1.0)" },
+  });
+  let html = String(res.data || "");
+  html = html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<noscript[\s\S]*?<\/noscript>/gi, " ");
+  html = html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|h[1-6]|li|tr|section|article)>/gi, "\n");
+  let text = html.replace(/<[^>]+>/g, " ");
+  text = text
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;|&#8217;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+  text = text.replace(/[ \t]+/g, " ").replace(/\n[ \t]+/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  if (text.length < 400) throw new Error("Could not extract enough text from the Advertorial Link — is the page live and public?");
+  return text.slice(0, 120000);
+}
+
 async function getLaunchTask(taskId) {
   const launchStore = (await readData("launch-tasks")) || { tasks: [] };
   return { launchStore, task: launchStore.tasks.find((x) => x.id === taskId) || null };
@@ -973,8 +996,25 @@ async function runStep(store, step, taskId) {
     return;
   }
   if (step === "1") {
-    if (!store.advertorialText?.trim()) throw new Error("Paste the advertorial first");
-    const prompt = PROMPT_1.replace("[ADVERTORIAL]", store.advertorialText);
+    const { launchStore, task } = await getLaunchTask(taskId);
+    const link = (task?.advertorialLink || "").trim();
+    let adv = "";
+    if (link) {
+      adv = await fetchAdvertorial(link);
+      store.advertorialText = adv;
+      store.advertorialSource = link;
+    } else {
+      adv = (store.advertorialText || "").trim();
+    }
+    if (!adv) throw new Error("Fill in the Advertorial Link in the Funnel section first");
+    // Taak automatisch naar de kolom AI Translation
+    if (task && (task.status === "Task Start" || task.status === "Ready For Build")) {
+      task.status = "AI Translation";
+      task.activity = task.activity || [];
+      task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `changed status to "AI Translation" — Sales Page Copy pipeline started`, at: new Date().toISOString() });
+      await writeData("launch-tasks", launchStore);
+    }
+    const prompt = PROMPT_1.replace("[ADVERTORIAL]", adv);
     store.researchDoc = await callClaude({ prompt, webSearch: true, maxTokens: 8000 });
     store.researchJson = null; // nieuw onderzoek maakt oude JSON ongeldig
     return;
