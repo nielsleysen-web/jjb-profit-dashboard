@@ -1096,7 +1096,7 @@ async function kickQueue(req, taskId) {
   if (!host) return;
   const proto = String(host).startsWith("localhost") ? "http" : "https";
   await axios
-    .post(`${proto}://${host}/api/salescopy`, { action: "runQueue", taskId, internalKey: internalKey(taskId) }, { timeout: 5000 })
+    .post(`${proto}://${host}/api/salescopy`, { action: "runQueue", taskId, internalKey: internalKey(taskId) }, { timeout: 10000 })
     .catch((e) => console.error("kickQueue error:", e.message));
 }
 
