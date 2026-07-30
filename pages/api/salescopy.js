@@ -1018,10 +1018,9 @@ async function runStep(store, step, taskId) {
       await writeData("launch-tasks", launchStore);
     }
     const prompt = PROMPT_1.replace("[ADVERTORIAL]", adv);
-    // Poging 1: met webresearch. Werd die afgebroken (timeout), dan draait poging 2
-    // automatisch zonder webresearch - sneller, en alle JSON-velden komen uit de advertorial zelf.
-    const useSearch = (store.attempts?.["1"] || 0) <= 1;
-    store.researchDoc = await callClaude({ prompt, webSearch: useSearch, maxTokens: useSearch ? 6000 : 5000, timeoutMs: 240000 });
+    // Webresearch staat voorlopig uit: alle velden voor de JSON komen uit de advertorial zelf,
+    // en zonder zoekopdrachten past de stap gegarandeerd binnen de functietijd.
+    store.researchDoc = await callClaude({ prompt, webSearch: false, maxTokens: 5000, timeoutMs: 240000 });
     store.researchJson = null; // nieuw onderzoek maakt oude JSON ongeldig
     return;
   }
