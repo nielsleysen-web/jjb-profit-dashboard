@@ -1083,6 +1083,25 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
         })}
       </div>
 
+      {Object.values(store?.stepStatus || {}).some((v) => String(v).startsWith("error")) && (
+        <div style={{ fontSize: "12px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
+          <b>Step errors:</b>
+          {Object.entries(store.stepStatus)
+            .filter(([, v]) => String(v).startsWith("error"))
+            .map(([k, v]) => {
+              const label = (SC_PIPE.find(([pk]) => pk === k) || [k, k])[1];
+              return (
+                <div key={k} style={{ marginTop: "3px", wordBreak: "break-word" }}>
+                  {"•"} <b>{label}</b>: {String(v).replace(/^error:\s*/, "")}
+                  {canEdit && !running && (
+                    <a onClick={() => runOne(k)} style={{ marginLeft: "8px", fontWeight: 700, color: "#b91c1c", cursor: "pointer", textDecoration: "underline" }}>retry</a>
+                  )}
+                </div>
+              );
+            })}
+        </div>
+      )}
+
       {store?.violations && (
         store.violations.length === 0 ? (
           <div style={{ fontSize: "12px", fontWeight: 700, color: "#166534", background: "#dcfce7", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
