@@ -10,7 +10,7 @@
 import axios from "axios";
 import crypto from "crypto";
 
-export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: "4mb" } } };
+export const config = { maxDuration: 300, api: { bodyParser: { sizeLimit: "4mb" } } };
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
@@ -95,21 +95,21 @@ async function writeData(handle, value) {
 }
 
 /* ---------------- Anthropic ---------------- */
-async function callClaude({ prompt, webSearch = false, maxTokens = 4000 }) {
+async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeoutMs = 55000 }) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set in Vercel");
   const body = {
     model: MODEL,
     max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   };
-  if (webSearch) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }];
+  if (webSearch) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
   const response = await axios.post("https://api.anthropic.com/v1/messages", body, {
     headers: {
       "x-api-key": process.env.ANTHROPIC_API_KEY,
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    timeout: 55000,
+    timeout: timeoutMs,
   });
   const blocks = response.data?.content || [];
   return blocks
@@ -959,7 +959,7 @@ async function runStep(store, step, taskId) {
     const langName = LANGUAGES[task?.marketCountry || ""];
     if (!langName) throw new Error(`Set Market Country on the task first (${Object.keys(LANGUAGES).join(", ")}) — needed for the translation`);
     const prompt = translatePrompt(langName, task.marketCountry, flatCells(store));
-    const text = await callClaude({ prompt, maxTokens: 8000 });
+    const text = await callClaude({ prompt, maxTokens: 8000, timeoutMs: 240000 });
     const obj = parseJsonLoose(text);
     const clean = {};
     for (const row of SHEET_ROWS) {
@@ -1018,14 +1018,14 @@ async function runStep(store, step, taskId) {
       await writeData("launch-tasks", launchStore);
     }
     const prompt = PROMPT_1.replace("[ADVERTORIAL]", adv);
-    store.researchDoc = await callClaude({ prompt, webSearch: true, maxTokens: 8000 });
+    store.researchDoc = await callClaude({ prompt, webSearch: true, maxTokens: 6000, timeoutMs: 240000 });
     store.researchJson = null; // nieuw onderzoek maakt oude JSON ongeldig
     return;
   }
   if (step === "1b") {
     if (!store.researchDoc?.trim()) throw new Error("Run step 1 (research) first");
     const prompt = PROMPT_1B.replace("[RESEARCH DOCUMENT]", store.researchDoc);
-    const text = await callClaude({ prompt, maxTokens: 3000 });
+    const text = await callClaude({ prompt, maxTokens: 3000, timeoutMs: 120000 });
     store.researchJson = parseJsonLoose(text);
     return;
   }
@@ -1186,6 +1186,9 @@ export default async function handler(req, res) {
       }
       const step = pending[0];
       store.attempts[step] = (store.attempts[step] || 0) + 1;
+      store.stepStatus[step] = "error: step was interrupted (most likely a timeout) - press Resume to retry";
+      store.updatedAt = new Date().toISOString();
+      await writeData(handle, store);
       try {
         await runStep(store, step, taskId);
         store.stepStatus[step] = "done";
