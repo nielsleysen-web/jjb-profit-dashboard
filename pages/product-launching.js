@@ -1086,6 +1086,7 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
       {Object.values(store?.stepStatus || {}).some((v) => String(v).startsWith("error")) && (
         <div style={{ fontSize: "12px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
           <b>Step errors:</b>
+          <div style={{ fontSize: "11px", color: "#991b1b", marginTop: "2px", fontStyle: "italic" }}>Tip: press "Resume pipeline" — it restarts from the first missing step in the right order.</div>
           {Object.entries(store.stepStatus)
             .filter(([, v]) => String(v).startsWith("error"))
             .map(([k, v]) => {
