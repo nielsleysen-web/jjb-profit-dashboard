@@ -1158,6 +1158,115 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
   );
 }
 
+/* ---------- Deadline picker: kalender + tijdchips ---------- */
+function DeadlinePicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState(() => {
+    const d = value ? new Date(value) : new Date();
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const sel = value ? new Date(value) : null;
+  const today = new Date();
+  const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+  const openPicker = () => {
+    const d = value ? new Date(value) : new Date();
+    setView({ y: d.getFullYear(), m: d.getMonth() });
+    setOpen(true);
+  };
+  const shift = (n) => setView((v) => {
+    const d = new Date(v.y, v.m + n, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+  const pickDay = (d) => {
+    const h = sel ? sel.getHours() : 18;
+    const min = sel ? sel.getMinutes() : 0;
+    onChange(new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, min).toISOString());
+  };
+  const pickHour = (h) => {
+    const base = sel || new Date();
+    onChange(new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, 0).toISOString());
+  };
+
+  const first = new Date(view.y, view.m, 1);
+  const cells = [];
+  for (let i = 0; i < 42; i++) cells.push(new Date(view.y, view.m, 1 - first.getDay() + i));
+  const monthLabel = first.toLocaleString("en-GB", { month: "long", year: "numeric" });
+  const fmt = sel ? sel.toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+  const navBtn = { width: "28px", height: "28px", borderRadius: "8px", border: "1px solid #eceef2", background: "#ffffff", cursor: "pointer", fontSize: "12px", color: "#334155", display: "flex", alignItems: "center", justifyContent: "center" };
+
+  return (
+    <div style={{ position: "relative", marginTop: "4px" }}>
+      <button onClick={openPicker} style={{ width: "100%", display: "flex", alignItems: "center", gap: "8px", padding: "7px 10px", borderRadius: "8px", border: "1px solid #e5e8ee", background: "#ffffff", cursor: "pointer", fontSize: "13px", fontWeight: sel ? 700 : 400, color: sel ? "#0f172a" : "#94a3b8", textAlign: "left" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="3" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+        {fmt || "Set deadline\u2026"}
+      </button>
+
+      {open && (
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 80 }} onClick={() => setOpen(false)} />
+          <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, width: "292px", maxWidth: "88vw", background: "#ffffff", border: "1px solid #e5e8ee", borderRadius: "16px", boxShadow: "0 18px 44px rgba(15,23,42,0.20)", padding: "14px", zIndex: 90 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <button onClick={() => shift(-1)} style={navBtn}>{"\u2039"}</button>
+              <span style={{ fontSize: "13.5px", fontWeight: 700 }}>{monthLabel}</span>
+              <button onClick={() => shift(1)} style={navBtn}>{"\u203A"}</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px", marginBottom: "2px" }}>
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                <span key={d} style={{ textAlign: "center", fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", padding: "4px 0" }}>{d}</span>
+              ))}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px" }}>
+              {cells.map((d, i) => {
+                const inMonth = d.getMonth() === view.m;
+                const isSel = sameDay(d, sel);
+                const isToday = sameDay(d, today);
+                return (
+                  <button
+                    key={i}
+                    onClick={() => pickDay(d)}
+                    style={{
+                      height: "32px",
+                      borderRadius: "9px",
+                      border: isToday && !isSel ? "1px solid #bfdbfe" : "1px solid transparent",
+                      background: isSel ? "#3b82f6" : "transparent",
+                      color: isSel ? "#ffffff" : inMonth ? "#0f172a" : "#cbd5e1",
+                      fontSize: "12.5px",
+                      fontWeight: isSel ? 800 : 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {String(d.getDate()).padStart(2, "0")}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.6px", margin: "12px 0 6px 0" }}>Select Time</div>
+            <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
+              {Array.from({ length: 24 }, (_, h) => {
+                const isSel = sel && sel.getHours() === h && sel.getMinutes() === 0;
+                return (
+                  <button
+                    key={h}
+                    onClick={() => pickHour(h)}
+                    style={{ flexShrink: 0, padding: "7px 12px", borderRadius: "10px", border: isSel ? "1.5px solid #3b82f6" : "1px solid #e5e8ee", background: isSel ? "#eff6ff" : "#ffffff", color: isSel ? "#1d4ed8" : "#334155", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontVariantNumeric: "tabular-nums" }}
+                  >
+                    {String(h).padStart(2, "0")}:00
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px" }}>
+              <a onClick={() => { onChange(""); setOpen(false); }} style={{ fontSize: "11.5px", fontWeight: 700, color: "#94a3b8", cursor: "pointer" }}>Clear</a>
+              <button onClick={() => setOpen(false)} style={{ padding: "7px 18px", borderRadius: "9px", border: "none", background: "#0f172a", color: "#ffffff", fontSize: "12px", fontWeight: 700, cursor: "pointer" }}>Done</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTasks, openTaskById }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
@@ -1367,12 +1476,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
               <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "10px 14px" }}>
                 <div style={ui.label}>Deadline</div>
                 {canEdit ? (
-                  <input
-                    type="datetime-local"
-                    style={{ ...selectStyle, marginTop: "4px" }}
-                    value={isoToLocalInput(t.deadline)}
-                    onChange={(e) => save("deadline", localInputToIso(e.target.value))}
-                  />
+                  <DeadlinePicker value={t.deadline} onChange={(v) => save("deadline", v)} />
                 ) : (
                   <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "6px", color: deadlineColor(t.deadline, t.status) }}>
                     {t.deadline ? fmtDeadline(t.deadline) : "—"}{isOverdue(t.deadline, t.status) ? " ⚠" : ""}
