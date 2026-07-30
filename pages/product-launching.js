@@ -526,7 +526,7 @@ function StatusDropdown({ value, onChange, disabled }) {
         style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "6px 10px", borderRadius: "8px", border: "1px solid #e5e8ee", background: "#ffffff", cursor: "pointer" }}
       >
         {pill(value, meta)}
-        <span style={{ color: "#64748b", fontSize: "11px" }}>{"\u25BE"}</span>
+        <span style={{ color: "#64748b", fontSize: "11px" }}>{"▾"}</span>
       </button>
       {open && (
         <>
@@ -544,7 +544,7 @@ function StatusDropdown({ value, onChange, disabled }) {
                   style={{ display: "flex", alignItems: "center", gap: "10px", width: "100%", padding: "6px 8px", background: s === value ? "#f6f8fa" : "transparent", border: "none", borderRadius: "8px", cursor: "pointer", textAlign: "left" }}
                 >
                   {pill(s, m)}
-                  {s === value && <span style={{ marginLeft: "auto", color: "#64748b", fontSize: "12px" }}>{"\u2713"}</span>}
+                  {s === value && <span style={{ marginLeft: "auto", color: "#64748b", fontSize: "12px" }}>{"✓"}</span>}
                 </button>
               );
             })}
@@ -638,7 +638,7 @@ function ChatText({ text, openTask }) {
       const refTitle = mm[2] || "task";
       nodes.push(
         <a key={k++} onClick={() => openTask && openTask(refId)} style={{ color: "#4f46e5", background: "#eef2ff", padding: "1px 7px", borderRadius: "6px", fontWeight: 700, cursor: "pointer" }}>
-          {"\u29C9"} {refTitle}
+          {"⧉"} {refTitle}
         </a>
       );
     } else {
@@ -764,11 +764,11 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
           {mode === "tasks" &&
             taskSugs.map((o) => (
               <button key={o.id} onClick={() => replaceToken(`[task:${o.id}|${o.title}] `)} style={{ display: "block", width: "100%", padding: "7px 9px", background: "none", border: "none", borderRadius: "8px", cursor: "pointer", textAlign: "left", fontSize: "12.5px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {"\u29C9"} {o.title}
+                {"⧉"} {o.title}
               </button>
             ))}
           {mode === "tasks" && taskSugs.length === 0 && <div style={{ fontSize: "11.5px", color: "#94a3b8", padding: "6px 9px" }}>No other tasks on this board</div>}
-          <div style={{ fontSize: "10px", color: "#94a3b8", padding: "4px 9px 2px 9px" }}>@ people {"\u00B7"} @@ tasks</div>
+          <div style={{ fontSize: "10px", color: "#94a3b8", padding: "4px 9px 2px 9px" }}>@ people {"·"} @@ tasks</div>
         </div>
       )}
 
@@ -779,13 +779,13 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
               <div style={{ fontSize: "10px", fontWeight: 700, color: "#6366f1" }}>Replying to {replyTo.author}</div>
               <div style={{ fontSize: "11px", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{replyTo.text}</div>
             </div>
-            <a onClick={onCancelReply} style={{ cursor: "pointer", color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>{"\u2715"}</a>
+            <a onClick={onCancelReply} style={{ cursor: "pointer", color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>{"✕"}</a>
           </div>
         )}
         {editing && (
           <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#fffbeb", borderLeft: "3px solid #f59e0b", borderRadius: "6px", padding: "4px 9px", marginBottom: "7px" }}>
             <span style={{ flex: 1, fontSize: "11px", fontWeight: 700, color: "#b45309" }}>Editing message</span>
-            <a onClick={onCancelEdit} style={{ cursor: "pointer", color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>{"\u2715"}</a>
+            <a onClick={onCancelEdit} style={{ cursor: "pointer", color: "#94a3b8", fontSize: "13px", flexShrink: 0 }}>{"✕"}</a>
           </div>
         )}
 
@@ -793,7 +793,7 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
           <div style={{ padding: "13px 4px", textAlign: "center", fontSize: "12.5px", fontWeight: 700, color: "#1d4ed8" }}>Drop your file here</div>
         ) : recording ? (
           <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "4px 4px 8px 4px" }}>
-            <button title="Cancel recording" onClick={() => stopRecording(true)} style={{ width: "26px", height: "26px", borderRadius: "999px", background: "#f1f5f9", border: "none", cursor: "pointer", color: "#475569", fontSize: "12px", flexShrink: 0 }}>{"\u2715"}</button>
+            <button title="Cancel recording" onClick={() => stopRecording(true)} style={{ width: "26px", height: "26px", borderRadius: "999px", background: "#f1f5f9", border: "none", cursor: "pointer", color: "#475569", fontSize: "12px", flexShrink: 0 }}>{"✕"}</button>
             <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#0f172a", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{fmtRec(recTime)}</span>
             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "2px", height: "24px", overflow: "hidden", minWidth: 0 }}>
               {levels.map((lv, i) => (
@@ -832,7 +832,7 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
               </svg>
             )}
           </button>
-          {busy && <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "6px" }}>Uploading{"\u2026"}</span>}
+          {busy && <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "6px" }}>Uploading{"…"}</span>}
           <button title={recording ? "Stop & send" : editing ? "Save edit" : "Send"} onClick={() => (recording ? stopRecording(false) : onSend())} disabled={busy} style={{ marginLeft: "auto", width: "42px", height: "32px", borderRadius: "10px", background: "#0f172a", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, opacity: busy ? 0.55 : 1 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 2L11 13" />
@@ -842,6 +842,319 @@ function ChatComposer({ team, me, taskOptions, value, setValue, onSend, onFile, 
         </div>
       </div>
     </div>
+  );
+}
+
+/* ================= Sales Page Copy pipeline (Stefan's Brain) ================= */
+const SC_STEPS = [
+  ["2", "ATF Headline", null],
+  ["3", "Subheadline", null],
+  ["4", "Top 4 Benefits", null],
+  ["5", "Authority Headline", null],
+  ["6", "Authority Column", null],
+  ["7", "Headline Section 3", null],
+  ["8", "Subheadline Section 3", null],
+  ["9", "Column Section 3", null],
+  ["10", "3 Benefits Section 3", null],
+  ["11", "How To Use: Subheadline", null],
+  ["12", "How To Use: Step-By-Step", ["step1_headline", "step1_column", "step2_headline", "step2_column", "step3_headline", "step3_column"]],
+  ["13", "Section 5: Headline", null],
+  ["14", "Section 5: Subheadline", null],
+  ["15", "Section 5: Benefits", ["benefit_1", "benefit_column_1", "benefit_2", "benefit_column_2", "benefit_3", "benefit_column_3", "benefit_4", "benefit_column_4"]],
+  ["16", "Section 6: Ingredients", ["ingredient_1", "ingredient_effect_1", "ingredient_2", "ingredient_effect_2", "ingredient_3", "ingredient_effect_3", "ingredient_4", "ingredient_effect_4", "ingredient_5", "ingredient_effect_5", "ingredient_6", "ingredient_effect_6"]],
+  ["17", "Reviews", ["name_review_1", "text_review_1", "date_review_1", "name_review_2", "text_review_2", "date_review_2", "name_review_3", "text_review_3", "date_review_3"]],
+  ["18", "Offer Section: Headline", null],
+  ["19", "Offer Section: Full Column Text", ["headline", "subheadline", "subheadline_3_benefits", "benefit_1", "benefit_2", "benefit_3"]],
+  ["20", "FAQ Section", ["question_1", "answer_1", "question_2", "answer_2", "question_3", "answer_3", "question_4", "answer_4", "question_5", "answer_5", "question_6", "answer_6", "question_7", "answer_7"]],
+];
+const SC_ROWS = [];
+for (const [k, label, fields] of SC_STEPS) {
+  if (!fields) SC_ROWS.push({ category: label, step: k, field: null });
+  else for (const f of fields) SC_ROWS.push({ category: `${label} — ${f.replace(/_/g, " ")}`, step: k, field: f });
+}
+const SC_PIPE = [["1", "Research"], ["1b", "Extract JSON"], ...SC_STEPS.map(([k, l]) => [k, l]), ["validate", "Validate"], ["translate", "Translate"], ["finalize", "Deliver CSV"]];
+const SC_LANGS = { Italy: "Italian", France: "French", Israel: "Hebrew" };
+
+function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
+  const [store, setStore] = useState(null);
+  const [advText, setAdvText] = useState("");
+  const [running, setRunning] = useState(false);
+  const [activeStep, setActiveStep] = useState(null);
+  const [showDoc, setShowDoc] = useState(false);
+  const storeRef = useRef(null);
+  const stopRef = useRef(false);
+
+  useEffect(() => {
+    fetch(`/api/salescopy?taskId=${t.id}`)
+      .then((r) => r.json())
+      .then((res) => {
+        if (res.success) {
+          setStore(res.store);
+          storeRef.current = res.store;
+          setAdvText(res.store.advertorialText || "");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      stopRef.current = true;
+    };
+  }, [t.id]);
+
+  const api = async (body) => {
+    const res = await fetch("/api/salescopy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId: t.id, ...body }),
+    }).then((r) => r.json());
+    if (res.store) {
+      storeRef.current = res.store;
+      setStore(res.store);
+    }
+    return res;
+  };
+
+  const saveAdv = async () => {
+    if (advText === (storeRef.current?.advertorialText || "")) return;
+    await api({ action: "saveAdvertorial", text: advText });
+  };
+
+  const runOne = async (step) => {
+    setActiveStep(step);
+    const res = await api({ action: "runStep", step });
+    setActiveStep(null);
+    return res.success;
+  };
+
+  const pendingSteps = () => {
+    const st = storeRef.current || {};
+    const seq = [];
+    if (!st.researchDoc) seq.push("1");
+    if (!st.researchJson) seq.push("1b");
+    for (const [k] of SC_STEPS) if (!st.outputs?.[k]) seq.push(k);
+    seq.push("validate");
+    if (!st.translated) seq.push("translate");
+    if (!st.csvUrl) seq.push("finalize");
+    return seq;
+  };
+
+  const runPipeline = async () => {
+    if (running) return;
+    if (!(advText || "").trim()) {
+      alert("Paste the Dutch advertorial first — step 1 needs it.");
+      return;
+    }
+    setRunning(true);
+    stopRef.current = false;
+    try {
+      await saveAdv();
+      for (const step of pendingSteps()) {
+        if (stopRef.current) break;
+        const ok = await runOne(step);
+        if (!ok && (step === "1" || step === "1b")) break; // zonder research/JSON kan niets verder
+      }
+    } finally {
+      setRunning(false);
+      setActiveStep(null);
+      if (storeRef.current?.csvUrl) post({ action: "refresh" });
+    }
+  };
+
+  const stepState = (k) => {
+    const st = store || {};
+    if (activeStep === k) return "running";
+    if (k === "1") return st.researchDoc ? "done" : st.stepStatus?.["1"]?.startsWith("error") ? "error" : "todo";
+    if (k === "1b") return st.researchJson ? "done" : st.stepStatus?.["1b"]?.startsWith("error") ? "error" : "todo";
+    if (k === "validate") return st.violations ? "done" : "todo";
+    if (k === "translate") return st.translated ? "done" : st.stepStatus?.["translate"]?.startsWith("error") ? "error" : "todo";
+    if (k === "finalize") return st.csvUrl ? "done" : st.stepStatus?.["finalize"]?.startsWith("error") ? "error" : "todo";
+    if (st.outputs?.[k]) return "done";
+    if (st.stepStatus?.[k]?.startsWith("error")) return "error";
+    return "todo";
+  };
+  const chipStyle = (state) => ({
+    fontSize: "10px",
+    fontWeight: 700,
+    padding: "3px 8px",
+    borderRadius: "999px",
+    cursor: state === "error" && canEdit ? "pointer" : "default",
+    background: state === "done" ? "#dcfce7" : state === "running" ? "#dbeafe" : state === "error" ? "#fee2e2" : "#f1f5f9",
+    color: state === "done" ? "#166534" : state === "running" ? "#1d4ed8" : state === "error" ? "#dc2626" : "#94a3b8",
+  });
+
+  const cellValue = (row) => {
+    const out = store?.outputs || {};
+    return row.field ? out[row.step]?.[row.field] || "" : out[row.step] || "";
+  };
+  const hasOutputs = store && Object.keys(store.outputs || {}).length > 0;
+  const doneCount = SC_PIPE.filter(([k]) => stepState(k) === "done").length;
+
+  const downloadCsv = () => {
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const langName = store?.translatedLanguage || SC_LANGS[t.marketCountry] || "Translation";
+    const lines = [["Category", "English", langName].map(esc).join(",")];
+    for (const row of SC_ROWS) {
+      const key = row.field ? `${row.step}.${row.field}` : row.step;
+      lines.push([row.category, cellValue(row), store?.translated?.[key] || ""].map(esc).join(","));
+    }
+    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${csvName} - sales page copy.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const copyCell = (v) => navigator.clipboard?.writeText(v);
+
+  return (
+    <Section title="🧠 Sales Page Copy (Stefan's Brain)">
+      <Field label="Ready for AI Translation">
+        {canEdit ? (
+          <select
+            value={t.readyForAI || "NO"}
+            onChange={(e) => {
+              save("readyForAI", e.target.value);
+              if (e.target.value === "YES") {
+                if (t.status === "Task Start" || t.status === "Ready For Build") post({ action: "status", taskId: t.id, status: "AI Translation" });
+                runPipeline();
+              }
+            }}
+            style={selectStyle}
+          >
+            <option>NO</option>
+            <option>YES</option>
+          </select>
+        ) : (
+          <span style={{ fontSize: "13px" }}>{t.readyForAI || "NO"}</span>
+        )}
+      </Field>
+
+      <div style={{ padding: "10px 0 2px 0" }}>
+        <div style={{ ...ui.label, marginBottom: "6px" }}>Advertorial (Dutch — input for step 1)</div>
+        <textarea
+          value={advText}
+          onChange={(e) => setAdvText(e.target.value)}
+          onBlur={saveAdv}
+          disabled={!canEdit}
+          placeholder="Paste the full Dutch advertorial here…"
+          style={{ ...ui.input, width: "100%", minHeight: "110px", resize: "vertical", fontFamily: "inherit", fontSize: "12.5px", boxSizing: "border-box" }}
+        />
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", margin: "10px 0" }}>
+        {canEdit && (
+          <button onClick={runPipeline} disabled={running} style={{ ...btnPrimary, padding: "8px 16px", fontSize: "12px", opacity: running ? 0.6 : 1 }}>
+            {running ? `Running… (${doneCount}/${SC_PIPE.length})` : hasOutputs ? "▶ Resume / rerun missing steps" : "▶ Generate Sales Page Copy"}
+          </button>
+        )}
+        {running && (
+          <button onClick={() => { stopRef.current = true; }} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px" }}>Stop</button>
+        )}
+        {store?.csvUrl && (
+          <a href={store.csvUrl} target="_blank" rel="noreferrer" style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px", textDecoration: "none", color: "#166534", borderColor: "#bbf7d0", background: "#f0fdf4", fontWeight: 700 }}>
+            📄 {store.csvName || "sales-page-copy.csv"}
+          </a>
+        )}
+        {hasOutputs && (
+          <button onClick={downloadCsv} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px" }}>⬇ Download CSV</button>
+        )}
+        {canEdit && hasOutputs && !running && (
+          <button
+            onClick={async () => {
+              if (confirm("Clear all pipeline outputs? The advertorial text stays.")) await api({ action: "reset" });
+            }}
+            style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px", color: "#dc2626", borderColor: "#fecaca" }}
+          >
+            Reset
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "10px" }}>
+        {SC_PIPE.map(([k, label]) => {
+          const state = stepState(k);
+          return (
+            <span
+              key={k}
+              title={state === "error" ? `${store?.stepStatus?.[k] || "error"} — click to retry` : label}
+              onClick={() => state === "error" && canEdit && !running && runOne(k)}
+              style={chipStyle(state)}
+            >
+              {state === "running" ? "⏳ " : state === "done" ? "✓ " : state === "error" ? "✕ " : ""}{label}
+            </span>
+          );
+        })}
+      </div>
+
+      {store?.violations && (
+        store.violations.length === 0 ? (
+          <div style={{ fontSize: "12px", fontWeight: 700, color: "#166534", background: "#dcfce7", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
+            ✓ All validator checks passed
+          </div>
+        ) : (
+          <div style={{ fontSize: "12px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
+            <b>Validator — {store.violations.length} issue(s):</b>
+            {store.violations.map((x, i) => (
+              <div key={i} style={{ marginTop: "3px" }}>• {x}</div>
+            ))}
+          </div>
+        )
+      )}
+
+      {canEdit && !running && (
+        <div style={{ marginBottom: "10px" }}>
+          <a
+            onClick={async () => {
+              const txt = prompt("Paste the research JSON (e.g. a test fixture). This skips steps 1 and 1B:");
+              if (!txt) return;
+              const res = await api({ action: "saveJson", text: txt });
+              if (!res.success) alert(res.error || "Invalid JSON");
+            }}
+            style={{ fontSize: "11px", fontWeight: 600, color: "#94a3b8", cursor: "pointer" }}
+          >
+            Paste research JSON manually (testing)
+          </a>
+        </div>
+      )}
+
+      {store?.researchDoc && (
+        <div style={{ marginBottom: "10px" }}>
+          <a onClick={() => setShowDoc(!showDoc)} style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}>
+            {showDoc ? "▾ Hide" : "▸ View"} research document & JSON
+          </a>
+          {showDoc && (
+            <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px", marginTop: "6px" }}>
+              <pre style={{ margin: 0, fontSize: "11px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "220px", overflowY: "auto" }}>{store.researchDoc}</pre>
+              {store.researchJson && (
+                <pre style={{ margin: "10px 0 0 0", fontSize: "10.5px", whiteSpace: "pre-wrap", fontFamily: "ui-monospace, monospace", maxHeight: "180px", overflowY: "auto", borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>{JSON.stringify(store.researchJson, null, 2)}</pre>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasOutputs && (
+        <div style={{ border: "1px solid #eceef2", borderRadius: "10px", overflow: "hidden" }}>
+          {SC_ROWS.map((row, i) => {
+            const v = cellValue(row);
+            return (
+              <div key={i} style={{ display: "flex", gap: "10px", padding: "7px 12px", background: i % 2 ? "#fafbfc" : "#ffffff", borderTop: i ? "1px solid #f1f5f9" : "none", alignItems: "flex-start" }}>
+                <div style={{ width: "220px", flexShrink: 0, fontSize: "11px", fontWeight: 700, color: "#64748b" }}>{row.category}</div>
+                <div style={{ flex: 1, fontSize: "12px", whiteSpace: "pre-wrap", minWidth: 0, color: v ? "#0f172a" : "#cbd5e1" }}>
+                  {v || "—"}
+                  {store?.translated?.[row.field ? `${row.step}.${row.field}` : row.step] && (
+                    <div style={{ color: "#64748b", marginTop: "3px", fontStyle: "italic" }}>{store.translated[row.field ? `${row.step}.${row.field}` : row.step]}</div>
+                  )}
+                </div>
+                {v && (
+                  <a onClick={() => copyCell(v)} title="Copy" style={{ fontSize: "11px", fontWeight: 700, color: "#3b82f6", cursor: "pointer", flexShrink: 0 }}>Copy</a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -1181,38 +1494,8 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
               )}
             </Section>
 
-            {/* ===== Sectie: AI Translation ===== */}
-            <Section title="🤖 AI Translation">
-              <Field label="Ready for AI Translation" last>
-                {canEdit ? (
-                  <select value={t.readyForAI || "NO"} onChange={(e) => save("readyForAI", e.target.value)} style={selectStyle}>
-                    <option>NO</option>
-                    <option>YES</option>
-                  </select>
-                ) : (
-                  <span style={{ fontSize: "13px" }}>{t.readyForAI || "NO"}</span>
-                )}
-              </Field>
-              <div style={{ padding: "10px 0 2px 0" }}>
-                <div style={{ ...ui.label, marginBottom: "6px" }}>Sales Page Copy</div>
-                {t.aiCopy ? (
-                  <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
-                    <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.aiCopy}</pre>
-                    <a
-                      href={`data:text/plain;charset=utf-8,${encodeURIComponent(t.aiCopy)}`}
-                      download={`${naming || t.productName}.txt`}
-                      style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}
-                    >
-                      ⬇ Download .txt
-                    </a>
-                  </div>
-                ) : (
-                  <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
-                    The AI-generated sales page copy will appear here once the ChatGPT automation is connected (phase 2).
-                  </p>
-                )}
-              </div>
-            </Section>
+            {/* ===== Sectie: Sales Page Copy pipeline ===== */}
+            <SalesCopyPanel t={t} canEdit={canEdit} save={save} selectStyle={selectStyle} csvName={naming || t.productName || "sales-copy"} post={post} />
 
             {/* ===== Sectie: First Creative Batch (helemaal onderaan) ===== */}
             <Section title="🎨 First Creative Batch">
