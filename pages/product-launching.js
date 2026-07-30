@@ -877,7 +877,6 @@ const SC_LANGS = { Italy: "Italian", France: "French", Israel: "Hebrew" };
 
 function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
   const [store, setStore] = useState(null);
-  const [advText, setAdvText] = useState("");
   const [running, setRunning] = useState(false);
   const [activeStep, setActiveStep] = useState(null);
   const [showDoc, setShowDoc] = useState(false);
@@ -891,7 +890,6 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
         if (res.success) {
           setStore(res.store);
           storeRef.current = res.store;
-          setAdvText(res.store.advertorialText || "");
         }
       })
       .catch(() => {});
@@ -911,11 +909,6 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
       setStore(res.store);
     }
     return res;
-  };
-
-  const saveAdv = async () => {
-    if (advText === (storeRef.current?.advertorialText || "")) return;
-    await api({ action: "saveAdvertorial", text: advText });
   };
 
   const runOne = async (step) => {
@@ -939,14 +932,13 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
 
   const runPipeline = async () => {
     if (running) return;
-    if (!(advText || "").trim()) {
-      alert("Paste the Dutch advertorial first — step 1 needs it.");
+    if (!(t.advertorialLink || "").trim() && !(storeRef.current?.advertorialText || "").trim()) {
+      alert("Fill in the Advertorial Link in the Funnel section first — step 1 fetches the advertorial from that page.");
       return;
     }
     setRunning(true);
     stopRef.current = false;
     try {
-      await saveAdv();
       for (const step of pendingSteps()) {
         if (stopRef.current) break;
         const ok = await runOne(step);
@@ -955,7 +947,7 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
     } finally {
       setRunning(false);
       setActiveStep(null);
-      if (storeRef.current?.csvUrl) post({ action: "refresh" });
+      post({ action: "refresh" });
     }
   };
 
@@ -1007,17 +999,14 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
   const copyCell = (v) => navigator.clipboard?.writeText(v);
 
   return (
-    <Section title="🧠 Sales Page Copy (Stefan's Brain)">
-      <Field label="Ready for AI Translation">
+    <Section title="🧠 Sales Page Copy">
+      <Field label="Ready for AI">
         {canEdit ? (
           <select
             value={t.readyForAI || "NO"}
             onChange={(e) => {
               save("readyForAI", e.target.value);
-              if (e.target.value === "YES") {
-                if (t.status === "Task Start" || t.status === "Ready For Build") post({ action: "status", taskId: t.id, status: "AI Translation" });
-                runPipeline();
-              }
+              if (e.target.value === "YES") runPipeline();
             }}
             style={selectStyle}
           >
@@ -1031,14 +1020,17 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
 
       <div style={{ padding: "10px 0 2px 0" }}>
         <div style={{ ...ui.label, marginBottom: "6px" }}>Advertorial (Dutch — input for step 1)</div>
-        <textarea
-          value={advText}
-          onChange={(e) => setAdvText(e.target.value)}
-          onBlur={saveAdv}
-          disabled={!canEdit}
-          placeholder="Paste the full Dutch advertorial here…"
-          style={{ ...ui.input, width: "100%", minHeight: "110px", resize: "vertical", fontFamily: "inherit", fontSize: "12.5px", boxSizing: "border-box" }}
-        />
+        {t.advertorialLink ? (
+          <div style={{ fontSize: "12.5px", color: "#166534", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", padding: "9px 12px" }}>
+            ✓ Fetched automatically from the{" "}
+            <a href={t.advertorialLink} target="_blank" rel="noreferrer" style={{ color: "#166534", fontWeight: 700 }}>Advertorial Link</a>{" "}
+            in the Funnel section.
+          </div>
+        ) : (
+          <div style={{ fontSize: "12.5px", color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "10px", padding: "9px 12px" }}>
+            ⚠ Fill in the Advertorial Link in the Funnel section first — the pipeline reads the advertorial from that page.
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", margin: "10px 0" }}>
@@ -1124,6 +1116,12 @@ function SalesCopyPanel({ t, canEdit, save, selectStyle, csvName, post }) {
           </a>
           {showDoc && (
             <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px", marginTop: "6px" }}>
+              {store.advertorialText && (
+                <details style={{ marginBottom: "10px" }}>
+                  <summary style={{ fontSize: "11.5px", fontWeight: 700, color: "#64748b", cursor: "pointer" }}>Fetched advertorial text</summary>
+                  <pre style={{ margin: "6px 0 0 0", fontSize: "11px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "180px", overflowY: "auto" }}>{store.advertorialText}</pre>
+                </details>
+              )}
               <pre style={{ margin: 0, fontSize: "11px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "220px", overflowY: "auto" }}>{store.researchDoc}</pre>
               {store.researchJson && (
                 <pre style={{ margin: "10px 0 0 0", fontSize: "10.5px", whiteSpace: "pre-wrap", fontFamily: "ui-monospace, monospace", maxHeight: "180px", overflowY: "auto", borderTop: "1px solid #e2e8f0", paddingTop: "10px" }}>{JSON.stringify(store.researchJson, null, 2)}</pre>
