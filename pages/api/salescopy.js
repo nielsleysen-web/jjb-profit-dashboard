@@ -112,11 +112,15 @@ async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeout
     timeout: timeoutMs,
   });
   const blocks = response.data?.content || [];
-  return blocks
+  const text = blocks
     .filter((b) => b.type === "text")
     .map((b) => b.text)
     .join("\n")
     .trim();
+  if (response.data?.stop_reason === "max_tokens") {
+    throw new Error("Output hit the token limit and was cut off — retry gives it more room");
+  }
+  return text;
 }
 
 const uidLog = () => crypto.randomBytes(8).toString("hex");
@@ -263,6 +267,8 @@ First I want you to analyze this advertorial and I want you to get all the answe
 - What is the logical dosage per application for this product form?
 - Which sensory confirmation can the user establish within seconds that proves they applied it correctly?
 ${LANGUAGE_NOTE}
+
+FORMAT: write the research document in compact bullet points. Be complete on content but economical with words — no decorative tables, no repeated section summaries. The document MUST answer EVERY question above, all the way to the last one about the sensory confirmation. Never stop early; the later questions (alternatives, authority figure, usage details) are the most important ones for the next step.
 
 THE ADVERTORIAL:
 [ADVERTORIAL]`;
@@ -959,7 +965,7 @@ async function runStep(store, step, taskId) {
     const langName = LANGUAGES[task?.marketCountry || ""];
     if (!langName) throw new Error(`Set Market Country on the task first (${Object.keys(LANGUAGES).join(", ")}) — needed for the translation`);
     const prompt = translatePrompt(langName, task.marketCountry, flatCells(store));
-    const text = await callClaude({ prompt, maxTokens: 8000, timeoutMs: 240000 });
+    const text = await callClaude({ prompt, maxTokens: 12000, timeoutMs: 280000 });
     const obj = parseJsonLoose(text);
     const clean = {};
     for (const row of SHEET_ROWS) {
@@ -1020,7 +1026,7 @@ async function runStep(store, step, taskId) {
     const prompt = PROMPT_1.replace("[ADVERTORIAL]", adv);
     // Webresearch staat voorlopig uit: alle velden voor de JSON komen uit de advertorial zelf,
     // en zonder zoekopdrachten past de stap gegarandeerd binnen de functietijd.
-    store.researchDoc = await callClaude({ prompt, webSearch: false, maxTokens: 5000, timeoutMs: 240000 });
+    store.researchDoc = await callClaude({ prompt, webSearch: false, maxTokens: 12000, timeoutMs: 280000 });
     store.researchJson = null; // nieuw onderzoek maakt oude JSON ongeldig
     return;
   }
