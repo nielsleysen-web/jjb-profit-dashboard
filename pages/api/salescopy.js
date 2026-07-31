@@ -929,6 +929,107 @@ function flatCells(store) {
   return flat;
 }
 
+/* ---------------- Minimale XLSX-schrijver (geen dependencies) ---------------- */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function zipStore(entries) {
+  // entries: [{ name, data: Buffer }] — ZIP zonder compressie (store)
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const e of entries) {
+    const name = Buffer.from(e.name, "utf8");
+    const crc = crc32(e.data);
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0);
+    lh.writeUInt16LE(20, 4);
+    lh.writeUInt16LE(0, 6);
+    lh.writeUInt16LE(0, 8);
+    lh.writeUInt16LE(0, 10);
+    lh.writeUInt16LE(0, 12);
+    lh.writeUInt32LE(crc, 14);
+    lh.writeUInt32LE(e.data.length, 18);
+    lh.writeUInt32LE(e.data.length, 22);
+    lh.writeUInt16LE(name.length, 26);
+    lh.writeUInt16LE(0, 28);
+    locals.push(lh, name, e.data);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0);
+    ch.writeUInt16LE(20, 4);
+    ch.writeUInt16LE(20, 6);
+    ch.writeUInt16LE(0, 8);
+    ch.writeUInt16LE(0, 10);
+    ch.writeUInt16LE(0, 12);
+    ch.writeUInt16LE(0, 14);
+    ch.writeUInt32LE(crc, 16);
+    ch.writeUInt32LE(e.data.length, 20);
+    ch.writeUInt32LE(e.data.length, 24);
+    ch.writeUInt16LE(name.length, 28);
+    ch.writeUInt16LE(0, 30);
+    ch.writeUInt16LE(0, 32);
+    ch.writeUInt16LE(0, 34);
+    ch.writeUInt16LE(0, 36);
+    ch.writeUInt32LE(0, 38);
+    ch.writeUInt32LE(offset, 42);
+    centrals.push(ch, name);
+    offset += 30 + name.length + e.data.length;
+  }
+  const centralBuf = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralBuf.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(0, 20);
+  return Buffer.concat([...locals, centralBuf, eocd]);
+}
+const xmlEsc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function colRef(i) {
+  let r = "";
+  i++;
+  while (i > 0) {
+    const m = (i - 1) % 26;
+    r = String.fromCharCode(65 + m) + r;
+    i = Math.floor((i - 1) / 26);
+  }
+  return r;
+}
+function sheetXml(rows) {
+  const body = rows
+    .map((row, ri) => `<row r="${ri + 1}">` + row.map((c, ci) => `<c r="${colRef(ci)}${ri + 1}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(c)}</t></is></c>`).join("") + `</row>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="38" customWidth="1"/><col min="2" max="3" width="70" customWidth="1"/></cols><sheetData>${body}</sheetData></worksheet>`;
+}
+function buildXlsx(sheets) {
+  // sheets: [{ name, rows: [[cel, ...], ...] }]
+  const sheetTags = sheets.map((sh, i) => `<sheet name="${xmlEsc(sh.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("");
+  const relTags = sheets.map((sh, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("");
+  const ctOverrides = sheets.map((sh, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("");
+  const entries = [
+    { name: "[Content_Types].xml", data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${ctOverrides}</Types>`) },
+    { name: "_rels/.rels", data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`) },
+    { name: "xl/workbook.xml", data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetTags}</sheets></workbook>`) },
+    { name: "xl/_rels/workbook.xml.rels", data: Buffer.from(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relTags}</Relationships>`) },
+  ];
+  sheets.forEach((sh, i) => entries.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: Buffer.from(sheetXml(sh.rows)) }));
+  return zipStore(entries);
+}
+
 function buildCsv(store, langName) {
   const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const flat = flatCells(store);
@@ -1064,10 +1165,21 @@ async function runStep(store, step, taskId) {
     if (!store.translated) throw new Error("Run the translation first");
     const { launchStore, task } = await getLaunchTask(taskId);
     const langName = store.translatedLanguage || "Translation";
-    const csv = buildCsv(store, langName);
+    const flat = flatCells(store);
+    const mainRows = [["Category", "English", langName]];
+    const imageRows = [["Category", "English", langName]];
+    for (const row of SHEET_ROWS) {
+      const key = row.field ? `${row.step}.${row.field}` : row.step;
+      const target = String(row.step).startsWith("img_") ? imageRows : mainRows;
+      target.push([row.category, flat[key], store.translated?.[key] || ""]);
+    }
+    const xlsxBuf = buildXlsx([
+      { name: "Sales Page Copy", rows: mainRows },
+      { name: "Image Copy", rows: imageRows },
+    ]);
     const safeProduct = String(task?.productName || "product").replace(/[^\w.\-]+/g, "_").slice(0, 60);
-    const filename = `${safeProduct}-sales-page-copy.csv`;
-    store.csvUrl = await uploadBufferToShopify(Buffer.from(csv, "utf8"), filename, "text/csv");
+    const filename = `${safeProduct}-sales-page-copy.xlsx`;
+    store.csvUrl = await uploadBufferToShopify(xlsxBuf, filename, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     store.csvName = filename;
     // Taak automatisch door naar Ready For Build + notificatie voor de funnel builder
     if (task) {
