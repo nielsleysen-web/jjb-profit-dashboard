@@ -97,12 +97,16 @@ async function writeData(handle, value) {
 }
 
 /* ---------------- Anthropic ---------------- */
-async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeoutMs = 55000 }) {
+async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeoutMs = 55000, image = null }) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set in Vercel");
+  // Met afbeelding (stap 1C): content wordt een array van [image, text]
+  const content = image
+    ? [{ type: "image", source: { type: "base64", media_type: image.media_type, data: image.data } }, { type: "text", text: prompt }]
+    : prompt;
   const body = {
     model: MODEL,
     max_tokens: maxTokens,
-    messages: [{ role: "user", content: prompt }],
+    messages: [{ role: "user", content }],
   };
   if (webSearch) body.tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }];
   let response;
@@ -315,6 +319,52 @@ RESEARCH DOCUMENT:
 
 RETURN THIS STRUCTURE:
 ${JSON_SCHEMA}`;
+
+// Step 1C — Product Vision: leest de packshot-foto en vult product.visual_description + product.size_reference
+const PROMPT_1C = `A photograph of the product is attached in this chat. It shows the packaging, the product itself, or both. Read it from the attachment.
+
+Your only task is to describe the physical product and return the JSON structure below. You do not describe the packaging design, you do not write marketing copy, you do not add anything else.
+
+RULES
+
+- Fill in both fields. Never leave a field empty.
+- Describe only what the product looks like in use, on or in the body — never the box, the label, the logo or the brand colours.
+- If the photo shows only a closed box, infer the product from the product type and the imagery printed on the box, combined with the standard appearance of this product type.
+- Every value is in English.
+- Return only valid JSON. No markdown, no code fences, no explanation, no text before or after.
+
+FIELD 1 — visual_description
+
+One sentence describing the product as it physically appears when used. It must contain, in this order: colour, shape, material, surface finish and texture.
+
+State the colour plainly and exactly as seen. If the product is white, say white — never cream, off-white or ivory unless it truly is.
+
+Example for a patch: "a plain white square adhesive patch with rounded corners, thin flexible non-woven fabric, soft matte finish with a subtle woven texture"
+
+Example for drops: "a clear colourless liquid applied with a glass pipette dropper"
+
+Example for a cream: "a thick opaque white cream applied as a thin layer from a tube"
+
+FIELD 2 — size_reference
+
+The real size of the product, always expressed relative to a body part that would be visible in a photo — a hand, a finger, a palm, a thumb.
+
+Derive the size from any printed volume, count or dimension visible on the packaging (30 ml, 60 g, 30 pcs, 5 cm), combined with the standard dimensions of this product type. Never give a measurement on its own without the body-part comparison.
+
+Always end with a negative against oversizing: "smaller than a palm", "no longer than a thumb".
+
+Example for a patch: "about 5 cm across, roughly the width of three fingers, smaller than a palm"
+
+Example for a dropper bottle: "a standard 30 ml dropper bottle, about the length of a thumb, smaller than a palm"
+
+Example for a cream: "a coin-sized amount of cream on the fingertips"
+
+RETURN THIS STRUCTURE:
+
+{
+  "visual_description": "",
+  "size_reference": ""
+}`;
 
 // Steps 2-20. Each receives ONLY the research JSON (appended by the runner).
 // multi: ordered field keys for JSON output; null = plain text output.
@@ -920,7 +970,7 @@ function validate(store) {
 
 /* ================= RUNNER ================= */
 function emptyStore() {
-  return { advertorialText: "", researchDoc: "", researchJson: null, outputs: {}, stepStatus: {}, violations: null, translated: null, translatedLanguage: "", csvUrl: "", csvName: "", queueActive: false, attempts: {}, queueRuns: 0, updatedAt: null };
+  return { advertorialText: "", researchDoc: "", researchJson: null, visionJson: null, outputs: {}, stepStatus: {}, violations: null, translated: null, translatedLanguage: "", csvUrl: "", csvName: "", queueActive: false, attempts: {}, queueRuns: 0, updatedAt: null };
 }
 
 // Alle cellen als platte map: "step" of "step.field" → tekst
@@ -1143,6 +1193,22 @@ async function fetchAdvertorial(url) {
   return text.slice(0, 120000);
 }
 
+// Packshot ophalen als base64 voor de vision-stap (max ~4,5 MB — de API-limiet is 5 MB)
+async function fetchPackshot(url) {
+  let src = url;
+  // Shopify CDN kan zelf verkleinen — scheelt tokens en blijft onder de limiet
+  if (/cdn\.shopify\.com/.test(src) && !/[?&]width=/.test(src)) {
+    src += (src.includes("?") ? "&" : "?") + "width=1600";
+  }
+  const r = await axios.get(src, { responseType: "arraybuffer", timeout: 25000, maxRedirects: 5 });
+  const buf = Buffer.from(r.data);
+  if (buf.length > 4.5 * 1024 * 1024) throw new Error("Packshot is larger than 4.5 MB — upload a smaller image");
+  const ct = String(r.headers["content-type"] || "").split(";")[0].trim();
+  const byExt = /\.png(\?|$)/i.test(url) ? "image/png" : /\.webp(\?|$)/i.test(url) ? "image/webp" : /\.gif(\?|$)/i.test(url) ? "image/gif" : "image/jpeg";
+  const media = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(ct) ? ct : byExt;
+  return { media_type: media, data: buf.toString("base64") };
+}
+
 async function getLaunchTask(taskId) {
   const launchStore = (await readData("launch-tasks")) || { tasks: [] };
   return { launchStore, task: launchStore.tasks.find((x) => x.id === taskId) || null };
@@ -1230,6 +1296,29 @@ async function runStep(store, step, taskId) {
     store.researchJson = null; // nieuw onderzoek maakt oude JSON ongeldig
     return;
   }
+  if (step === "1c") {
+    // Product Vision: packshot-foto → product.visual_description + product.size_reference (merge in de research JSON)
+    const { task } = await getLaunchTask(taskId);
+    const url = (task?.productPackshot || "").trim();
+    if (!url) {
+      // Geen packshot op de taak: stap netjes overslaan, de waarden uit de research blijven staan
+      store.visionJson = { skipped: true };
+      return;
+    }
+    const image = await fetchPackshot(url);
+    const text = await callClaude({ prompt: PROMPT_1C, image, maxTokens: 1000, timeoutMs: 120000 });
+    const obj = parseJsonLoose(text);
+    store.visionJson = {
+      visual_description: String(obj.visual_description || "").trim(),
+      size_reference: String(obj.size_reference || "").trim(),
+    };
+    if (store.researchJson) {
+      store.researchJson.product = store.researchJson.product || {};
+      if (store.visionJson.visual_description) store.researchJson.product.visual_description = store.visionJson.visual_description;
+      if (store.visionJson.size_reference) store.researchJson.product.size_reference = store.visionJson.size_reference;
+    }
+    return;
+  }
   if (step === "1b") {
     if (!store.researchDoc?.trim()) {
       // Research ontbreekt nog: draai die eerst, daarna alsnog de extractie
@@ -1239,6 +1328,12 @@ async function runStep(store, step, taskId) {
     const prompt = PROMPT_1B.replace("[RESEARCH DOCUMENT]", store.researchDoc);
     const text = await callClaude({ prompt, maxTokens: 8000, timeoutMs: 180000 });
     store.researchJson = parseJsonLoose(text);
+    // Vision-resultaat (1C) van een eerdere run opnieuw inmengen — de packshot wint altijd van de advertorial
+    if (store.visionJson && !store.visionJson.skipped) {
+      store.researchJson.product = store.researchJson.product || {};
+      if (store.visionJson.visual_description) store.researchJson.product.visual_description = store.visionJson.visual_description;
+      if (store.visionJson.size_reference) store.researchJson.product.size_reference = store.visionJson.size_reference;
+    }
     return;
   }
   if (step === "validate") {
@@ -1280,6 +1375,7 @@ function computePending(store) {
   const seq = [];
   if (!store.researchDoc) seq.push("1");
   if (store.researchDoc && !store.researchJson) seq.push("1b");
+  if (store.researchJson && !store.visionJson) seq.push("1c"); // Product Vision: packshot → visual_description/size_reference
   if (store.researchJson) for (const st of STEPS) if (!store.outputs?.[st.key]) seq.push(st.key);
   // Staart mag door zodra elke copystap klaar is OF zijn pogingen heeft opgebruikt
   // (mislukte stap = lege cel; de validator meldt hem, de rijen verschuiven nooit)
@@ -1294,9 +1390,10 @@ function computePending(store) {
 // Voortgang (X van 27) berekenen zoals het paneel dat doet: 1, 1B, alle copy/imagestappen, validate, translate, finalize
 function computeProgress(store) {
   let done = 0;
-  const total = 2 + STEPS.length + 3; // 1 + 1b + copystappen + validate/translate/finalize
+  const total = 3 + STEPS.length + 3; // 1 + 1b + 1c + copystappen + validate/translate/finalize
   if (store.researchDoc) done++;
   if (store.researchJson) done++;
+  if (store.visionJson) done++;
   for (const st of STEPS) if (store.outputs?.[st.key]) done++;
   if (store.violations) done++;
   if (store.translated) done++;
