@@ -1287,6 +1287,32 @@ function computePending(store) {
   return seq;
 }
 
+// Voortgang (X van 27) berekenen zoals het paneel dat doet: 1, 1B, alle copy/imagestappen, validate, translate, finalize
+function computeProgress(store) {
+  let done = 0;
+  const total = 2 + STEPS.length + 3; // 1 + 1b + copystappen + validate/translate/finalize
+  if (store.researchDoc) done++;
+  if (store.researchJson) done++;
+  for (const st of STEPS) if (store.outputs?.[st.key]) done++;
+  if (store.violations) done++;
+  if (store.translated) done++;
+  if (store.csvUrl) done++;
+  return { done, total };
+}
+
+// Mini-voortgang op de taak zelf zetten zodat het kanban-kaartje hem kan tonen
+async function writeTaskProgress(taskId, store) {
+  try {
+    const { launchStore, task } = await getLaunchTask(taskId);
+    if (!task) return;
+    const { done, total } = computeProgress(store);
+    task.salesCopyProgress = { done, total, delivered: !!store.csvUrl, at: new Date().toISOString() };
+    await writeData("launch-tasks", launchStore);
+  } catch (e) {
+    console.error("writeTaskProgress error:", e.message); // voortgang is cosmetisch — nooit de pipeline breken
+  }
+}
+
 // Volgende schakel van de keten aftrappen: request wordt afgeleverd, antwoord wachten we niet af
 async function kickQueue(req, taskId) {
   // Publiek domein eerst: de interne VERCEL_URL kan door Deployment Protection geblokkeerd zijn
@@ -1371,6 +1397,7 @@ export default async function handler(req, res) {
       store.queueRuns = 0;
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
+      await writeTaskProgress(taskId, store); // balkje meteen op het kaartje zetten
       await kickQueue(req, taskId);
       return res.status(200).json({ success: true, store });
     }
@@ -1418,6 +1445,7 @@ export default async function handler(req, res) {
       if (!remaining.length) store.queueActive = false;
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
+      await writeTaskProgress(taskId, store);
       if (remaining.length) {
         await kickQueue(req, taskId);
       } else if (computePending(store).length) {
@@ -1440,6 +1468,7 @@ export default async function handler(req, res) {
       }
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
+      await writeTaskProgress(taskId, store);
       return res.status(200).json({ success: true, store });
     }
 
