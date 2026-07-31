@@ -749,6 +749,75 @@ Our guarantee:
 – No questions asked
 – We even pay the return shipping costs`,
   },
+  {
+    key: "img_hero",
+    label: "Hero Image",
+    multi: ["name_of_product", "benefit_1", "benefit_2", "benefit_3", "benefit_4"],
+    prompt: `Use the research JSON. All values come from these fields, never from your own interpretation.
+We are going to take the 4 top benefits from our advertorial and state them explicitly in a high-conversion output for the hero image on the sales page.
+
+Benefit 1
+This is linked to the root cause mechanism. In a maximum of 5-6 short words you must tell what the unique mechanism solution does in terms of addressing the root cause. Where possible, end on surface-level medical jargon that our avatar knows at this awareness stage. You always start this line with the active verb of what our product does and make sure it ties in strongly with our unique mechanism solution.
+The substance is mechanism.root_cause_substance. The percentage is mechanism.root_cause_percentage; if that field is empty, use a number above 95 and below 98, never 95 or 90.
+IF THE ROOT CAUSE IS A BUILDUP (fluid, calcium, plaque, toxins): the object is that substance, and the verb describes its removal: drains, dissolves, breaks down, flushes out.
+IF THE ROOT CAUSE IS DAMAGE OR A DEFICIT (skin, hair, nails, cells — nothing has accumulated, something is broken or missing): the object is the physical damage or the missing substance itself — the micro-cracks, the lost collagen, the damaged hair cells. The verb describes what physically happens to that damage: fills, seals, rebuilds, replenishes, repairs. Never a removal verb here (there is nothing to flush out), and still never a vague restoration verb such as restores, improves or supports.
+The object is never the system, the function or the organ.
+Examples: Dissolves 97% of calcium deposits / Flushes out 97% of liver toxins / Fills 96% of skin micro-cracks / Repairs 96% of damaged hair cells
+
+Benefit 2
+Maximum 7 words. It states briefly and clearly, in surface-level medical jargon and without becoming too technical, what our product does in relation to the first step of the unique mechanism solution from the advertorial.
+It always starts with a verb that fits step 1 of the unique mechanism and nothing else, and it must above all be an aggressive medical claim. It must read as if it solves the pain point IMMEDIATELY.
+The timeframe is ALWAYS "24 hours" — never in days, and never product.results_days. We want to show an instant result.
+The form depends on classification.visual_or_non_visual.
+IF VISUAL: state the visible result of step 1, never the mechanism itself. Open with an adjective that belongs exclusively to this desired outcome and to almost no other, paired with "visibly". Use avatar.desired_outcome_adjective; if that field is empty, derive one that meets the exclusivity test — words like better, healthier or improved fit everywhere and therefore say nothing.
+IF NON-VISUAL: state an aggressive medical claim about step 1 of the unique mechanism. Open with an active verb that fits step 1 and step 1 only, followed by the structure it acts on. The claim comes from mechanism.step_1_current_problem.
+Examples if visual: Visibly slimmer arms in 24 hours / Visibly smoother eye skin in 24 hours
+Examples if non-visual: Dilates the narrowed arteries in 24 hours / Dampens the ringing in 24 hours
+
+Benefit 3
+This benefit is a maximum of 3 words and always states their MAIN OBJECTION to the product before they proceed to purchase, phrased as a benefit, so that the objection is swept off the table immediately. Have they been burned by chemical products? Then: 100% natural. Are they afraid it is not permanent? Then: Permanent results.
+The objection is objections.main_purchase_objection. Do not use objections.exception_objection here; that is a different objection used elsewhere on the page.
+
+Benefit 4
+With this benefit we want to radiate authority — proof that the product is medically approved or medically sound for our target audience to use.
+For example: Approved by authority.title_plural / authority.title_plural proven efficacy / authority.institutional_backer tested and approved.
+When you name the institutional backer, always attach its discipline: the dermatology clinic, the vascular institute, the ENT department. An institute without a discipline reads as a name; an institute with a discipline reads as proof.
+THE INSTITUTION RULE (applies wherever authority.institutional_backer is used): the institution must come from the MARKET COUNTRY stated below — the country where the product is sold — because the authority figure is presented as a local practitioner. If authority.institutional_backer is from the market country, use it. If it is foreign or empty, compose the name of a clinic or hospital in the market country, tied to the discipline of the pain point, written in the local language and credible to a native reader. Never a research institute, never a real existing famous hospital that the advertorial does not name.
+
+OUTPUT: name_of_product is product.name.`,
+  },
+  {
+    key: "img_authority",
+    label: "Authority Image",
+    multi: ["quote", "name_line"],
+    prompt: `Use the research JSON. All values come from these fields, never from your own interpretation.
+For the following text I want you to give me this structured text very simple, but change the words that are needed to make it congruent with our advertorial and grammatically natural.
+
+THE STRUCTURE for "quote":
+"As a authority.title_singular I have advised product.name for over 2 years in my authority.practice_type to my patients with avatar.pain_point_own_word, and 8 out of 10 returned saying they saw a noticeable difference within product.results_days in their avatar.first_symptoms"
+If product.results_days is empty, use a number of days between 2 and 6.
+If authority.practice_type is empty, derive it from authority.title_singular (a urologist has a urology practice).
+
+THE STRUCTURE for "name_line":
+authority.name — authority.title_singular (capitalised) — the institution
+THE INSTITUTION RULE: the institution must come from the MARKET COUNTRY stated below. If authority.institutional_backer is from the market country, use it. If it is foreign or empty, compose the name of a clinic or hospital in the market country, tied to the discipline of the pain point, written in the local language and credible to a native reader. Never a research institute, never a real existing famous hospital that the advertorial does not name. The doctor's name must also fit the market country; if authority.name does not fit, replace it with a natural local equivalent of the same gender.`,
+  },
+  {
+    key: "img_approved",
+    label: "Approved Image",
+    multi: null,
+    prompt: `Use the research JSON. All values come from these fields, never from your own interpretation.
+For the following text I want you to give me this structured text very simple, but change the words that are needed to make it congruent with our advertorial.
+
+THE STRUCTURE:
+Medically approved by authority.title_plural and authority.institutional_backer to mechanism.step_2_root_cause, explained in surface-level medical jargon the avatar knows at their awareness stage, to treat avatar.pain_point_own_word.
+
+Name the institution WITHOUT its city — no "in Milan", no "in Stockholm"; the institution name only. That keeps the line short.
+THE INSTITUTION RULE: the institution must come from the MARKET COUNTRY stated below. If authority.institutional_backer is from the market country, use it. If it is foreign or empty, compose the name of a clinic or hospital in the market country, tied to the discipline of the pain point, written in the local language and credible to a native reader. Never a research institute, never a real existing famous hospital that the advertorial does not name.
+Example: Medically approved by urologists and the Nordiska Urologkliniken to dissolve the calcium deposits in the blood vessels and restore blood flow, to treat erectile problems.
+
+Give only the output, without explanation.`,
+  },
 ];
 
 /* ================= SHEET ROWS (fixed order, one row per cell) ================= */
@@ -1067,6 +1136,10 @@ async function runStep(store, step, taskId) {
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   let prompt = def.prompt.replace("[TODAY]", today);
   prompt += `\n\nJSON FROM THE EXTRACTOR (this is your ONLY source of facts — never invent or substitute values):\n${JSON.stringify(store.researchJson, null, 2)}`;
+  if (def.key.startsWith("img_")) {
+    const { task: imgTask } = await getLaunchTask(taskId);
+    prompt += `\n\nMARKET COUNTRY: ${imgTask?.marketCountry || "Italy"}`;
+  }
   if (def.multi) {
     prompt += `\n\nOUTPUT FORMAT (overrides any earlier output format): return ONLY a valid JSON object with exactly these keys, all string values, no markdown, no code fences, no text before or after:\n{ ${def.multi.map((f) => `"${f}": ""`).join(", ")} }`;
   } else {
