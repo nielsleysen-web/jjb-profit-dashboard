@@ -892,7 +892,7 @@ for (const [k, label, fields] of SC_STEPS) {
   if (!fields) SC_ROWS.push({ category: label, step: k, field: null });
   else for (const f of fields) SC_ROWS.push({ category: `${label} — ${f.replace(/_/g, " ")}`, step: k, field: f });
 }
-const SC_PIPE = [["1", "Research"], ["1b", "Extract JSON"], ...SC_STEPS.map(([k, l]) => [k, l]), ["validate", "Validate"], ["translate", "Translate"], ["finalize", "Deliver CSV"]];
+const SC_PIPE = [["1", "Research"], ["1b", "Extract JSON"], ...SC_STEPS.map(([k, l]) => [k, l]), ["validate", "Validate"], ["translate", "Translate"], ["finalize", "Deliver Excel"]];
 const SC_LANGS = { Italy: "Italian", France: "French", Israel: "Hebrew" };
 
 function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post }) {
@@ -1014,22 +1014,6 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
   const started = !!(store && (store.researchDoc || hasOutputs || Object.keys(store.stepStatus || {}).length > 0));
   const doneCount = SC_PIPE.filter(([k]) => stepState(k) === "done").length;
 
-  const downloadCsv = () => {
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const langName = store?.translatedLanguage || SC_LANGS[t.marketCountry] || "Translation";
-    const lines = [["Category", "English", langName].map(esc).join(",")];
-    for (const row of SC_ROWS) {
-      const key = row.field ? `${row.step}.${row.field}` : row.step;
-      lines.push([row.category, cellValue(row), store?.translated?.[key] || ""].map(esc).join(","));
-    }
-    const blob = new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${csvName} - sales page copy.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-
   const downloadJson = () => {
     const blob = new Blob([JSON.stringify(store.researchJson, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -1090,16 +1074,13 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
         )}
         {store?.csvUrl && (
           <a href={store.csvUrl} target="_blank" rel="noreferrer" style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px", textDecoration: "none", color: "#166534", borderColor: "#bbf7d0", background: "#f0fdf4", fontWeight: 700 }}>
-            📄 {store.csvName || "sales-page-copy.csv"}
+            📄 {store.csvName || "sales-page-copy.xlsx"}
           </a>
         )}
         {store?.researchJson && (
           <button onClick={downloadJson} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px", color: "#1d4ed8", borderColor: "#bfdbfe", background: "#eff6ff", fontWeight: 700 }}>
             ⬇ Research JSON
           </button>
-        )}
-        {isAdmin && hasOutputs && (
-          <button onClick={downloadCsv} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px" }}>⬇ Download CSV</button>
         )}
         {isAdmin && hasOutputs && !running && (
           <button
@@ -1200,7 +1181,7 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
         ) : (
           <div style={{ fontSize: "12px", color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
             <b>Validator — {store.violations.length} warning(s)</b>
-            <span style={{ fontWeight: 400, color: "#b45309" }}> · does not stop the pipeline, the CSV is still delivered</span>
+            <span style={{ fontWeight: 400, color: "#b45309" }}> · does not stop the pipeline, the Excel file is still delivered</span>
             {store.violations.map((x, i) => (
               <div key={i} style={{ marginTop: "3px" }}>• {x}</div>
             ))}
