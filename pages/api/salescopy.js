@@ -275,6 +275,13 @@ First I want you to analyze this advertorial and I want you to get all the answe
 - At which moment in their existing daily routine would this type of product logically be used for maximum effect?
 - What is the logical dosage per application for this product form?
 - Which sensory confirmation can the user establish within seconds that proves they applied it correctly?
+- How many days does the advertorial promise before a noticeable difference appears?
+- What is the physical substance, buildup or blockage that the root cause consists of — the fluid, the calcium, the plaque? Name the substance, not the organ or the system.
+- Does the advertorial state a percentage for the effect on that substance? Quote it.
+- Which single adjective describes the visible desired outcome and belongs almost exclusively to this pain point — slimmer, smoother, firmer?
+- What is their biggest objection to the product itself before buying? Not what makes them feel like an exception, but what makes them hesitate to buy at all.
+- What type of practice does the authority figure have — a dermatology practice, an ENT practice, a urology practice?
+- Which clinic or hospital is the authority figure connected to? If the advertorial names none, leave empty.
 ${LANGUAGE_NOTE}
 
 FORMAT: write the research document in compact bullet points. Be complete on content but economical with words — no decorative tables, no repeated section summaries. The document MUST answer EVERY question above, all the way to the last one about the sensory confirmation. Never stop early; the later questions (alternatives, authority figure, usage details) are the most important ones for the next step.
