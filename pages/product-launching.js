@@ -892,7 +892,7 @@ for (const [k, label, fields] of SC_STEPS) {
   if (!fields) SC_ROWS.push({ category: label, step: k, field: null });
   else for (const f of fields) SC_ROWS.push({ category: `${label} — ${f.replace(/_/g, " ")}`, step: k, field: f });
 }
-const SC_PIPE = [["1", "Research"], ["1b", "Extract JSON"], ...SC_STEPS.map(([k, l]) => [k, l]), ["validate", "Validate"], ["translate", "Translate"], ["finalize", "Deliver Excel"]];
+const SC_PIPE = [["1", "Research"], ["1b", "Extract JSON"], ["1c", "Product Vision"], ...SC_STEPS.map(([k, l]) => [k, l]), ["validate", "Validate"], ["translate", "Translate"], ["finalize", "Deliver Excel"]];
 const SC_LANGS = { Italy: "Italian", France: "French", Israel: "Hebrew" };
 
 function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post }) {
@@ -967,6 +967,7 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
     const blocked = (k) => (att[k] || 0) >= 3;
     if (!st.researchDoc) return "1";
     if (!st.researchJson) return "1b";
+    if (!st.visionJson && !blocked("1c")) return "1c";
     for (const [k] of SC_STEPS) if (!st.outputs?.[k] && !blocked(k)) return k;
     if (!st.violations) return "validate";
     if (!st.translated) return "translate";
@@ -989,6 +990,7 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
     if (retryStep === k || (running && k === firstPending)) return "running";
     if (k === "1") return st.researchDoc ? "done" : st.stepStatus?.["1"]?.startsWith("error") ? "error" : "todo";
     if (k === "1b") return st.researchJson ? "done" : st.stepStatus?.["1b"]?.startsWith("error") ? "error" : "todo";
+    if (k === "1c") return st.visionJson ? "done" : st.stepStatus?.["1c"]?.startsWith("error") ? "error" : "todo";
     if (k === "validate") return st.violations ? "done" : "todo";
     if (k === "translate") return st.translated ? "done" : st.stepStatus?.["translate"]?.startsWith("error") ? "error" : "todo";
     if (k === "finalize") return st.csvUrl ? "done" : st.stepStatus?.["finalize"]?.startsWith("error") ? "error" : "todo";
@@ -1380,6 +1382,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [packshotBusy, setPackshotBusy] = useState(false);
   const debounceRef = useRef(null);
   const naming = namingConvention(t);
   const showNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf(NAMING_FROM_STATUS);
@@ -1626,6 +1629,51 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
                 <Field label="Alibaba Link" last>
                   <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
                 </Field>
+              </div>
+              <div style={{ marginTop: "10px" }}>
+                <div style={ui.label}>Product Packshot (photo of the product — used by the AI pipeline)</div>
+                {t.productPackshot ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "6px", background: "#f8fafc", borderRadius: "10px", padding: "8px 12px" }}>
+                    <img src={t.productPackshot} alt="" style={{ width: "44px", height: "44px", borderRadius: "8px", objectFit: "cover", border: "1px solid #eef0f3" }} />
+                    <a href={t.productPackshot} target="_blank" rel="noreferrer" style={{ fontSize: "12.5px", fontWeight: 700, color: "#166534", flex: 1, textDecoration: "none" }}>✓ Packshot uploaded</a>
+                    {canEdit && (
+                      <a onClick={() => save("productPackshot", "")} style={{ color: "#94a3b8", cursor: "pointer", fontSize: "12px" }}>remove</a>
+                    )}
+                  </div>
+                ) : canEdit ? (
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginTop: "6px", padding: "8px 14px", border: "1px dashed #d7dce3", borderRadius: "10px", fontSize: "12.5px", fontWeight: 600, color: "#64748b", cursor: packshotBusy ? "default" : "pointer" }}>
+                    {packshotBusy ? "Uploading…" : "📷 Upload packshot"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      disabled={packshotBusy}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        if (file.size > 3.5 * 1024 * 1024) { alert("Max 3 MB — please resize the image first"); return; }
+                        setPackshotBusy(true);
+                        try {
+                          const data = await new Promise((resolve, reject) => {
+                            const r = new FileReader();
+                            r.onload = () => resolve(String(r.result).split(",")[1]);
+                            r.onerror = reject;
+                            r.readAsDataURL(file);
+                          });
+                          const res = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name, mimeType: file.type, data }) }).then((r) => r.json());
+                          if (!res.success) throw new Error(res.error || "Upload failed");
+                          save("productPackshot", res.url);
+                        } catch (err) {
+                          alert(err.message);
+                        }
+                        setPackshotBusy(false);
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
+                )}
               </div>
             </Section>
 
