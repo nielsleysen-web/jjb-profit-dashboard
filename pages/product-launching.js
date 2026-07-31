@@ -1013,6 +1013,15 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
     URL.revokeObjectURL(a.href);
   };
 
+  const downloadJson = () => {
+    const blob = new Blob([JSON.stringify(store.researchJson, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${csvName} - research.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const copyCell = (v) => navigator.clipboard?.writeText(v);
 
   return (
@@ -1066,6 +1075,11 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
           <a href={store.csvUrl} target="_blank" rel="noreferrer" style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px", textDecoration: "none", color: "#166534", borderColor: "#bbf7d0", background: "#f0fdf4", fontWeight: 700 }}>
             📄 {store.csvName || "sales-page-copy.csv"}
           </a>
+        )}
+        {store?.researchJson && (
+          <button onClick={downloadJson} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px", color: "#1d4ed8", borderColor: "#bfdbfe", background: "#eff6ff", fontWeight: 700 }}>
+            ⬇ Research JSON
+          </button>
         )}
         {isAdmin && hasOutputs && (
           <button onClick={downloadCsv} style={{ ...btnGhost, padding: "8px 14px", fontSize: "12px" }}>⬇ Download CSV</button>
