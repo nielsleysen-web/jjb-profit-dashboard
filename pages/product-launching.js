@@ -179,10 +179,16 @@ export default function ProductLaunching() {
 
   useEffect(() => {
     load();
-    const iv = setInterval(load, 45000);
-    return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Sneller verversen zolang er een pipeline draait, zodat het balkje op het kaartje live meebeweegt
+  const aiRunning = tasks.some((x) => x.status === "AI Translation");
+  useEffect(() => {
+    const iv = setInterval(load, aiRunning ? 10000 : 45000);
+    return () => clearInterval(iv);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiRunning]);
 
   const post = async (payload) => {
     const res = await fetch("/api/launch-tasks", {
@@ -411,6 +417,17 @@ export default function ProductLaunching() {
                         </span>
                       )}
                     </div>
+                    {t.status === "AI Translation" && t.salesCopyProgress && (
+                      <div style={{ marginTop: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10px", fontWeight: 700, color: t.salesCopyProgress.delivered ? "#166534" : "#7c3aed", marginBottom: "3px" }}>
+                          <span>{t.salesCopyProgress.delivered ? "✓ Copy delivered" : "🧠 Generating copy…"}</span>
+                          <span>{t.salesCopyProgress.done}/{t.salesCopyProgress.total}</span>
+                        </div>
+                        <div style={{ height: "5px", background: "#eef0f3", borderRadius: "999px", overflow: "hidden" }}>
+                          <div style={{ width: `${Math.round((t.salesCopyProgress.done / (t.salesCopyProgress.total || 1)) * 100)}%`, height: "100%", background: t.salesCopyProgress.delivered ? "#16a34a" : "#8b5cf6", borderRadius: "999px", transition: "width 0.4s" }} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {me?.canEdit && (
