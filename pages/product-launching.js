@@ -866,6 +866,9 @@ const SC_STEPS = [
   ["18", "Offer Section: Headline", null],
   ["19", "Offer Section: Full Column Text", ["headline", "subheadline", "subheadline_3_benefits", "benefit_1", "benefit_2", "benefit_3"]],
   ["20", "FAQ Section", ["question_1", "answer_1", "question_2", "answer_2", "question_3", "answer_3", "question_4", "answer_4", "question_5", "answer_5", "question_6", "answer_6", "question_7", "answer_7"]],
+  ["img_hero", "Hero Image", ["name_of_product", "benefit_1", "benefit_2", "benefit_3", "benefit_4"]],
+  ["img_authority", "Authority Image", ["quote", "name_line"]],
+  ["img_approved", "Approved Image", null],
 ];
 const SC_ROWS = [];
 for (const [k, label, fields] of SC_STEPS) {
