@@ -1191,12 +1191,12 @@ async function runStep(store, step, taskId) {
         task.status = "Ready For Build";
         task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `changed status to "Ready For Build" — sales page copy (English + ${langName}) is ready`, at });
       }
-      task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `🧠 Sales Page Copy CSV delivered (English + ${langName})`, at });
+      task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `🧠 Sales Page Copy Excel delivered (English + ${langName})`, at });
       task.salesCopyCsvUrl = store.csvUrl;
       await writeData("launch-tasks", launchStore);
       const notifs = [];
       const target = task.assigneeEmail || ADMIN_EMAIL;
-      notifs.push({ email: target, text: `Sales page copy for "${task.productName}" is ready (English + ${langName}) — the CSV is waiting in the task` });
+      notifs.push({ email: target, text: `Sales page copy for "${task.productName}" is ready (English + ${langName}) — the Excel file is waiting in the task` });
       if (target !== ADMIN_EMAIL) notifs.push({ email: ADMIN_EMAIL, text: `Sales page copy for "${task.productName}" is ready — task moved to Ready For Build` });
       await pushNotifications(notifs);
     }
