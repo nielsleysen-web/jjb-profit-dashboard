@@ -900,6 +900,7 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
   const [retryStep, setRetryStep] = useState(null);
   const [showDoc, setShowDoc] = useState(false);
   const [showTable, setShowTable] = useState(false);
+  const [editCell, setEditCell] = useState(null); // { key, step, field, en, tr } — admin celbewerking
   const storeRef = useRef(null);
   const running = !!store?.queueActive && (!store?.updatedAt || Date.now() - Date.parse(store.updatedAt) < 240000);
 
@@ -1276,21 +1277,65 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
         <div style={{ border: "1px solid #eceef2", borderRadius: "10px", overflow: "hidden" }}>
           {SC_ROWS.map((row, i) => {
             const v = cellValue(row);
+            const key = row.field ? `${row.step}.${row.field}` : row.step;
+            const tr = store?.translated?.[key] || "";
+            const editing = editCell?.key === key;
             return (
               <div key={i} style={{ display: "flex", gap: "10px", padding: "7px 12px", background: i % 2 ? "#fafbfc" : "#ffffff", borderTop: i ? "1px solid #f1f5f9" : "none", alignItems: "flex-start" }}>
                 <div style={{ width: "220px", flexShrink: 0, fontSize: "11px", fontWeight: 700, color: "#64748b" }}>{row.category}</div>
-                <div style={{ flex: 1, fontSize: "12px", whiteSpace: "pre-wrap", minWidth: 0, color: v ? "#0f172a" : "#cbd5e1" }}>
-                  {v || "—"}
-                  {store?.translated?.[row.field ? `${row.step}.${row.field}` : row.step] && (
-                    <div style={{ color: "#64748b", marginTop: "3px", fontStyle: "italic" }}>{store.translated[row.field ? `${row.step}.${row.field}` : row.step]}</div>
-                  )}
-                </div>
-                {v && (
-                  <a onClick={() => copyCell(v)} title="Copy" style={{ fontSize: "11px", fontWeight: 700, color: "#3b82f6", cursor: "pointer", flexShrink: 0 }}>Copy</a>
+                {editing ? (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <textarea
+                      value={editCell.en}
+                      onChange={(e) => setEditCell({ ...editCell, en: e.target.value })}
+                      rows={Math.min(6, Math.max(2, Math.ceil((editCell.en || "").length / 70)))}
+                      style={{ width: "100%", boxSizing: "border-box", fontSize: "12px", fontFamily: "inherit", padding: "6px 8px", border: "1px solid #bfdbfe", borderRadius: "8px", resize: "vertical" }}
+                      placeholder="English"
+                    />
+                    <textarea
+                      value={editCell.tr}
+                      onChange={(e) => setEditCell({ ...editCell, tr: e.target.value })}
+                      rows={Math.min(6, Math.max(2, Math.ceil((editCell.tr || "").length / 70)))}
+                      style={{ width: "100%", boxSizing: "border-box", fontSize: "12px", fontStyle: "italic", fontFamily: "inherit", padding: "6px 8px", border: "1px solid #e5e8ee", borderRadius: "8px", resize: "vertical", marginTop: "4px" }}
+                      placeholder={store?.translatedLanguage || "Translation"}
+                    />
+                    <div style={{ display: "flex", gap: "10px", marginTop: "5px" }}>
+                      <a
+                        onClick={async () => {
+                          const res = await api({ action: "saveCell", step: row.step, field: row.field, en: editCell.en, tr: editCell.tr });
+                          if (!res.success) { alert(res.error || "Save failed"); return; }
+                          setEditCell(null);
+                        }}
+                        style={{ fontSize: "11px", fontWeight: 700, color: "#16a34a", cursor: "pointer" }}
+                      >
+                        ✓ Save
+                      </a>
+                      <a onClick={() => setEditCell(null)} style={{ fontSize: "11px", fontWeight: 700, color: "#94a3b8", cursor: "pointer" }}>Cancel</a>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ flex: 1, fontSize: "12px", whiteSpace: "pre-wrap", minWidth: 0, color: v ? "#0f172a" : "#cbd5e1" }}>
+                    {v || "—"}
+                    {tr && <div style={{ color: "#64748b", marginTop: "3px", fontStyle: "italic" }}>{tr}</div>}
+                  </div>
+                )}
+                {!editing && (
+                  <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                    <a onClick={() => setEditCell({ key, step: row.step, field: row.field, en: v, tr })} title="Edit" style={{ fontSize: "11px", fontWeight: 700, color: "#8b5cf6", cursor: "pointer" }}>Edit</a>
+                    {v && <a onClick={() => copyCell(v)} title="Copy" style={{ fontSize: "11px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}>Copy</a>}
+                  </div>
                 )}
               </div>
             );
           })}
+        </div>
+      )}
+      {isAdmin && hasOutputs && showTable && store?.csvUrl && !running && (
+        <div style={{ marginTop: "8px" }}>
+          <a onClick={() => runOne("finalize")} style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}>
+            ⟳ Rebuild Excel file with these edits
+          </a>
+          <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "8px" }}>replaces the delivered file — no new notifications are sent</span>
         </div>
       )}
     </Section>
