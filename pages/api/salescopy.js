@@ -133,8 +133,12 @@ async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeout
   if (response.data?.stop_reason === "max_tokens") {
     throw new Error("Output hit the token limit and was cut off — retry gives it more room");
   }
+  if (response.data?.stop_reason === "refusal") {
+    // Inhoudelijke weigering van het model: retryen heeft geen zin, de bron moet aangepast
+    throw new Error("Model declined this content — adjust the advertorial claims and run the pipeline again. Retrying unchanged will not help.");
+  }
   if (!text) {
-    // Leeg antwoord: laat zien wáárom (bv. stop_reason "refusal") en wat er wel in zat
+    // Leeg antwoord: laat zien wáárom en wat er wel in zat
     const types = blocks.map((b) => b.type).join(", ") || "no blocks at all";
     throw new Error(`Model returned no text — stop_reason: ${response.data?.stop_reason || "?"}, content blocks: ${types}`);
   }
@@ -1550,6 +1554,8 @@ export default async function handler(req, res) {
         store.stepStatus[step] = "done";
       } catch (e) {
         store.stepStatus[step] = `error: ${e.message}`;
+        // Weigering is inhoudelijk, geen technisch falen: niet opnieuw proberen, meteen doorschuiven
+        if (/declined this content/.test(e.message)) store.attempts[step] = MAX_ATTEMPTS;
       }
       const remaining = computePending(store).filter((k) => (store.attempts[k] || 0) < MAX_ATTEMPTS);
       if (!remaining.length) store.queueActive = false;
