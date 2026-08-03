@@ -1435,6 +1435,40 @@ async function writeTaskProgress(taskId, store) {
   }
 }
 
+// Na een lange stap de store nooit blind terugschrijven: vers inlezen en alleen het resultaat
+// van déze stap eroverheen leggen — handmatige celbewerkingen tijdens de run blijven zo bewaard
+async function mergeStepResult(handle, store, step) {
+  const fresh = (await readData(handle)) || store;
+  fresh.stepStatus = { ...(fresh.stepStatus || {}), [step]: store.stepStatus?.[step] };
+  fresh.attempts = { ...(fresh.attempts || {}), ...(store.attempts || {}) };
+  fresh.queueRuns = store.queueRuns;
+  fresh.queueActive = store.queueActive;
+  if (step === "1") {
+    fresh.researchDoc = store.researchDoc;
+    fresh.researchJson = store.researchJson;
+    fresh.advertorialText = store.advertorialText;
+    fresh.advertorialSource = store.advertorialSource;
+  } else if (step === "1b") {
+    fresh.researchDoc = store.researchDoc;
+    fresh.researchJson = store.researchJson;
+    if (store.stepStatus?.["1"]) fresh.stepStatus["1"] = store.stepStatus["1"]; // 1b kan 1 automatisch meedraaien
+  } else if (step === "1c") {
+    fresh.visionJson = store.visionJson;
+    fresh.researchJson = store.researchJson; // bevat de gemergde vision-velden
+  } else if (step === "validate") {
+    fresh.violations = store.violations;
+  } else if (step === "translate") {
+    fresh.translated = store.translated;
+    fresh.translatedLanguage = store.translatedLanguage;
+  } else if (step === "finalize") {
+    fresh.csvUrl = store.csvUrl;
+    fresh.csvName = store.csvName;
+  } else {
+    fresh.outputs = { ...(fresh.outputs || {}), [step]: store.outputs?.[step] };
+  }
+  return fresh;
+}
+
 // Volgende schakel van de keten aftrappen: request wordt afgeleverd, antwoord wachten we niet af
 async function kickQueue(req, taskId) {
   // Publiek domein eerst: de interne VERCEL_URL kan door Deployment Protection geblokkeerd zijn
@@ -1590,15 +1624,17 @@ export default async function handler(req, res) {
         // Weigering is inhoudelijk, geen technisch falen: niet opnieuw proberen, meteen doorschuiven
         if (/declined this content/.test(e.message)) store.attempts[step] = MAX_ATTEMPTS;
       }
-      const remaining = computePending(store).filter((k) => (store.attempts[k] || 0) < MAX_ATTEMPTS);
-      if (!remaining.length) store.queueActive = false;
-      store.updatedAt = new Date().toISOString();
-      await writeData(handle, store);
-      await writeTaskProgress(taskId, store);
+      // Vers samenvoegen zodat celbewerkingen die tijdens deze stap zijn opgeslagen niet verloren gaan
+      const merged = await mergeStepResult(handle, store, step);
+      const remaining = computePending(merged).filter((k) => (merged.attempts[k] || 0) < MAX_ATTEMPTS);
+      if (!remaining.length) merged.queueActive = false;
+      merged.updatedAt = new Date().toISOString();
+      await writeData(handle, merged);
+      await writeTaskProgress(taskId, merged);
       if (remaining.length) {
         await kickQueue(req, taskId);
-      } else if (computePending(store).length) {
-        const errs = Object.entries(store.stepStatus || {}).filter(([, v]) => String(v).startsWith("error"));
+      } else if (computePending(merged).length) {
+        const errs = Object.entries(merged.stepStatus || {}).filter(([, v]) => String(v).startsWith("error"));
         await pushNotifications([{ email: ADMIN_EMAIL, text: `Sales page copy pipeline stopped with ${errs.length} failed step(s) - open the task to retry` }]);
       }
       return res.status(200).json({ success: true });
@@ -1611,14 +1647,16 @@ export default async function handler(req, res) {
         store.stepStatus[key] = "done";
       } catch (e) {
         store.stepStatus[key] = `error: ${e.message}`;
-        store.updatedAt = new Date().toISOString();
-        await writeData(handle, store);
-        return res.status(200).json({ success: false, error: e.message, store });
+        const mergedErr = await mergeStepResult(handle, store, key);
+        mergedErr.updatedAt = new Date().toISOString();
+        await writeData(handle, mergedErr);
+        return res.status(200).json({ success: false, error: e.message, store: mergedErr });
       }
-      store.updatedAt = new Date().toISOString();
-      await writeData(handle, store);
-      await writeTaskProgress(taskId, store);
-      return res.status(200).json({ success: true, store });
+      const merged = await mergeStepResult(handle, store, key);
+      merged.updatedAt = new Date().toISOString();
+      await writeData(handle, merged);
+      await writeTaskProgress(taskId, merged);
+      return res.status(200).json({ success: true, store: merged });
     }
 
     return res.status(400).json({ success: false, error: "Unknown action" });
