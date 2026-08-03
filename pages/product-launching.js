@@ -1155,25 +1155,36 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
         })()}
       </div>
 
-      {Object.entries(store?.stepStatus || {}).some(([k, v]) => String(v).startsWith("error") && !(running && k === firstPending)) && (
-        <div style={{ fontSize: "12px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
-          <b>Step errors:</b>
-          <div style={{ fontSize: "11px", color: "#991b1b", marginTop: "2px", fontStyle: "italic" }}>Tip: press "Resume pipeline" — it restarts from the first missing step in the right order.</div>
-          {Object.entries(store.stepStatus)
-            .filter(([k, v]) => String(v).startsWith("error") && !(running && k === firstPending))
-            .map(([k, v]) => {
+      {Object.entries(store?.stepStatus || {}).some(([k, v]) => String(v).startsWith("error") && !(running && k === firstPending)) && (() => {
+        const isRefusal = (v) => /declined this content/i.test(String(v));
+        const entries = Object.entries(store.stepStatus).filter(([k, v]) => String(v).startsWith("error") && !(running && k === firstPending));
+        const hasRetryable = entries.some(([, v]) => !isRefusal(v));
+        return (
+          <div style={{ fontSize: "12px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 12px", marginBottom: "10px" }}>
+            <b>Step errors:</b>
+            {hasRetryable && (
+              <div style={{ fontSize: "11px", color: "#991b1b", marginTop: "2px", fontStyle: "italic" }}>Tip: press "Resume pipeline" — it restarts from the first missing step in the right order.</div>
+            )}
+            {entries.map(([k, v]) => {
               const label = (SC_PIPE.find(([pk]) => pk === k) || [k, k])[1];
+              const refusal = isRefusal(v);
               return (
                 <div key={k} style={{ marginTop: "3px", wordBreak: "break-word" }}>
-                  {"•"} <b>{label}</b>: {String(v).replace(/^error:\s*/, "")}
-                  {canEdit && !running && (
+                  {refusal ? "🚫" : "•"} <b>{label}</b>: {String(v).replace(/^error:\s*/, "")}
+                  {refusal && (
+                    <span style={{ display: "block", fontSize: "11px", fontStyle: "italic", color: "#991b1b", marginTop: "2px" }}>
+                      This is a content decision by the model, not a technical error — retrying will not change it.
+                    </span>
+                  )}
+                  {canEdit && !running && !refusal && (
                     <a onClick={() => runOne(k)} style={{ marginLeft: "8px", fontWeight: 700, color: "#b91c1c", cursor: "pointer", textDecoration: "underline" }}>retry</a>
                   )}
                 </div>
               );
             })}
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {store?.violations && (
         store.violations.length === 0 ? (
