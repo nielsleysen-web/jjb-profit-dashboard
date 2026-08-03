@@ -133,6 +133,11 @@ async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeout
   if (response.data?.stop_reason === "max_tokens") {
     throw new Error("Output hit the token limit and was cut off — retry gives it more room");
   }
+  if (!text) {
+    // Leeg antwoord: laat zien wáárom (bv. stop_reason "refusal") en wat er wel in zat
+    const types = blocks.map((b) => b.type).join(", ") || "no blocks at all";
+    throw new Error(`Model returned no text — stop_reason: ${response.data?.stop_reason || "?"}, content blocks: ${types}`);
+  }
   return text;
 }
 
