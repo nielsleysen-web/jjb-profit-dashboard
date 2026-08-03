@@ -1335,16 +1335,16 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
           <div>
             <a
               onClick={async () => {
-                if (retryStep) return;
-                const ok = await runOne("translate");
-                if (!ok) { alert("Translation failed — see the step errors above"); return; }
-                await runOne("finalize");
+                if (!confirm("Translate all cells again with your edits and replace the Excel file?")) return;
+                const res = await api({ action: "retranslate" });
+                if (!res.success) { alert(res.error || "Could not start"); return; }
+                setTimeout(() => post({ action: "refresh" }), 4000);
               }}
-              style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: retryStep ? "default" : "pointer", opacity: retryStep ? 0.5 : 1 }}
+              style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}
             >
-              {retryStep === "translate" ? "Translating…" : retryStep === "finalize" ? "Rebuilding…" : "⟳ Re-translate and rebuild Excel file"}
+              ⟳ Re-translate and rebuild Excel file
             </a>
-            <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "8px" }}>translates your edits again and replaces the delivered file (takes a minute) — no new notifications are sent</span>
+            <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "8px" }}>runs on the server — you can safely close this task; no new notifications are sent</span>
           </div>
           <div>
             <a onClick={() => !retryStep && runOne("finalize")} style={{ fontSize: "11.5px", fontWeight: 700, color: "#94a3b8", cursor: retryStep ? "default" : "pointer" }}>
