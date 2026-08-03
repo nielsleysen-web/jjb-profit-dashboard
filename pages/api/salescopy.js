@@ -1247,7 +1247,7 @@ async function runStep(store, step, taskId) {
   }
   if (step === "finalize") {
     if (!store.translated) throw new Error("Run the translation first");
-    const wasDelivered = !!store.csvUrl; // herbouw na handmatige edits: stil, zonder nieuwe notificaties
+    const wasDelivered = !!store.csvUrl || !!store.silentRebuild; // herbouw na handmatige edits: stil, zonder nieuwe notificaties
     const { launchStore, task } = await getLaunchTask(taskId);
     const langName = store.translatedLanguage || "Translation";
     const flat = flatCells(store);
@@ -1463,6 +1463,7 @@ async function mergeStepResult(handle, store, step) {
   } else if (step === "finalize") {
     fresh.csvUrl = store.csvUrl;
     fresh.csvName = store.csvName;
+    fresh.silentRebuild = false; // herbouw afgerond
   } else {
     fresh.outputs = { ...(fresh.outputs || {}), [step]: store.outputs?.[step] };
   }
@@ -1564,6 +1565,26 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, store });
     }
 
+    if (action === "retranslate") {
+      // Opnieuw vertalen + Excel vervangen via de server-side keten: de browser mag dicht
+      if (!isAdmin) return res.status(403).json({ success: false, error: "Admin only" });
+      store.translated = null;
+      store.translatedLanguage = "";
+      store.csvUrl = "";
+      store.silentRebuild = true; // geen nieuwe notificaties/statuswijziging bij finalize
+      store.queueActive = true;
+      store.queueRuns = 0;
+      const keep = {};
+      for (const [k, v] of Object.entries(store.stepStatus || {})) {
+        if (/declined this content/.test(String(v))) keep[k] = MAX_ATTEMPTS;
+      }
+      store.attempts = keep;
+      store.updatedAt = new Date().toISOString();
+      await writeData(handle, store);
+      await kickQueue(req, taskId);
+      return res.status(200).json({ success: true, store });
+    }
+
     if (action === "reset") {
       const keep = store.advertorialText;
       const fresh = emptyStore();
@@ -1580,7 +1601,13 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, store });
       }
       store.queueActive = true;
-      store.attempts = {};
+      // Pogingen resetten, behalve bij inhoudelijke weigeringen: die zouden meteen weer weigeren
+      // en zo de staart (validate/translate/finalize) opnieuw blokkeren
+      const keepBlocked = {};
+      for (const [k, v] of Object.entries(store.stepStatus || {})) {
+        if (/declined this content/.test(String(v))) keepBlocked[k] = MAX_ATTEMPTS;
+      }
+      store.attempts = keepBlocked;
       store.queueRuns = 0;
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
