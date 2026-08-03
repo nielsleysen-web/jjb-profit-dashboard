@@ -1246,6 +1246,7 @@ async function runStep(store, step, taskId) {
   }
   if (step === "finalize") {
     if (!store.translated) throw new Error("Run the translation first");
+    const wasDelivered = !!store.csvUrl; // herbouw na handmatige edits: stil, zonder nieuwe notificaties
     const { launchStore, task } = await getLaunchTask(taskId);
     const langName = store.translatedLanguage || "Translation";
     const flat = flatCells(store);
@@ -1268,18 +1269,24 @@ async function runStep(store, step, taskId) {
     if (task) {
       const at = new Date().toISOString();
       task.activity = task.activity || [];
-      if (task.status === "AI Translation" || task.status === "Task Start") {
-        task.status = "Ready For Build";
-        task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `changed status to "Ready For Build" — sales page copy (English + ${langName}) is ready`, at });
+      if (!wasDelivered) {
+        if (task.status === "AI Translation" || task.status === "Task Start") {
+          task.status = "Ready For Build";
+          task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `changed status to "Ready For Build" — sales page copy (English + ${langName}) is ready`, at });
+        }
+        task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `🧠 Sales Page Copy Excel delivered (English + ${langName})`, at });
+      } else {
+        task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `🧠 Excel rebuilt after manual edits`, at });
       }
-      task.activity.push({ id: uidLog(), type: "log", author: "Stefan's Brain", email: ADMIN_EMAIL, text: `🧠 Sales Page Copy Excel delivered (English + ${langName})`, at });
       task.salesCopyCsvUrl = store.csvUrl;
       await writeData("launch-tasks", launchStore);
-      const notifs = [];
-      const target = task.assigneeEmail || ADMIN_EMAIL;
-      notifs.push({ email: target, text: `Sales page copy for "${task.productName}" is ready (English + ${langName}) — the Excel file is waiting in the task` });
-      if (target !== ADMIN_EMAIL) notifs.push({ email: ADMIN_EMAIL, text: `Sales page copy for "${task.productName}" is ready — task moved to Ready For Build` });
-      await pushNotifications(notifs);
+      if (!wasDelivered) {
+        const notifs = [];
+        const target = task.assigneeEmail || ADMIN_EMAIL;
+        notifs.push({ email: target, text: `Sales page copy for "${task.productName}" is ready (English + ${langName}) — the Excel file is waiting in the task` });
+        if (target !== ADMIN_EMAIL) notifs.push({ email: ADMIN_EMAIL, text: `Sales page copy for "${task.productName}" is ready — task moved to Ready For Build` });
+        await pushNotifications(notifs);
+      }
     }
     return;
   }
@@ -1486,6 +1493,31 @@ export default async function handler(req, res) {
       }
       store.researchJson = parsed;
       store.stepStatus["1b"] = "done";
+      store.updatedAt = new Date().toISOString();
+      await writeData(handle, store);
+      return res.status(200).json({ success: true, store });
+    }
+
+    if (action === "saveCell") {
+      // Handmatige celbewerking in de copytabel — alleen admin
+      if (!isAdmin) return res.status(403).json({ success: false, error: "Admin only" });
+      const stepKey = String(req.body.step || "");
+      const fieldKey = req.body.field ? String(req.body.field) : null;
+      const validRow = SHEET_ROWS.some((r) => String(r.step) === stepKey && (r.field || null) === fieldKey);
+      if (!validRow) return res.status(400).json({ success: false, error: "Unknown cell" });
+      if (req.body.en !== undefined && req.body.en !== null) {
+        store.outputs = store.outputs || {};
+        if (fieldKey) {
+          if (!store.outputs[stepKey] || typeof store.outputs[stepKey] !== "object") store.outputs[stepKey] = {};
+          store.outputs[stepKey][fieldKey] = String(req.body.en);
+        } else {
+          store.outputs[stepKey] = String(req.body.en);
+        }
+      }
+      if (req.body.tr !== undefined && req.body.tr !== null) {
+        store.translated = store.translated || {};
+        store.translated[fieldKey ? `${stepKey}.${fieldKey}` : stepKey] = String(req.body.tr);
+      }
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
       return res.status(200).json({ success: true, store });
