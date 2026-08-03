@@ -286,7 +286,7 @@ First I want you to analyze this advertorial and I want you to get all the answe
 - Which specific substance or ingredient do they absolutely not want in a product like this, based on the alternatives they have tried and the side effects they hate? Name the substance, not the category.
 - Which alternative are they still actively using right now, that they would be afraid of having to give up?
 - Which characteristic makes them feel like an exception — their age, how long they have had the complaint, their skin type, or other medication they take? Which one would make them say "yes but in my case it's different, because ..."?
-- What is the pain point in their own everyday word, the word they say to a friend at the kitchen table? And what is the formal or medical name for it?
+- What is the pain point in their own everyday word, the word they say to a friend at the kitchen table? This must be a NOUN PHRASE of 1-4 words that names the condition itself — "stubborn belly fat", "erectile problems", "fatty liver", "crow's feet" — NEVER a spoken sentence, complaint or quote like "it all goes straight to my belly". And what is the formal or medical name for it?
 - Who is the authority figure, and what is their professional title in the singular and in the plural? Give the title exactly as the advertorial states it, even if a different specialist would seem more logical for this product type.
 - Which cleaning agent would a normal person actually use on the body part where the product is applied?
 - At which moment in their existing daily routine would this type of product logically be used for maximum effect?
@@ -318,6 +318,7 @@ Your only task is to extract the values into the JSON structure below. You do no
 RULES
 - Fill in every field. If a value genuinely does not appear in the research document, use an empty string "".
 - Never invent a value. An empty field is better than a guessed one.
+- avatar.pain_point_own_word must be a NOUN PHRASE of 1-4 words naming the condition itself ("stubborn belly fat", "erectile problems", "fatty liver") — never a first-person sentence, complaint or quote. If the research document only quotes spoken sentences, distil them to the everyday name of the condition.
 - Values that are a choice from a fixed list must be exactly one of the listed options.
 - Arrays stay arrays, even when there is only one item.
 - Return only valid JSON. No markdown, no code fences, no explanation, no text before or after.
