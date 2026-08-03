@@ -1179,6 +1179,31 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
                   {canEdit && !running && !refusal && (
                     <a onClick={() => runOne(k)} style={{ marginLeft: "8px", fontWeight: 700, color: "#b91c1c", cursor: "pointer", textDecoration: "underline" }}>retry</a>
                   )}
+                  {k === "1b" && canEdit && !running && (
+                    <div style={{ marginTop: "6px" }}>
+                      <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 12px", background: "#ffffff", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "11.5px", fontWeight: 700, color: "#b91c1c", cursor: "pointer" }}>
+                        ⬆ Upload Manual JSON
+                        <input
+                          type="file"
+                          accept=".json,application/json,text/plain"
+                          style={{ display: "none" }}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!file) return;
+                            const text = await file.text();
+                            const res = await api({ action: "saveJson", text });
+                            if (!res.success) { alert(res.error || "Invalid JSON"); return; }
+                            await api({ action: "startQueue" }); // meteen doorlopen vanaf de copystappen
+                            setTimeout(() => post({ action: "refresh" }), 4000);
+                          }}
+                        />
+                      </label>
+                      <span style={{ display: "block", fontSize: "10.5px", color: "#991b1b", marginTop: "3px" }}>
+                        Upload a research JSON file (same structure as the ⬇ Research JSON download) — the pipeline continues automatically with all remaining steps.
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}
