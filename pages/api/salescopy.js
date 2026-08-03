@@ -221,7 +221,11 @@ function parseJsonLoose(text) {
   t = t.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "").trim();
   const start = t.indexOf("{");
   const end = t.lastIndexOf("}");
-  if (start === -1 || end === -1) throw new Error("No JSON found in model output");
+  if (start === -1 || end === -1) {
+    // Laat zien wat het model dan wél zei — anders valt dit niet te debuggen
+    const peek = t ? t.slice(0, 260) : "(empty output)";
+    throw new Error(`No JSON found in model output. The model said: "${peek}"`);
+  }
   return JSON.parse(t.slice(start, end + 1));
 }
 
