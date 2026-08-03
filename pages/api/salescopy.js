@@ -1553,6 +1553,12 @@ export default async function handler(req, res) {
         store.translated = store.translated || {};
         store.translated[fieldKey ? `${stepKey}.${fieldKey}` : stepKey] = String(req.body.tr);
       }
+      // Handmatig gevuld = stap afgerond: de foutmelding (bv. een refusal) verdwijnt uit het foutenblok
+      if (String(req.body.en || "").trim() && String(store.stepStatus?.[stepKey] || "").startsWith("error")) {
+        store.stepStatus[stepKey] = "done";
+      }
+      // Validator live bijwerken zodat "Empty cell"-waarschuwingen meteen verdwijnen zodra de cel inhoud heeft
+      if (store.violations) store.violations = validate(store);
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
       return res.status(200).json({ success: true, store });
