@@ -1331,11 +1331,26 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
         </div>
       )}
       {isAdmin && hasOutputs && showTable && store?.csvUrl && !running && (
-        <div style={{ marginTop: "8px" }}>
-          <a onClick={() => runOne("finalize")} style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: "pointer" }}>
-            ⟳ Rebuild Excel file with these edits
-          </a>
-          <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "8px" }}>replaces the delivered file — no new notifications are sent</span>
+        <div style={{ marginTop: "8px", display: "grid", gap: "6px" }}>
+          <div>
+            <a
+              onClick={async () => {
+                if (retryStep) return;
+                const ok = await runOne("translate");
+                if (!ok) { alert("Translation failed — see the step errors above"); return; }
+                await runOne("finalize");
+              }}
+              style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", cursor: retryStep ? "default" : "pointer", opacity: retryStep ? 0.5 : 1 }}
+            >
+              {retryStep === "translate" ? "Translating…" : retryStep === "finalize" ? "Rebuilding…" : "⟳ Re-translate and rebuild Excel file"}
+            </a>
+            <span style={{ fontSize: "11px", color: "#8a92a3", marginLeft: "8px" }}>translates your edits again and replaces the delivered file (takes a minute) — no new notifications are sent</span>
+          </div>
+          <div>
+            <a onClick={() => !retryStep && runOne("finalize")} style={{ fontSize: "11.5px", fontWeight: 700, color: "#94a3b8", cursor: retryStep ? "default" : "pointer" }}>
+              ⟳ Rebuild only (keep current translations)
+            </a>
+          </div>
         </div>
       )}
     </Section>
