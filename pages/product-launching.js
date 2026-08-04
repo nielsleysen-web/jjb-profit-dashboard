@@ -1180,7 +1180,7 @@ function SalesCopyPanel({ t, canEdit, isAdmin, save, selectStyle, csvName, post 
                   {canEdit && !running && !refusal && (
                     <a onClick={() => runOne(k)} style={{ marginLeft: "8px", fontWeight: 700, color: "#b91c1c", cursor: "pointer", textDecoration: "underline" }}>retry</a>
                   )}
-                  {k === "1b" && canEdit && !running && (
+                  {(k === "1" || k === "1b") && canEdit && !running && (
                     <div style={{ marginTop: "6px" }}>
                       <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "6px 12px", background: "#ffffff", border: "1px solid #fecaca", borderRadius: "8px", fontSize: "11.5px", fontWeight: 700, color: "#b91c1c", cursor: "pointer" }}>
                         ⬆ Upload Manual JSON
