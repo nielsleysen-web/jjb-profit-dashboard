@@ -287,6 +287,7 @@ First I want you to analyze this advertorial and I want you to get all the answe
 - Which alternative are they still actively using right now, that they would be afraid of having to give up?
 - Which characteristic makes them feel like an exception — their age, how long they have had the complaint, their skin type, or other medication they take? Which one would make them say "yes but in my case it's different, because ..."?
 - What is the pain point in their own everyday word, the word they say to a friend at the kitchen table? This must be a NOUN PHRASE of 1-4 words that names the condition itself — "stubborn belly fat", "erectile problems", "fatty liver", "crow's feet" — NEVER a spoken sentence, complaint or quote like "it all goes straight to my belly". And what is the formal or medical name for it?
+- Name the BROAD condition, never a symptom, measurement or keyword that belongs to it, and never a subtype or stage. For a blood sugar product the pain point is "diabetes", not "my sugar", not "high blood sugar" and not "diabetes mellitus type 2". For a liver product it is "fatty liver", not "liver values". The symptom words stay available as jargon; they never replace the name of the condition.
 - Who is the authority figure, and what is their professional title in the singular and in the plural? Give the title exactly as the advertorial states it, even if a different specialist would seem more logical for this product type.
 - Which cleaning agent would a normal person actually use on the body part where the product is applied?
 - At which moment in their existing daily routine would this type of product logically be used for maximum effect?
@@ -319,6 +320,7 @@ RULES
 - Fill in every field. If a value genuinely does not appear in the research document, use an empty string "".
 - Never invent a value. An empty field is better than a guessed one.
 - avatar.pain_point_own_word must be a NOUN PHRASE of 1-4 words naming the condition itself ("stubborn belly fat", "erectile problems", "fatty liver") — never a first-person sentence, complaint or quote. If the research document only quotes spoken sentences, distil them to the everyday name of the condition.
+- avatar.pain_point_own_word names the BROAD condition, never a symptom, measurement or keyword of it and never a subtype or stage: "diabetes" — not "my sugar", not "high blood sugar", not "diabetes mellitus type 2". The same applies to avatar.pain_point_formal: give the broad medical name ("diabetes"), never the subtype.
 - Values that are a choice from a fixed list must be exactly one of the listed options.
 - Arrays stay arrays, even when there is only one item.
 - Return only valid JSON. No markdown, no code fences, no explanation, no text before or after.
@@ -606,14 +608,16 @@ This step creates trust and logic: the product only works on a clean spot.
 HEADLINE: Maximum 4 words.
 If the avatar applies it to his body: Wash your [body part]. The verb follows the cleaning agent: "Wash your ..." with soap, facial cleanser or shampoo, "Clean your ..." with a damp cloth.
 If the avatar does not apply it to his body (mouth, nose, or elsewhere): Make sure your [body part] is empty
-COLUMN: One sentence, maximum 30 words. Contains three things: the place, the cleaning agent, and the reason. The reason is always linked to the absorption of the product, for example "so that the active ingredients can be fully absorbed".
+COLUMN: One sentence, maximum 25 words. Contains three things: the place, the preparation, and the reason. The reason is always linked to the absorption of the product, for example "so that the active ingredients can be fully absorbed".
 Use usage.application_place and usage.cleaning_agent from the JSON. Never invent a spot. The body part in the headline is exactly the same body part as in the column.
+THE PREPARATION MUST BE THE LOWEST POSSIBLE THRESHOLD AND MUST ACTUALLY AFFECT ABSORPTION. Only name an action that directly influences whether the product is absorbed on that spot. Never add an unrelated hygiene ritual: brushing teeth, using toothpaste, mouthwash, showering, shaving or exfoliating are NEVER mentioned. For the mouth or under the tongue the preparation is simply that the mouth is empty — nothing has been eaten or drunk and nothing is left in the mouth. Do not turn a one-second action into a chore.
 CLEANING AGENT PER BODY PART: Choose what a normal person actually uses on that body part. "Mild soap and warm water" applies exclusively to the torso, lower abdomen, arms, legs, hands and feet. Never use it on the face, around the eyes, in the ears, on the scalp or in the mouth.
 Face and around the eyes: a mild facial cleanser and lukewarm water. Ears: a damp cloth, never soap in the ear canal. Scalp: a mild shampoo. Mouth: do not clean, only empty.
 
 STEP 2 — HOW THEY USE IT
 HEADLINE: Always contains the pain point and always ends on "treating" — as in: Treating tinnitus / Treating erectile problems / Treating crow's feet
-COLUMN: Two sentences.
+Use avatar.pain_point_own_word exactly as it stands in the JSON: the broad condition ("Treating diabetes"), never a symptom or keyword of it ("Treating your sugar").
+COLUMN: Two short sentences, maximum 30 words in total. Concrete and stripped: no repetition of information the reader already has, no extra explanation. Every word must earn its place.
 The first sentence contains three things in this order: the moment, the place, and the quantity (usage.application_moment, usage.application_place, usage.dosage from the JSON). The moment must be an action the avatar already does daily. Never introduce a new moment.
 The second sentence is the proof point (usage.proof_point from the JSON): a sensory confirmation he can establish himself within a few seconds. Phrase the proof point as a confirmation, never as a warning or a risk. "Make sure that ..." is correct; "Watch out that it does not ..." is wrong.
 
@@ -848,6 +852,7 @@ The objection is objections.main_purchase_objection. Do not use objections.excep
 
 Benefit 4
 With this benefit we want to radiate authority — proof that the product is medically approved or medically sound for our target audience to use.
+MAXIMUM 7 WORDS, and 6 is better. This is a badge on an image, not a sentence. Count the words before you answer; if it runs over, drop words until it fits — the institution name may be shortened, but never split across a line.
 For example: Approved by authority.title_plural / authority.title_plural proven efficacy / authority.institutional_backer tested and approved.
 When you name the institutional backer, always attach its discipline: the dermatology clinic, the vascular institute, the ENT department. An institute without a discipline reads as a name; an institute with a discipline reads as proof.
 THE INSTITUTION RULE (applies wherever authority.institutional_backer is used): the institution must come from the MARKET COUNTRY stated below — the country where the product is sold — because the authority figure is presented as a local practitioner. If authority.institutional_backer is from the market country, use it. If it is foreign or empty, compose the name of a clinic or hospital in the market country, tied to the discipline of the pain point, written in the local language and credible to a native reader. Never a research institute, never a real existing famous hospital that the advertorial does not name.
@@ -862,13 +867,17 @@ OUTPUT: name_of_product is product.name.`,
 For the following text I want you to give me this structured text very simple, but change the words that are needed to make it congruent with our advertorial and grammatically natural.
 
 THE STRUCTURE for "quote":
-"As a authority.title_singular I have advised product.name for over 2 years in my authority.practice_type to my patients with avatar.pain_point_own_word, and 8 out of 10 returned saying they saw a noticeable difference within product.results_days in their avatar.first_symptoms"
+"As a authority.title_singular I have advised product.name for over 2 years in my authority.practice_type to my patients struggling with their avatar.pain_point_own_word and 8 out of 10 returned saying they noticed a big difference within product.results_days in their avatar.first_symptoms"
+MAXIMUM 45 WORDS. Keep it at the length of this reference line and never longer:
+"As a diabetologist I have advised GlucoDrops for over 2 years in my diabetology practice to my patients struggling with their diabetes and 8 out of 10 returned saying they noticed a big difference within 4 days in their first symptoms."
+Name only ONE first symptom, the most common one, and keep it to a few words. No extra clauses, no second sentence, no explanation.
 If product.results_days is empty, use a number of days between 2 and 6.
 If authority.practice_type is empty, derive it from authority.title_singular (a urologist has a urology practice).
 
 THE STRUCTURE for "name_line":
-authority.name — authority.title_singular (capitalised) — the institution
-THE INSTITUTION RULE: the institution must come from the MARKET COUNTRY stated below. If authority.institutional_backer is from the market country, use it. If it is foreign or empty, compose the name of a clinic or hospital in the market country, tied to the discipline of the pain point, written in the local language and credible to a native reader. Never a research institute, never a real existing famous hospital that the advertorial does not name. The doctor's name must also fit the market country; if authority.name does not fit, replace it with a natural local equivalent of the same gender.`,
+authority.name — authority.title_singular (capitalised)
+MAXIMUM 5 WORDS. Name and title only, no institution, no city, no extra credentials. Reference: "Dr. Paolo Ricci — Diabetologist"
+The doctor's name must fit the MARKET COUNTRY stated below; if authority.name does not fit, replace it with a natural local equivalent of the same gender.`,
   },
   {
     key: "img_approved",
@@ -878,8 +887,11 @@ THE INSTITUTION RULE: the institution must come from the MARKET COUNTRY stated b
 For the following text I want you to give me this structured text very simple, but change the words that are needed to make it congruent with our advertorial.
 
 THE STRUCTURE:
-Medically approved by authority.title_plural and authority.institutional_backer to mechanism.step_2_root_cause, explained in surface-level medical jargon the avatar knows at their awareness stage, to treat avatar.pain_point_own_word.
+Medically approved by authority.title_plural and authority.institutional_backer to mechanism.step_2_root_cause, explained in surface-level medical jargon the avatar knows at their awareness stage.
 
+MAXIMUM 18 WORDS. Keep it at the length of this reference line and never longer:
+"Medically approved by diabetologists and the Clinica Diabetologica to restore the insuline production inside the pancreas."
+State the mechanism in one short clause. Do not add a closing "to treat [pain point]" if the line would run over — the mechanism clause is what matters.
 Name the institution WITHOUT its city — no "in Milan", no "in Stockholm"; the institution name only. That keeps the line short.
 THE INSTITUTION RULE: the institution must come from the MARKET COUNTRY stated below. If authority.institutional_backer is from the market country, use it. If it is foreign or empty, compose the name of a clinic or hospital in the market country, tied to the discipline of the pain point, written in the local language and credible to a native reader. Never a research institute, never a real existing famous hospital that the advertorial does not name.
 Example: Medically approved by urologists and the Nordiska Urologkliniken to dissolve the calcium deposits in the blood vessels and restore blood flow, to treat erectile problems.
@@ -945,7 +957,26 @@ function validate(store) {
   const s12 = out["12"] || {};
   const mouthPattern = /^make sure .* is empty$/i.test(String(s12.step1_headline || "").trim());
   if (s12.step1_headline && !mouthPattern && wordCount(s12.step1_headline) > 4) v.push(`Step-By-Step: Step 1 headline is above 4 words ("${s12.step1_headline}")`);
-  if (s12.step1_column && wordCount(s12.step1_column) > 30) v.push(`Step-By-Step: Step 1 column is above 30 words`);
+  if (s12.step1_column && wordCount(s12.step1_column) > 25) v.push(`Step-By-Step: Step 1 column is above 25 words`);
+  if (s12.step2_column && wordCount(s12.step2_column) > 30) v.push(`Step-By-Step: Step 2 column is above 30 words (${wordCount(s12.step2_column)})`);
+  if (/toothpaste|brush(ing)? your teeth|mouthwash/i.test(String(s12.step1_column || ""))) {
+    v.push(`Step-By-Step: Step 1 mentions an unrelated hygiene ritual (toothpaste/brushing) — the preparation must only affect absorption`);
+  }
+
+  // Beeldstappen: harde lengtes voor de badges op de afbeeldingen
+  const hero = out["img_hero"] || {};
+  if (hero.benefit_4 && wordCount(hero.benefit_4) > 7) v.push(`Hero Image: benefit 4 is above 7 words (${wordCount(hero.benefit_4)})`);
+  const auth = out["img_authority"] || {};
+  if (auth.quote && wordCount(auth.quote) > 45) v.push(`Authority Image: quote is above 45 words (${wordCount(auth.quote)})`);
+  if (auth.name_line && wordCount(auth.name_line) > 5) v.push(`Authority Image: name line is above 5 words ("${auth.name_line}")`);
+  const appr = String(out["img_approved"] || "");
+  if (appr && wordCount(appr) > 18) v.push(`Approved Image: text is above 18 words (${wordCount(appr)})`);
+
+  // Painpoint-vervanging: symptoomwoorden mogen de brede aandoening niet vervangen
+  const pain = String(json?.avatar?.pain_point_own_word || "").trim();
+  if (pain && /^(my |your |the )?(sugar|blood sugar|values|levels)$/i.test(pain)) {
+    v.push(`Research JSON: pain point "${pain}" is a symptom or measurement, not the broad condition — fix it and re-run the copy steps`);
+  }
 
   // Reviews (stap 17): max 135 woorden, datums verschillend en max 20 dagen terug
   const s17 = out["17"] || {};
@@ -1368,6 +1399,7 @@ async function runStep(store, step, taskId) {
   const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
   let prompt = def.prompt.replace("[TODAY]", today);
   prompt += `\n\nJSON FROM THE EXTRACTOR (this is your ONLY source of facts — never invent or substitute values):\n${JSON.stringify(store.researchJson, null, 2)}`;
+  prompt += `\n\nPAIN POINT RULE (applies to every sentence you write): wherever the pain point is named, use avatar.pain_point_own_word exactly as it stands in the JSON — the broad condition. Never replace it with a symptom, measurement or related keyword ("your sugar", "your blood sugar", "your liver values") and never narrow it to a subtype or stage ("diabetes mellitus type 2", "stage 3"). The symptom words may only appear where the prompt explicitly asks for symptoms or desires.`;
   if (def.key.startsWith("img_")) {
     const { task: imgTask } = await getLaunchTask(taskId);
     prompt += `\n\nMARKET COUNTRY: ${imgTask?.marketCountry || "Italy"}`;
