@@ -1529,6 +1529,11 @@ export default async function handler(req, res) {
       }
       store.researchJson = parsed;
       store.stepStatus["1b"] = "done";
+      // Stap 1 hoeft niet meer te draaien: de JSON is er al (anders pakt de keten hem alsnog op)
+      if (!String(store.researchDoc || "").trim()) {
+        store.researchDoc = "(Research JSON was provided manually — steps 1 and 1B were skipped.)";
+      }
+      store.stepStatus["1"] = "done";
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
       return res.status(200).json({ success: true, store });
