@@ -515,7 +515,16 @@ function SelectField({ value, options, onSave, disabled, placeholder }) {
 
 function TextAreaField({ value, onSave, disabled, placeholder }) {
   const [val, setVal] = useState(value || "");
+  const ref = useRef(null);
   useEffect(() => setVal(value || ""), [value]);
+  // Automatisch meegroeien met de tekst zodat er nooit in het veld zelf gescrold hoeft te worden
+  const autoGrow = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(72, el.scrollHeight + 2)}px`;
+  };
+  useEffect(() => { autoGrow(); }, [val]);
   if (disabled) {
     return value ? (
       <span style={{ fontSize: "13px", whiteSpace: "pre-wrap" }}>{value}</span>
@@ -525,7 +534,8 @@ function TextAreaField({ value, onSave, disabled, placeholder }) {
   }
   return (
     <textarea
-      style={{ ...ui.input, minHeight: "72px", resize: "vertical" }}
+      ref={ref}
+      style={{ ...ui.input, minHeight: "72px", resize: "none", overflow: "hidden" }}
       value={val}
       placeholder={placeholder || "—"}
       onChange={(e) => setVal(e.target.value)}
