@@ -1509,8 +1509,13 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                 <SelectField value={t.batchType} options={BATCH_TYPES} onSave={(v) => save("batchType", v)} disabled={!canEdit} />
               </Field>
               {t.batchType === "Iteration" && (
-                <Field label="Iteration Type" last>
+                <Field label="Iteration Type">
                   <SelectField value={t.iterationType} options={ITERATION_TYPES} onSave={(v) => save("iterationType", v)} disabled={!canEdit} />
+                </Field>
+              )}
+              {t.batchType === "Iteration" && (
+                <Field label="Reference Ad" last>
+                  <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
                 </Field>
               )}
               {(t.batchType === "Net New" || t.batchType === "Iteration") && (
