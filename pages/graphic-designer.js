@@ -1516,17 +1516,15 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               <Field label="Reference Ad" last>
                 <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
               </Field>
-              {(t.batchType === "Net New" || t.batchType === "Iteration") && (
-                <div style={{ padding: "10px 0 2px 0" }}>
-                  <div style={{ ...ui.label, marginBottom: "6px" }}>Visual Briefing</div>
-                  <TextAreaField
-                    value={t.visualBriefing}
-                    disabled={!canEdit}
-                    onSave={(v) => save("visualBriefing", v)}
-                    placeholder="Guidelines for the graphic designer — visual direction, references, do's & don'ts…"
-                  />
-                </div>
-              )}
+              <div style={{ padding: "10px 0 2px 0" }}>
+                <div style={{ ...ui.label, marginBottom: "6px" }}>Visual Briefing</div>
+                <TextAreaField
+                  value={t.visualBriefing}
+                  disabled={!canEdit}
+                  onSave={(v) => save("visualBriefing", v)}
+                  placeholder="Guidelines for the graphic designer — visual direction, references, do's & don'ts…"
+                />
+              </div>
               {t.batchType === "First Creative Batch" && (
                 <>
                   {[1, 2, 3, 4, 5].map((n) => (
