@@ -1528,6 +1528,21 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                 </div>
               )}
               {t.batchType === "First Creative Batch" && (
+                <>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Field key={n} label={`Top competitor creative ${n}`}>
+                      <TextField
+                        value={t[`topCompetitorCreative${n}`]}
+                        disabled={!canEdit}
+                        onSave={(v) => save(`topCompetitorCreative${n}`, v)}
+                        type="url"
+                        placeholder="Link to the swiped competitor creative — https://…"
+                      />
+                    </Field>
+                  ))}
+                </>
+              )}
+              {t.batchType === "First Creative Batch" && (
                 <div style={{ padding: "10px 0 2px 0" }}>
                   <div style={{ ...ui.label, marginBottom: "6px" }}>Creative Copy</div>
                   {t.creativeCopy ? (
