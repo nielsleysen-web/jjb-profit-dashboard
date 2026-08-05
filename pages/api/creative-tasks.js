@@ -232,7 +232,7 @@ export default async function handler(req, res) {
     const FIELDS = [
       "product", "scriptLink", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
       "angle", "advertorialLink", "market", "countryCode", "gender", "ageRange", "type",
-      "videoIteration", "inspirationLink", "videoFormat", "aRoll", "aRollAvatarId", "aRollAvatarName",
+      "videoIteration", "referenceAd", "inspirationLink", "videoFormat", "aRoll", "aRollAvatarId", "aRollAvatarName",
       "aRollLink", "voiceId", "voiceName", "subtitles", "frameioLink", "finalOutputLink",
     ];
     const OUTPUT_FIELDS = ["frameioLink", "finalOutputLink"];
