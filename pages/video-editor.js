@@ -1508,6 +1508,11 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                   <SelectField value={t.videoIteration} options={VIDEO_ITERATIONS} onSave={(v) => save("videoIteration", v)} disabled={!canEdit} />
                 </Field>
               )}
+              {t.type === "Iteration" && (
+                <Field label="Reference Ad">
+                  <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
+                </Field>
+              )}
               <Field label="Video Inspiration Link">
                 <TextField value={t.inspirationLink} disabled={!canEdit} onSave={(v) => save("inspirationLink", v)} type="url" placeholder="https://…" />
               </Field>
