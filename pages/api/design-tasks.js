@@ -243,7 +243,7 @@ export default async function handler(req, res) {
     const FIELDS = [
       "product", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
       "angle", "advertorialLink", "market", "countryCode", "gender", "ageRange",
-      "batchType", "visualBriefing", "iterationType", "creativeCopy",
+      "batchType", "visualBriefing", "iterationType", "referenceAd", "creativeCopy",
       "frameioLink", "finalOutputLink",
     ];
     const OUTPUT_FIELDS = ["frameioLink", "finalOutputLink"];
