@@ -1513,9 +1513,11 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                   <SelectField value={t.iterationType} options={ITERATION_TYPES} onSave={(v) => save("iterationType", v)} disabled={!canEdit} />
                 </Field>
               )}
-              <Field label="Reference Ad" last>
-                <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
-              </Field>
+              {t.batchType !== "First Creative Batch" && (
+                <Field label="Reference Ad" last>
+                  <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
+                </Field>
+              )}
               <div style={{ padding: "10px 0 2px 0" }}>
                 <div style={{ ...ui.label, marginBottom: "6px" }}>Visual Briefing</div>
                 <TextAreaField
