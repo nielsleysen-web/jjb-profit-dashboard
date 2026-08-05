@@ -544,6 +544,89 @@ function TextAreaField({ value, onSave, disabled, placeholder }) {
   );
 }
 
+/* ---------- Rich text veld: vet / cursief / onderstreept / hyperlink ---------- */
+function sanitizeHtml(html) {
+  let h = String(html || "");
+  h = h.replace(/<\s*(script|style|iframe|object|embed)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "");
+  h = h.replace(/<\s*(script|style|iframe|object|embed)[^>]*\/?>/gi, "");
+  h = h.replace(/\son\w+\s*=\s*"[^"]*"/gi, "").replace(/\son\w+\s*=\s*'[^']*'/gi, "").replace(/\son\w+\s*=\s*[^\s>]+/gi, "");
+  h = h.replace(/(href\s*=\s*["']?)\s*javascript:[^"'>\s]*/gi, "$1#");
+  return h;
+}
+// Oude platte tekst blijft gewoon werken: pas escapen + <br> bij het inladen
+const legacyToHtml = (v) => {
+  const s = String(v || "");
+  if (/<[a-z][\s\S]*>/i.test(s)) return s;
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
+};
+const htmlIsEmpty = (h) => !String(h || "").replace(/<br\s*\/?>|&nbsp;|<[^>]+>/gi, "").trim();
+
+function RichTextField({ value, onSave, disabled, placeholder }) {
+  const ref = useRef(null);
+  const focusedRef = useRef(false);
+  const html = sanitizeHtml(legacyToHtml(value));
+
+  useEffect(() => {
+    if (ref.current && !focusedRef.current && ref.current.innerHTML !== html) ref.current.innerHTML = html;
+  }, [html]);
+
+  const cmd = (c) => {
+    ref.current?.focus();
+    if (c === "link") {
+      const url = prompt("Link URL (https://…):");
+      if (!url) return;
+      document.execCommand("createLink", false, /^https?:\/\//i.test(url) ? url : `https://${url}`);
+    } else {
+      document.execCommand(c, false, null);
+    }
+  };
+
+  const linkCss = `.jjb-rtf a { color: #3b82f6; text-decoration: underline; } .jjb-rtf[contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; }`;
+
+  if (disabled) {
+    return htmlIsEmpty(html) ? (
+      <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
+    ) : (
+      <>
+        <style>{linkCss}</style>
+        <div
+          className="jjb-rtf"
+          style={{ fontSize: "13px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(html).replace(/<a\s/gi, '<a target="_blank" rel="noreferrer" ') }}
+        />
+      </>
+    );
+  }
+
+  const btn = { width: "26px", height: "24px", borderRadius: "6px", border: "1px solid #e5e8ee", background: "#ffffff", cursor: "pointer", fontSize: "12px", color: "#334155", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
+  return (
+    <div>
+      <style>{linkCss}</style>
+      <div style={{ display: "flex", gap: "4px", marginBottom: "5px" }}>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); cmd("bold"); }} title="Bold" style={{ ...btn, fontWeight: 800 }}>B</button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); cmd("italic"); }} title="Italic" style={{ ...btn, fontStyle: "italic", fontFamily: "Georgia, serif" }}>I</button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); cmd("underline"); }} title="Underline" style={{ ...btn, textDecoration: "underline" }}>U</button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); cmd("link"); }} title="Add link (select text first)" style={btn}>🔗</button>
+      </div>
+      <div
+        ref={ref}
+        className="jjb-rtf"
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder={placeholder || "—"}
+        onFocus={() => { focusedRef.current = true; }}
+        onBlur={() => {
+          focusedRef.current = false;
+          const clean = sanitizeHtml(ref.current?.innerHTML || "");
+          const out = htmlIsEmpty(clean) ? "" : clean;
+          if (out !== String(value || "")) onSave(out);
+        }}
+        style={{ ...ui.input, minHeight: "72px", height: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden", cursor: "text" }}
+      />
+    </div>
+  );
+}
+
 /* ---------- HeyGen avatar dropdown met foto's ---------- */
 function AvatarDropdown({ value, valueName, avatars, onSelect, disabled }) {
   const [open, setOpen] = useState(false);
@@ -1530,7 +1613,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               )}
               <div style={{ padding: "10px 0 2px 0" }}>
                 <div style={{ ...ui.label, marginBottom: "6px" }}>Visual Briefing</div>
-                <TextAreaField
+                <RichTextField
                   value={t.visualBriefing}
                   disabled={!canEdit}
                   onSave={(v) => save("visualBriefing", v)}
