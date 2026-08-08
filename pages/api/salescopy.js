@@ -1494,7 +1494,7 @@ async function writeTaskProgress(taskId, store) {
     const { launchStore, task } = await getLaunchTask(taskId);
     if (!task) return;
     const { done, total } = computeProgress(store);
-    task.salesCopyProgress = { done, total, delivered: !!store.csvUrl, at: new Date().toISOString() };
+    task.salesCopyProgress = { done, total, delivered: !!store.csvUrl, active: !!store.queueActive, at: new Date().toISOString() };
     await writeData("launch-tasks", launchStore);
   } catch (e) {
     console.error("writeTaskProgress error:", e.message); // voortgang is cosmetisch — nooit de pipeline breken
@@ -1550,7 +1550,7 @@ async function kickQueue(req, taskId) {
 /* ================= handler ================= */
 export default async function handler(req, res) {
   const rawTaskId = String((req.method === "GET" ? req.query.taskId : req.body?.taskId) || "").replace(/[^a-f0-9]/g, "");
-  const isInternal = req.method === "POST" && req.body?.action === "runQueue" && !!rawTaskId && req.body?.internalKey === internalKey(rawTaskId);
+  const isInternal = req.method === "POST" && (req.body?.action === "runQueue" || req.body?.action === "startQueue") && !!rawTaskId && req.body?.internalKey === internalKey(rawTaskId);
   const session = getSession(req);
   const roles = session?.roles || [];
   const isAdmin = !!session?.admin;
@@ -1667,6 +1667,9 @@ export default async function handler(req, res) {
 
     /* --- startQueue: pipeline server-side laten doorlopen, browser mag dicht --- */
     if (action === "startQueue") {
+      // Interne aanroep (board-watchdog): alleen een gestorven keten weer aantrappen,
+      // nooit een queue herstarten die met Stop bewust is stilgelegd
+      if (isInternal && !store.queueActive) return res.status(200).json({ success: true, halted: true });
       if (store.queueActive && store.updatedAt && Date.now() - Date.parse(store.updatedAt) < 90000) {
         await kickQueue(req, taskId); // keten draait (of viel stil): geef een nieuwe zet
         return res.status(200).json({ success: true, store });
@@ -1691,6 +1694,7 @@ export default async function handler(req, res) {
       store.queueActive = false;
       store.updatedAt = new Date().toISOString();
       await writeData(handle, store);
+      await writeTaskProgress(taskId, store); // active: false op het kaartje — houdt de board-watchdog stil
       return res.status(200).json({ success: true, store });
     }
 
@@ -1698,7 +1702,9 @@ export default async function handler(req, res) {
     if (action === "runQueue") {
       if (!store.queueActive) return res.status(200).json({ success: true, halted: true });
       store.queueRuns = (store.queueRuns || 0) + 1;
-      if (store.queueRuns > 60) {
+      // 28 stappen + max 3 pogingen per stap kan onder zware belasting boven 60 uitkomen;
+      // 120 dekt het slechtste geval en blijft een echte runaway-stop
+      if (store.queueRuns > 120) {
         store.queueActive = false;
         await writeData(handle, store);
         return res.status(200).json({ success: false, error: "Queue safety limit reached" });
