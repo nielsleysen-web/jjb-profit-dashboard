@@ -1478,7 +1478,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
-  const [packshotBusy, setPackshotBusy] = useState(false);
+  const [liveBusy, setLiveBusy] = useState(false);
   const debounceRef = useRef(null);
   const naming = namingConvention(t);
   const showNaming = STATUSES.indexOf(t.status) >= STATUSES.indexOf(NAMING_FROM_STATUS);
@@ -1508,6 +1508,31 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
   }, [query]);
 
   const save = (field, value) => post({ action: "update", taskId: t.id, task: { [field]: value } });
+
+  // Live productpagina openen. Oudere taken hebben nog geen url op t.product staan:
+  // die zoeken we eenmalig op via de productsearch en slaan hem meteen op de taak op.
+  const openLivePage = async () => {
+    if (t.product?.url) { window.open(t.product.url, "_blank", "noopener"); return; }
+    if (!t.product?.title || liveBusy) return;
+    setLiveBusy(true);
+    const w = window.open("about:blank", "_blank");
+    try {
+      const res = await fetch(`/api/products-search?q=${encodeURIComponent(t.product.title)}`).then((r) => r.json());
+      const list = res.success ? res.products : [];
+      const match = list.find((p) => (p.title || "").toLowerCase() === t.product.title.toLowerCase()) || list[0];
+      if (match?.url) {
+        if (canEdit) save("product", { ...t.product, id: t.product.id || match.id, handle: match.handle, url: match.url });
+        if (w) w.location = match.url; else window.open(match.url, "_blank", "noopener");
+      } else {
+        if (w) w.close();
+        alert("No live product page found on Shopify for this product");
+      }
+    } catch (err) {
+      if (w) w.close();
+      alert("Could not look up the live page: " + err.message);
+    }
+    setLiveBusy(false);
+  };
 
   const copyNaming = () => {
     navigator.clipboard?.writeText(naming).then(() => {
@@ -1691,6 +1716,9 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", background: "#f8fafc", borderRadius: "10px", padding: "8px 12px" }}>
                   {t.product.image && <img src={t.product.image} alt="" style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover" }} />}
                   <span style={{ fontSize: "13.5px", fontWeight: 700, flex: 1 }}>{t.product.title}</span>
+                  <a onClick={openLivePage} style={{ color: "#2563eb", cursor: "pointer", fontSize: "12px", fontWeight: 700, whiteSpace: "nowrap", textDecoration: "none" }}>
+                    {liveBusy ? "Opening…" : "View live page ↗"}
+                  </a>
                   {canEdit && (
                     <a onClick={() => save("product", null)} style={{ color: "#94a3b8", cursor: "pointer", fontSize: "12px" }}>change</a>
                   )}
@@ -1705,7 +1733,7 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
                         <button
                           key={p.id}
                           onClick={() => {
-                            post({ action: "update", taskId: t.id, task: { product: { title: p.title, image: p.image }, productName: p.title } });
+                            post({ action: "update", taskId: t.id, task: { product: { id: p.id, title: p.title, image: p.image, handle: p.handle || null, url: p.url || null }, productName: p.title } });
                             setQuery("");
                             setResults([]);
                           }}
@@ -1725,51 +1753,6 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
                 <Field label="Alibaba Link" last>
                   <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
                 </Field>
-              </div>
-              <div style={{ marginTop: "10px" }}>
-                <div style={ui.label}>Product Packshot (photo of the product — used by the AI pipeline)</div>
-                {t.productPackshot ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "6px", background: "#f8fafc", borderRadius: "10px", padding: "8px 12px" }}>
-                    <img src={t.productPackshot} alt="" style={{ width: "44px", height: "44px", borderRadius: "8px", objectFit: "cover", border: "1px solid #eef0f3" }} />
-                    <a href={t.productPackshot} target="_blank" rel="noreferrer" style={{ fontSize: "12.5px", fontWeight: 700, color: "#166534", flex: 1, textDecoration: "none" }}>✓ Packshot uploaded</a>
-                    {canEdit && (
-                      <a onClick={() => save("productPackshot", "")} style={{ color: "#94a3b8", cursor: "pointer", fontSize: "12px" }}>remove</a>
-                    )}
-                  </div>
-                ) : canEdit ? (
-                  <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", marginTop: "6px", padding: "8px 14px", border: "1px dashed #d7dce3", borderRadius: "10px", fontSize: "12.5px", fontWeight: 600, color: "#64748b", cursor: packshotBusy ? "default" : "pointer" }}>
-                    {packshotBusy ? "Uploading…" : "📷 Upload packshot"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      style={{ display: "none" }}
-                      disabled={packshotBusy}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = "";
-                        if (!file) return;
-                        if (file.size > 3.5 * 1024 * 1024) { alert("Max 3 MB — please resize the image first"); return; }
-                        setPackshotBusy(true);
-                        try {
-                          const data = await new Promise((resolve, reject) => {
-                            const r = new FileReader();
-                            r.onload = () => resolve(String(r.result).split(",")[1]);
-                            r.onerror = reject;
-                            r.readAsDataURL(file);
-                          });
-                          const res = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ filename: file.name, mimeType: file.type, data }) }).then((r) => r.json());
-                          if (!res.success) throw new Error(res.error || "Upload failed");
-                          save("productPackshot", res.url);
-                        } catch (err) {
-                          alert(err.message);
-                        }
-                        setPackshotBusy(false);
-                      }}
-                    />
-                  </label>
-                ) : (
-                  <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
-                )}
               </div>
             </Section>
 
