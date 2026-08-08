@@ -54,6 +54,8 @@ const SEARCH_QUERY = `
       nodes {
         id
         title
+        handle
+        onlineStoreUrl
         featuredImage { url(transform: {maxWidth: 120, maxHeight: 120}) }
         variants(first: 25) {
           nodes {
@@ -116,6 +118,9 @@ export default async function handler(req, res) {
     const products = nodes.map((p) => ({
       id: p.id,
       title: p.title,
+      handle: p.handle || null,
+      // Live productpagina: onlineStoreUrl als de winkel die geeft, anders via de handle
+      url: p.onlineStoreUrl || (p.handle ? `https://${storeUrl}/products/${p.handle}` : null),
       image: p.featuredImage?.url || null,
       variants: p.variants.nodes.map((v) => ({
         id: v.id,
@@ -131,7 +136,7 @@ export default async function handler(req, res) {
     if (basicOnly) {
       return res.status(200).json({
         success: true,
-        products: products.map((p) => ({ id: p.id, title: p.title, image: p.image, variants: [] })),
+        products: products.map((p) => ({ id: p.id, title: p.title, handle: p.handle, url: p.url, image: p.image, variants: [] })),
       });
     }
     return res.status(200).json({ success: true, products });
