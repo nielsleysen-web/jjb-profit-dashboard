@@ -308,7 +308,7 @@ async function fetchMetaData(dateFrom, dateTo) {
             params: {
               access_token: token,
               level: "campaign",
-              fields: "campaign_name,spend,impressions,clicks",
+              fields: "campaign_name,spend,impressions,clicks,unique_outbound_clicks",
               time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
               time_increment: 1,
               limit: 500,
@@ -323,9 +323,14 @@ async function fetchMetaData(dateFrom, dateTo) {
         for (const row of rows) {
           const spend = parseFloat(row.spend || 0);
           const day = row.date_start;
+          // unique_outbound_clicks komt als actie-array: [{ action_type: "outbound_click", value: "12" }]
+          const outboundClicks = (row.unique_outbound_clicks || []).reduce(
+            (sum, a) => sum + parseFloat(a.value || 0),
+            0
+          );
           accountTotal += spend;
           dailySpend[day] = (dailySpend[day] || 0) + spend;
-          campaignSpend.push({ name: row.campaign_name || "", spend, date: day });
+          campaignSpend.push({ name: row.campaign_name || "", spend, outboundClicks, date: day });
         }
 
         accountsData[accountId] = { spend: accountTotal };
@@ -414,7 +419,7 @@ function summarizeOrders(orders) {
       if (itemRevenue === 0 && itemCogs === 0) continue; // gratis geschenken overslaan
 
       if (!productMap[name]) {
-        productMap[name] = { name, image: null, orders: 0, revenue: 0, cogs: 0, adSpend: 0 };
+        productMap[name] = { name, image: null, orders: 0, revenue: 0, cogs: 0, adSpend: 0, outboundClicks: 0 };
       }
       if (!productMap[name].image && item.image?.url) {
         productMap[name].image = item.image.url;
@@ -476,7 +481,10 @@ function matchAdSpendToProducts(productMap, campaignSpend, inPeriod) {
         }
       }
     }
-    if (best) best.adSpend += row.spend;
+    if (best) {
+      best.adSpend += row.spend;
+      best.outboundClicks += row.outboundClicks || 0;
+    }
   }
 }
 
@@ -580,14 +588,21 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
 
   // Producten gesorteerd op winst
   const products = Object.values(cur.productMap)
-    .map((p) => ({
-      ...p,
-      revenue: round2(p.revenue),
-      cogs: round2(p.cogs),
-      adSpend: round2(p.adSpend),
-      profit: round2(p.revenue - p.cogs - p.adSpend),
-      roas: p.adSpend > 0 ? round2(p.revenue / p.adSpend) : null,
-    }))
+    .map((p) => {
+      const profit = p.revenue - p.cogs - p.adSpend;
+      return {
+        ...p,
+        revenue: round2(p.revenue),
+        cogs: round2(p.cogs),
+        adSpend: round2(p.adSpend),
+        profit: round2(profit),
+        profitPercent: p.revenue > 0 ? round1((profit / p.revenue) * 100) : null,
+        roas: p.adSpend > 0 ? round2(p.revenue / p.adSpend) : null,
+        outboundClicks: Math.round(p.outboundClicks || 0),
+        // CVR = orders / unieke outbound clicks van alle gematchte campagnes
+        cvr: (p.outboundClicks || 0) > 0 ? round1((p.orders / p.outboundClicks) * 100) : null,
+      };
+    })
     .sort((a, b) => b.profit - a.profit);
 
   return {
