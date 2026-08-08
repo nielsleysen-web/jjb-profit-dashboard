@@ -32,6 +32,35 @@ function getSession(req) {
   }
 }
 
+// Zelfde interne sleutel als in salescopy.js — daarmee mag deze API de pipeline-queue aantrappen
+const salescopyInternalKey = (taskId) => crypto.createHmac("sha256", SESSION_SECRET).update(`salescopy-queue:${taskId}`).digest("base64url");
+
+// Server-side watchdog: het board pollt elke 10s zolang er iets in AI Translation staat.
+// Is de zelf-kettende pipeline-keten van een taak gestorven (progress > 6 min stil terwijl
+// de queue nog actief was), dan trappen we hem hier automatisch weer aan — geen Resume-klik nodig.
+const PIPELINE_STALL_MS = 6 * 60 * 1000; // langste stap duurt max ~5 min (functielimiet 300s)
+async function resumeStalledPipelines(req, tasks) {
+  const stalled = (tasks || []).filter((t) => {
+    const p = t.salesCopyProgress;
+    return (
+      t.status === "AI Translation" &&
+      p && p.active && !p.delivered &&
+      p.at && Date.now() - Date.parse(p.at) > PIPELINE_STALL_MS
+    );
+  });
+  if (!stalled.length) return;
+  const host = req.headers.host;
+  if (!host) return;
+  const proto = String(host).startsWith("localhost") ? "http" : "https";
+  await Promise.all(
+    stalled.slice(0, 3).map((t) =>
+      axios
+        .post(`${proto}://${host}/api/salescopy`, { action: "startQueue", taskId: t.id, internalKey: salescopyInternalKey(t.id) }, { timeout: 5000 })
+        .catch(() => {}) // fire-and-forget: volgende board-poll probeert het gewoon opnieuw
+    )
+  );
+}
+
 /* ---------------- Shopify storage ---------------- */
 let tokenCache = { token: null, expiresAt: 0 };
 async function getShopifyToken(storeUrl) {
@@ -250,6 +279,7 @@ export default async function handler(req, res) {
 
     if (req.method === "GET") {
       const [store, accounts] = await Promise.all([readData("launch-tasks"), readData("accounts")]);
+      await resumeStalledPipelines(req, store?.tasks || []);
       const users = (accounts?.users || []).filter((u) => u.status === "active");
       const funnelBuilders = users
         .filter((u) => (u.roles || []).includes("Funnel Builder"))
