@@ -256,7 +256,7 @@ export default function Dashboard() {
         <table style={{ width: "100%", minWidth: isMobile ? "640px" : "auto", borderCollapse: "collapse", fontSize: "13px" }}>
           <thead>
             <tr>
-              {["Product", "ROAS", "Orders", "Revenue", "COGS", "Ad spend", "Profit"].map((h, i) => (
+              {["Product", "Orders", "ROAS", "Profit €", "Profit %", "CVR", "Ad Spend", "Total Revenue"].map((h, i) => (
                 <th
                   key={h}
                   style={{
@@ -305,24 +305,27 @@ export default function Dashboard() {
                       <span style={{ fontWeight: 600, color: "#0f172a" }}>{product.name}</span>
                     </div>
                   </td>
-                  <td style={cellR}>{product.roas != null ? product.roas.toFixed(2) : "—"}</td>
                   <td style={cellR}>{product.orders || 0}</td>
-                  <td style={cellR}>{formatCurrency(product.revenue)}</td>
-                  <td style={cellR}>{formatCurrency(product.cogs)}</td>
-                  <td style={cellR}>{product.adSpend > 0 ? formatCurrency(product.adSpend) : "—"}</td>
+                  <td style={cellR}>{product.roas != null ? product.roas.toFixed(2) : "—"}</td>
                   <td style={{ ...cellR, fontWeight: 700, color: product.profit >= 0 ? "#16a34a" : "#dc2626" }}>{formatCurrency(product.profit)}</td>
+                  <td style={{ ...cellR, fontWeight: 600, color: product.profitPercent == null ? "#94a3b8" : product.profitPercent >= 0 ? "#16a34a" : "#dc2626" }}>
+                    {product.profitPercent != null ? `${product.profitPercent.toFixed(1)}%` : "—"}
+                  </td>
+                  <td style={cellR}>{product.cvr != null ? `${product.cvr.toFixed(1)}%` : "—"}</td>
+                  <td style={cellR}>{product.adSpend > 0 ? formatCurrency(product.adSpend) : "—"}</td>
+                  <td style={cellR}>{formatCurrency(product.revenue)}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="7" style={{ padding: "32px", textAlign: "center", color: "#94a3b8" }}>No sales in this period.</td>
+                <td colSpan="8" style={{ padding: "32px", textAlign: "center", color: "#94a3b8" }}>No sales in this period.</td>
               </tr>
             )}
           </tbody>
         </table>
         </div>
         <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Ad spend matched by campaign name • product profit = revenue − COGS − matched ad spend
+          Ad spend matched by campaign name • product profit = revenue − COGS − matched ad spend • CVR = orders / unique outbound clicks of the matched campaigns
         </p>
       </div>
       </div>
