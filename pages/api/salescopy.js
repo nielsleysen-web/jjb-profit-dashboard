@@ -1247,11 +1247,44 @@ async function fetchPackshot(url) {
   }
   const r = await axios.get(src, { responseType: "arraybuffer", timeout: 25000, maxRedirects: 5 });
   const buf = Buffer.from(r.data);
-  if (buf.length > 4.5 * 1024 * 1024) throw new Error("Packshot is larger than 4.5 MB — upload a smaller image");
+  if (buf.length > 4.5 * 1024 * 1024) throw new Error("Product photo is larger than 4.5 MB — use a smaller image on the Shopify product");
   const ct = String(r.headers["content-type"] || "").split(";")[0].trim();
   const byExt = /\.png(\?|$)/i.test(url) ? "image/png" : /\.webp(\?|$)/i.test(url) ? "image/webp" : /\.gif(\?|$)/i.test(url) ? "image/gif" : "image/jpeg";
   const media = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(ct) ? ct : byExt;
   return { media_type: media, data: buf.toString("base64") };
+}
+
+// Productfoto voor de vision-stap automatisch bepalen:
+// 1. een handmatig geuploade packshot op de taak (oude taken) wint altijd,
+// 2. anders de featured image van het gekozen Shopify-product (via id),
+// 3. anders het product opzoeken op titel en die featured image nemen.
+async function resolveProductImageUrl(task) {
+  const manual = (task?.productPackshot || "").trim();
+  if (manual) return manual;
+  const prod = task?.product || {};
+  if (prod.id) {
+    try {
+      const data = await shopifyGraphql(
+        `query Img($id: ID!) { product(id: $id) { featuredImage { url(transform: {maxWidth: 1600, maxHeight: 1600}) } } }`,
+        { id: prod.id }
+      );
+      const url = data?.product?.featuredImage?.url;
+      if (url) return url;
+    } catch { /* val hieronder terug op zoeken op titel */ }
+  }
+  const title = (prod.title || task?.productName || "").trim();
+  if (!title) return "";
+  try {
+    const data = await shopifyGraphql(
+      `query Find($q: String!) { products(first: 5, query: $q) { nodes { title featuredImage { url(transform: {maxWidth: 1600, maxHeight: 1600}) } } } }`,
+      { q: `title:*${title.replace(/["\\]/g, "")}*` }
+    );
+    const nodes = data?.products?.nodes || [];
+    const match = nodes.find((p) => (p.title || "").toLowerCase() === title.toLowerCase()) || nodes[0];
+    return match?.featuredImage?.url || "";
+  } catch {
+    return "";
+  }
 }
 
 async function getLaunchTask(taskId) {
@@ -1349,11 +1382,12 @@ async function runStep(store, step, taskId) {
     return;
   }
   if (step === "1c") {
-    // Product Vision: packshot-foto → product.visual_description + product.size_reference (merge in de research JSON)
+    // Product Vision: productfoto → product.visual_description + product.size_reference (merge in de research JSON)
+    // De foto komt automatisch uit Shopify (featured image van het gekozen product); een oude handmatige packshot wint.
     const { task } = await getLaunchTask(taskId);
-    const url = (task?.productPackshot || "").trim();
+    const url = await resolveProductImageUrl(task);
     if (!url) {
-      // Geen packshot op de taak: stap netjes overslaan, de waarden uit de research blijven staan
+      // Geen productfoto te vinden: stap netjes overslaan, de waarden uit de research blijven staan
       store.visionJson = { skipped: true };
       return;
     }
@@ -1428,7 +1462,7 @@ function computePending(store) {
   const seq = [];
   if (!store.researchDoc) seq.push("1");
   if (store.researchDoc && !store.researchJson) seq.push("1b");
-  if (store.researchJson && !store.visionJson) seq.push("1c"); // Product Vision: packshot → visual_description/size_reference
+  if (store.researchJson && !store.visionJson) seq.push("1c"); // Product Vision: Shopify-productfoto → visual_description/size_reference
   if (store.researchJson) for (const st of STEPS) if (!store.outputs?.[st.key]) seq.push(st.key);
   // Staart mag door zodra elke copystap klaar is OF zijn pogingen heeft opgebruikt
   // (mislukte stap = lege cel; de validator meldt hem, de rijen verschuiven nooit)
