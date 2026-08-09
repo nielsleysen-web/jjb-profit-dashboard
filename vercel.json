@@ -5,6 +5,9 @@
     },
     "pages/api/upload.js": {
       "maxDuration": 60
+    },
+    "pages/api/growth-model.js": {
+      "maxDuration": 300
     }
   }
 }
