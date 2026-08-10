@@ -157,6 +157,7 @@ export default function GrowthModel() {
       <p style={{ margin: "0 0 20px 0", fontSize: "13px", color: "#8a92a3" }}>
         Hypothesis vs. reality — steady state = winners per week × lifespan. Winner = CPA under €{data.settings.WINNER_CPA} after the test gate
         (€{data.settings.GATE_SWIPE} swipe / €{data.settings.GATE_OWN} own write).
+        {data.settings.TRACK_FROM ? ` Tracking funnels launched from ${fmtDay(data.settings.TRACK_FROM)} — older products are excluded.` : ""}
       </p>
 
       {t.missingSource > 0 && (
@@ -243,7 +244,7 @@ export default function GrowthModel() {
       {/* Funnel-tabel */}
       <div style={{ ...ui.card, padding: isMobile ? "16px 12px" : "24px" }}>
         <h2 style={{ margin: "0 0 16px 0", fontSize: "14px", fontWeight: 600, color: "#334155" }}>
-          Funnels — {t.funnelsTracked} with ad spend in the last {data.settings.LOOKBACK_DAYS} days
+          Funnels — {t.funnelsTracked} launched since {fmtDay(data.settings.TRACK_FROM)}
         </h2>
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
           <table style={{ width: "100%", minWidth: "760px", borderCollapse: "collapse", fontSize: "13px" }}>
@@ -277,7 +278,7 @@ export default function GrowthModel() {
               ) : (
                 <tr>
                   <td colSpan="10" style={{ padding: "32px", textAlign: "center", color: "#94a3b8" }}>
-                    No funnels with matched ad spend yet. Campaign names must contain the product name.
+                    No funnels launched since {fmtDay(data.settings.TRACK_FROM)} with matched ad spend yet. Campaign names must contain the product name.
                   </td>
                 </tr>
               )}
