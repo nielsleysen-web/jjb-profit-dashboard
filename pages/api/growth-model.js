@@ -22,6 +22,7 @@ const STORE_TIMEZONE = "Europe/Brussels";
 
 /* ---------------- instellingen van het model ---------------- */
 const LOOKBACK_DAYS = 90;          // hoeveel historie we meenemen
+const TRACK_FROM = "2026-08-10";   // startdatum van de meting — funnels met eerste spend vóór deze datum tellen niet mee
 const WINNER_CPA = 20;             // winner = CPA onder dit bedrag (EUR)
 const GATE_SWIPE = 60;             // testbudget swipe (EUR) — verdict valt zodra spend hier voorbij is
 const GATE_OWN = 210;              // testbudget eigen funnel (EUR)
@@ -295,6 +296,9 @@ function buildGrowthModel(tasks, campaignDays, ordersByProduct, today) {
     if (!days.length) continue; // nooit spend gehad → staat nog niet live
 
     const firstSpendDay = days[0];
+    // Alleen funnels die vanaf de startdatum zijn gelanceerd — oudere producten vervuilen
+    // de hitrate/levensduur-meting omdat hun geschiedenis buiten het meetvenster begon
+    if (firstSpendDay < TRACK_FROM) continue;
     const lastSpendDay = days[days.length - 1];
     const totalSpend = days.reduce((s, d) => s + f.spendDays[d], 0);
     const alive = daysBetween(lastSpendDay, today) <= DEAD_AFTER_DAYS;
@@ -408,7 +412,7 @@ function buildGrowthModel(tasks, campaignDays, ordersByProduct, today) {
     generatedAt: new Date().toISOString(),
     windowFrom,
     windowTo: today,
-    settings: { WINNER_CPA, GATE_SWIPE, GATE_OWN, LOOKBACK_DAYS, DEAD_AFTER_DAYS },
+    settings: { WINNER_CPA, GATE_SWIPE, GATE_OWN, LOOKBACK_DAYS, DEAD_AFTER_DAYS, TRACK_FROM },
     assumptions: ASSUMPTIONS,
     totals: {
       funnelsTracked: results.length,
