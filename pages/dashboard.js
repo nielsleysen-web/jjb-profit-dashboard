@@ -54,6 +54,8 @@ export default function Dashboard() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [refreshedAt, setRefreshedAt] = useState("");
+  const [storeTime, setStoreTime] = useState("");
+  const inFlight = useRef(false);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -62,9 +64,14 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange, customFrom, customTo]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError("");
+  // silent = achtergrond-refresh: geen loading-flikkering, fouten stil houden
+  const fetchData = async (silent = false) => {
+    if (inFlight.current) return; // vorige refresh loopt nog
+    inFlight.current = true;
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const url =
         dateRange === "custom"
@@ -83,11 +90,32 @@ export default function Dashboard() {
         })
       );
     } catch (err) {
-      setError(err.message);
+      if (!silent) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      inFlight.current = false;
     }
   };
+
+  // Auto-refresh: elke 3s op Today (live meekijken), elke 30s op andere periodes.
+  // Pauzeert automatisch als het tabblad niet zichtbaar is.
+  useEffect(() => {
+    const intervalMs = dateRange === "today" ? 3000 : 30000;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") fetchData(true);
+    }, intervalMs);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, customFrom, customTo]);
+
+  // Live klok in de tijdzone van de winkel
+  useEffect(() => {
+    const tick = () =>
+      setStoreTime(new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const formatCurrency = (value) =>
     new Intl.NumberFormat("en-IE", {
@@ -152,6 +180,13 @@ export default function Dashboard() {
           <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>refreshed {refreshedAt}</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            onClick={() => fetchData(true)}
+            title="Refreshes automatically every 3 seconds on Today"
+            style={{ padding: "10px 16px", background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", cursor: "pointer", fontSize: "12.5px", fontWeight: 600, color: "#334155" }}
+          >
+            ⟳ Refresh
+          </button>
           <div style={{ display: "flex", gap: "4px", background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", padding: "4px" }}>
             {RANGES.map(({ label, value }) => (
               <button
@@ -220,6 +255,9 @@ export default function Dashboard() {
             </div>
             <div style={{ fontSize: "20px", fontWeight: 700, letterSpacing: "-0.4px", marginTop: "2px", color: "#0f172a" }}>
               {formatCurrency(data.revenue)}
+            </div>
+            <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "3px" }}>
+              🕐 Store time {storeTime} (Brussels)
             </div>
           </div>
           <span style={{ fontSize: "11px", color: "#8a92a3", textAlign: "right" }}>
