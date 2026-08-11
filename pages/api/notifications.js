@@ -105,9 +105,11 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const { action } = req.body || {};
       if (action === "markRead") {
+        // Met id: alleen die melding. Zonder id: alles van deze gebruiker ("Mark all as read").
+        const { id } = req.body || {};
         let changed = false;
         for (const n of store.items) {
-          if (n.email === session.email && !n.read) {
+          if (n.email === session.email && !n.read && (!id || n.id === id)) {
             n.read = true;
             changed = true;
           }
