@@ -280,7 +280,16 @@ async function fetchShopifyOrders(dateFrom, dateTo) {
 
 /* ------------------------------ Meta (Ads) ------------------------------- */
 
+// Meta-spend 2 minuten cachen: het dashboard pollt elke 3s, maar ad spend verandert
+// niet per seconde en de Meta Insights API heeft strakke rate limits. Orders (Shopify)
+// worden WEL bij elke refresh vers opgehaald — sales zie je dus meteen.
+let metaDataCache = { key: "", at: 0, data: null };
+
 async function fetchMetaData(dateFrom, dateTo) {
+  const cacheKey = `${dateFrom}:${dateTo}`;
+  if (metaDataCache.data && metaDataCache.key === cacheKey && Date.now() - metaDataCache.at < 120000) {
+    return metaDataCache.data;
+  }
   const token = process.env.META_ACCESS_TOKEN;
   const accountIds = (process.env.META_AD_ACCOUNT_IDS || "1729,2349")
     .split(",")
@@ -344,7 +353,9 @@ async function fetchMetaData(dateFrom, dateTo) {
     })
   );
 
-  return { dailySpend, campaignSpend, accountsData };
+  const result = { dailySpend, campaignSpend, accountsData };
+  metaDataCache = { key: cacheKey, at: Date.now(), data: result };
+  return result;
 }
 
 /* --------------------------- metrics opbouwen ---------------------------- */
