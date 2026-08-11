@@ -298,6 +298,8 @@ First I want you to analyze this advertorial and I want you to get all the answe
 - Does the advertorial state a percentage for the effect on that substance? Quote it.
 - Which single adjective describes the visible desired outcome and belongs almost exclusively to this pain point — slimmer, smoother, firmer?
 - What is their biggest objection to the product itself before buying? Not what makes them feel like an exception, but what makes them hesitate to buy at all.
+- What do they hate MOST about the pain point itself — the single concrete aspect or symptom that bothers them most in daily life, the thing they would name first when complaining to a friend? Name the thing itself (the bloated belly, the constant ringing, the flaky patches) — never an emotion like frustration or shame.
+- Which concrete BENEFITS of the product does the advertorial mention, and how often does each one come back? Count every repetition across the whole advertorial (headline, body, bullets, testimonials, captions). Rank them from most-mentioned to least-mentioned and give the top 3 to 5, each with its count. Phrase every benefit as a short outcome the avatar feels or sees ("reduces bloating", "all-day energy", "deeper sleep") — never as a mechanism or an ingredient.
 - What type of practice does the authority figure have — a dermatology practice, an ENT practice, a urology practice?
 - Which clinic or hospital is the authority figure connected to? If the advertorial names none, leave empty.
 - Describe the physical appearance of the product itself in one sentence — form, colour, size, texture, packaging — exactly as shown or described in the advertorial.
@@ -311,7 +313,7 @@ FORMAT: write the research document in compact bullet points. Be complete on con
 THE ADVERTORIAL:
 [ADVERTORIAL]`;
 
-const JSON_SCHEMA = `{ "product": { "name": "", "name_with_tm": "", "type": "", "delivery_form": "singular | plural", "product_noun": "", "ingredient_root_cause": "", "ingredient_instant": "", "results_days": "", "visual_description": "", "size_reference": "" }, "classification": { "external_or_internal": "external | internal", "visual_or_non_visual": "visual | non-visual", "step3_headline_verb": "See | Hear | Feel | Discover" }, "avatar": { "age_range": "", "gender": "", "awareness_stage": "", "pain_point_own_word": "", "pain_point_formal": "", "pain_point_number": "singular | plural", "buzzwords_known": [], "buzzwords_unknown": [], "first_symptom_sentence": "", "first_symptoms": [], "greatest_fear": "", "consequence_to_restore": "", "deeper_desire": "", "desired_outcome_adjective": "", "main_purchase_objection": "", "problem_symbol_type": "none | glow | object", "problem_symbol_options": [], "problem_symbol": "" }, "mechanism": { "entry_route": "", "root_cause_structure": "", "root_cause_verb": "", "step_1_current_problem": "", "step_2_root_cause": "", "second_body_part": "", "cell_word": "", "structure_word": "", "recognisable_anatomical_word": "", "mechanism_verb": "", "root_cause_substance": "", "root_cause_percentage": "" }, "objections": { "alternative_1": "", "alternative_1_hated_adjective": "", "alternative_2": "", "alternative_2_hated_adjective": "", "currently_still_using": "", "substances_they_refuse": [], "exception_objection": "", "thing_to_avoid": "" }, "usage": { "application_place": "", "cleaning_agent": "", "application_moment": "", "dosage": "", "proof_point": "" }, "authority": { "name": "", "title_singular": "", "title_plural": "", "institution": "", "practice_type": "", "institutional_backer": "" } }`;
+const JSON_SCHEMA = `{ "product": { "name": "", "name_with_tm": "", "type": "", "delivery_form": "singular | plural", "product_noun": "", "ingredient_root_cause": "", "ingredient_instant": "", "results_days": "", "visual_description": "", "size_reference": "" }, "classification": { "external_or_internal": "external | internal", "visual_or_non_visual": "visual | non-visual", "step3_headline_verb": "See | Hear | Feel | Discover" }, "avatar": { "age_range": "", "gender": "", "awareness_stage": "", "pain_point_own_word": "", "pain_point_formal": "", "pain_point_number": "singular | plural", "buzzwords_known": [], "buzzwords_unknown": [], "first_symptom_sentence": "", "first_symptoms": [], "greatest_fear": "", "most_hated_aspect": "", "consequence_to_restore": "", "deeper_desire": "", "ranked_benefits": [], "desired_outcome_adjective": "", "main_purchase_objection": "", "problem_symbol_type": "none | glow | object", "problem_symbol_options": [], "problem_symbol": "" }, "mechanism": { "entry_route": "", "root_cause_structure": "", "root_cause_verb": "", "step_1_current_problem": "", "step_2_root_cause": "", "second_body_part": "", "cell_word": "", "structure_word": "", "recognisable_anatomical_word": "", "mechanism_verb": "", "root_cause_substance": "", "root_cause_percentage": "" }, "objections": { "alternative_1": "", "alternative_1_hated_adjective": "", "alternative_2": "", "alternative_2_hated_adjective": "", "currently_still_using": "", "substances_they_refuse": [], "exception_objection": "", "thing_to_avoid": "" }, "usage": { "application_place": "", "cleaning_agent": "", "application_moment": "", "dosage": "", "proof_point": "" }, "authority": { "name": "", "title_singular": "", "title_plural": "", "institution": "", "practice_type": "", "institutional_backer": "" } }`;
 
 const PROMPT_1B = `Below is the complete research document for this product.
 Your only task is to extract the values into the JSON structure below. You do not add anything, you do not interpret, you do not improve. Every value comes literally from the research document.
@@ -321,6 +323,8 @@ RULES
 - Never invent a value. An empty field is better than a guessed one.
 - avatar.pain_point_own_word must be a NOUN PHRASE of 1-4 words naming the condition itself ("stubborn belly fat", "erectile problems", "fatty liver") — never a first-person sentence, complaint or quote. If the research document only quotes spoken sentences, distil them to the everyday name of the condition.
 - avatar.pain_point_own_word names the BROAD condition, never a symptom, measurement or keyword of it and never a subtype or stage: "diabetes" — not "my sugar", not "high blood sugar", not "diabetes mellitus type 2". The same applies to avatar.pain_point_formal: give the broad medical name ("diabetes"), never the subtype.
+- avatar.most_hated_aspect: the concrete thing they hate most about the pain point — a physical aspect or symptom in 2-5 words ("the bloated belly", "the constant ringing"), never an emotion.
+- avatar.ranked_benefits: the product benefits ranked by how often the research document says they appear in the advertorial, most-mentioned FIRST. Keep the order exactly as the research document ranks them. Each entry is a short outcome phrase of 2-5 words ("reduces bloating", "all-day energy") — never a mechanism, never an ingredient. If the research document gives no ranking, leave the array empty.
 - Values that are a choice from a fixed list must be exactly one of the listed options.
 - Arrays stay arrays, even when there is only one item.
 - Return only valid JSON. No markdown, no code fences, no explanation, no text before or after.
@@ -389,18 +393,23 @@ const STEPS = [
     key: "2",
     label: "ATF Headline",
     multi: null,
-    prompt: `I want you to create the headline for me based on the JSON from the extractor. The headline is solution-aware / product-aware and follows this order:
+    prompt: `I want you to create the ATF headline based on the JSON from the extractor. The headline is solution-aware / product-aware and is ONE flowing sentence with exactly this structure, in this order:
 
-1. [First the product name]
+1. [PRODUCT NAME] — product.name, always first.
 
-2. [State the desired outcome they want by breaking down the main pain point and mentioning it negatively, by using an adjective that mainly fits this pain point. Make sure this adjective is also something they know, and that it ties in with what THEY hate about the pain point and that it is only applicable to this and cannot be used for any other pain point, that it is phrased extremely negatively and is relatable for our target audience]
+2. [MAIN FUNCTION] — what the product does to the root cause, stated as an active verb plus the root cause object, in the avatar's known jargon at their awareness stage. Build it from mechanism.root_cause_verb and mechanism.root_cause_structure (or mechanism.root_cause_substance when the substance is the more natural object). Example form: "flushes fatty liver", "dissolves calcium deposits". Never a vague verb such as helps, supports or improves.
 
-3. State that they should not use what their most common alternative is for this pain point. It usually starts with 'WITHOUT', and also state an adjective that ties in extremely strongly with what they hate about this alternative, and something that can only be used for this specific alternative and does not fit any other alternative. Make sure this adjective is also something they know, and that it ties in with what THEY hate about the alternative. Also make sure it is a word they know in their vocabulary, and not something they barely hear or say themselves
+3. [TIMEFRAME] — "in X days". X comes from product.results_days. It is ALWAYS between 4 and 6 days: if results_days is empty or above 6, use 6; if it is below 4, use 4. Never more than 6 days, never in hours, seconds or weeks — only days.
 
-4. Think about our unique mechanism pain point: what is it that caused the pain point? And state that this is solved first, and state a specific timeframe of when it is solved within 4-6 days. You NEVER state more than 6 days, you never state it in hours, seconds, or anything else, only in days. This often starts with 'treats' or 'restores', but it does not necessarily have to start with this. Also state it in their known jargon based on their awareness stage.
+4. [TOP 2 BENEFITS] — the two MOST-MENTIONED benefits from the research: avatar.ranked_benefits[0] and avatar.ranked_benefits[1], connected naturally, usually as "to [benefit 1] and [benefit 2]". Keep each benefit in the avatar's everyday words, phrased as an outcome they feel or see. If avatar.ranked_benefits is empty or has fewer than 2 entries (older research), derive the two most central outcomes from avatar.first_symptoms (as relief of those symptoms) and avatar.deeper_desire — but never invent a benefit the JSON does not support.
+
+HARD RULES
+- ONE sentence, maximum 20 words. Count before you answer; if it runs over, shorten the benefits, never drop the timeframe.
+- No colons, no dashes, no exclamation marks, no "without ..." constructions — the sentence flows like spoken language.
+- Use product.name exactly as it stands (respect the ™ if name_with_tm is the convention elsewhere on the page: use product.name here, plain).
 
 Example:
-NeuroTone™ treats your annoying tinnitus without sound therapy and restores damaged hair cells within 4 days
+AlphaCleanse flushes fatty liver in 6 days to reduce bloating and give you all-day energy.
 
 Give me only the output I ask for, no explanation or clarification with it.`,
   },
@@ -441,16 +450,25 @@ Before you write a single word, determine the following for yourself. This does 
 - The two steps of the unique mechanism solution: mechanism.step_1_current_problem and mechanism.step_2_root_cause
 - The cell word and the structure word: mechanism.cell_word and mechanism.structure_word
 - The recognisable anatomical word: mechanism.recognisable_anatomical_word
+- The ranked benefits, most-mentioned first: avatar.ranked_benefits
+- The deeper desire: avatar.deeper_desire
+- The root-cause ingredient: product.ingredient_root_cause
+- The most hated aspect of the pain point: avatar.most_hated_aspect
 
 GENERAL RULES
 - No benefit contains more than 8 words.
 - Never add a word to reach a word count. If a benefit can be shorter, it is shorter.
 - No verb appears twice in the block. Two verbs that resemble each other or sound the same (restore and restart, dilate and dissolve) count as the same verb.
-- The claim strength rises from 1 to 4. Never start strong and then weaken.
 
-BENEFIT 1 — THE AUTHORITY CLAIM
-A strong claim that simply states that the problem is solved. Always start with "Effective treatment for" and end on the pain point as they know it in THEIR jargon. Do not be a smart-ass here with a word they do not use.
-Effective treatment for tinnitus / Effective treatment for erectile problems / Effective treatment for crow's feet
+BENEFIT 1 — THE STRONGEST DESIRE
+The most common benefit our product delivers through its mechanism — their strongest desire first. Take avatar.ranked_benefits[0], the benefit the advertorial mentions most often. If ranked_benefits is empty (older research), use avatar.deeper_desire instead.
+Never state it as an abstract claim. Express it as ONE concrete everyday moment the avatar gets back — a situation so specific that it only fits THIS pain point and no other. THE EXCLUSIVITY TEST: if the line could appear on the sales page of a different product for a different condition, it is too vague — sharpen it until it cannot. "Fall asleep without music again" beats "peaceful silence"; "Climb the stairs without stopping" beats "more energy"; "Wear a bikini without covering up" beats "smoother skin".
+Build the moment from the avatar's daily life in the JSON: their first symptoms, what they currently do to cope, what they avoid, their deeper desire.
+THE ANGLE FOLLOWS classification.external_or_internal:
+- FOR EXTERNAL (the pain point is visible and they hide it): the moment is about being SEEN again — showing, wearing, no longer hiding. "Show off your legs again during summer" / "Wear a bikini without covering up". Never a comfort or symptom moment here; for a visible problem, being seen beats feeling better.
+- FOR INTERNAL (only they feel, hear or notice it): the moment is the symptom or coping behaviour that finally disappears. "Fall asleep without music again" / "Sleep through the night without bathroom trips". The coping behaviour they can finally DROP is often the sharpest angle.
+Never a mechanism, never an ingredient. Maximum 8 words.
+Examples: Fall asleep without music again / Wear a bikini without covering up / Climb the stairs without stopping
 
 BENEFIT 2 — THE MECHANISM, STEP 1 (THE CURRENT PROBLEM)
 Always start with an action word: restores, strengthens, stimulates, activates, supports.
@@ -461,21 +479,18 @@ FOR EXTERNAL: name the cell plus the substance that cell produces. Leave out the
 FOR INTERNAL: name the structure plus the function that structure performs. The article stays. Examples: Strengthens the eardrum to dampen sound waves / Restores blood flow to the smallest blood vessels
 Overlap in mechanism between benefit 2 and 3 is allowed as long as the perspective differs: 2 works at cell level, 3 at cause level.
 
-BENEFIT 3 — THE CAUSE, STEP 2
-Always start with "Proven ingredients that" and then continue to how it solves the CAUSE of the problem, using mechanism.step_2_root_cause from the JSON. Maximum 8 words. Shorter is better.
-Choose as the object what the CAUSE is, not what the victim is. Never put the cause into an adjective attached to another object.
-The verb names the end state that the mechanism delivers, never the means. Never use a feeding or supply verb: feed, supply, support and stimulate are forbidden here.
-Use the most recognisable variant of the anatomical term, not the most technical. So hair cells, not ciliated hair cells. So the skin, not the dermis.
-Where possible, use mechanism.root_cause_verb from the JSON.
-FOR EXTERNAL: if the cause is the organ itself, name it in its general form (the skin, the hair, the nail). No micro-location, no adjectives. The verb is a dimension verb: thicken, fill, firm, tighten. Example: Proven ingredients that thicken the skin again
-FOR INTERNAL: the verb is a function or clearing verb: restore, calm, normalise, dampen, dilate, dissolve, remove. Examples: Proven ingredients that repair the hair cells / Proven ingredients that dissolve calcium buildup
-Exception to the umbrella-word ban: "restore" is allowed when no more specific physical verb exists for this cause.
+BENEFIT 3 — THE INGREDIENT THAT FIXES THE CAUSE
+Structure: [INGREDIENT] restores [ROOT CAUSE MECHANISM]. Always short, MAXIMUM 7 WORDS — count before you answer.
+The ingredient is product.ingredient_root_cause, named exactly as it stands. The root cause mechanism comes from mechanism.step_2_root_cause, in the avatar's most recognisable words (hair cells, not ciliated hair cells; the skin, not the dermis).
+The default verb is restores. Only when the root cause is a buildup that must disappear (fluid, calcium, plaque, toxins) use the fitting clearing verb instead: dissolves, flushes out, breaks down.
+Examples: Milk thistle restores liver cell function / Saw palmetto restores healthy blood flow / Magnesium dissolves calcium buildup
 
-BENEFIT 4 — THE TIME PROMISE
-Benefit 4 is always exactly one of these two, depending on the product type:
-- FOR EXTERNAL: Visible difference within 24 hours!
-- FOR INTERNAL: Noticeable difference within 24 hours!
-Nothing more. Never swap visible and noticeable.
+BENEFIT 4 — PROVEN INGREDIENTS AGAINST WHAT THEY HATE MOST
+Always start with "Proven ingredients that", followed by a verb and avatar.most_hated_aspect — the thing they hate most about the pain point.
+Choose the verb by what happens to that thing when it disappears: removes, dissolves, reduces, clears, calms, fades — the verb must fit the disappearing object, so a buildup dissolves, a sound calms, a swelling reduces.
+If avatar.most_hated_aspect is empty (older research), use the most prominent entry of avatar.first_symptoms.
+Maximum 8 words.
+Examples: Proven ingredients that reduce the bloated belly / Proven ingredients that calm the constant ringing / Proven ingredients that dissolve stubborn fat
 
 OUTPUT FORMAT
 Give only the four benefits as a numbered list. No outcome of step 0, no word counts, no variants, no alternatives, no tables, no explanation. Only the four lines.`,
@@ -931,19 +946,31 @@ function validate(store) {
     if (!String(val || "").trim()) v.push(`Empty cell: ${row.category}`);
   }
 
-  // Top 4 Benefits (stap 4)
+  // ATF Headline (stap 2): naam + hoofdactie + dagen + top 2 benefits, in een zin
+  const s2 = String(out["2"] || "").trim();
+  if (s2) {
+    if (wordCount(s2) > 20) v.push(`ATF Headline: above 20 words (${wordCount(s2)})`);
+    if (/\.\s+\S/.test(s2)) v.push(`ATF Headline: must be ONE flowing sentence`);
+    const dayMatch = s2.match(/(\d+)\s*days?\b/i);
+    if (!dayMatch) v.push(`ATF Headline: missing a timeframe in days ("in X days")`);
+    else if (parseInt(dayMatch[1], 10) > 6) v.push(`ATF Headline: timeframe is above 6 days (${dayMatch[1]})`);
+    else if (parseInt(dayMatch[1], 10) < 4) v.push(`ATF Headline: timeframe is below 4 days (${dayMatch[1]})`);
+    if (/\bhours?\b|\bweeks?\b|\bseconds?\b/i.test(s2)) v.push(`ATF Headline: timeframe must be in days only`);
+    if (/\bwithout\b/i.test(s2)) v.push(`ATF Headline: old "without ..." construction detected — the new structure has no WITHOUT element`);
+  }
+
+  // Top 4 Benefits (stap 4): desire → mechanisme → ingredient (max 7) → Proven ingredients
   const b4 = String(out["4"] || "");
   if (b4) {
     const lines = b4.split("\n").map((l) => l.replace(/^\s*\d+[.)]\s*/, "").trim()).filter(Boolean);
+    if (lines.length !== 4) v.push(`Top 4 Benefits: expected exactly 4 lines, got ${lines.length}`);
     lines.forEach((l, i) => {
-      if (wordCount(l) > 8) v.push(`Top 4 Benefits: benefit ${i + 1} is above 8 words ("${l}")`);
+      const max = i === 2 ? 7 : 8; // benefit 3 is max 7 woorden, de rest max 8
+      if (wordCount(l) > max) v.push(`Top 4 Benefits: benefit ${i + 1} is above ${max} words ("${l}")`);
     });
     const last = lines[lines.length - 1] || "";
-    const okLast = ["Visible difference within 24 hours!", "Noticeable difference within 24 hours!"];
-    if (!okLast.includes(last)) {
-      v.push(`Top 4 Benefits: benefit 4 must be exactly "Visible difference within 24 hours!" or "Noticeable difference within 24 hours!" (got "${last}")`);
-    } else if (!last.toLowerCase().startsWith(rightWord)) {
-      v.push(`Top 4 Benefits: benefit 4 uses "${wrongWord}" but classification.visual_or_non_visual says "${rightWord}"`);
+    if (last && !/^proven ingredients that\b/i.test(last)) {
+      v.push(`Top 4 Benefits: benefit 4 must start with "Proven ingredients that" (got "${last}")`);
     }
   }
 
