@@ -458,25 +458,75 @@ function NotificationBell({ inline, admin }) {
     return () => clearInterval(iv);
   }, [router.pathname, admin]);
 
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    // Bij openen: eigen meldingen als gelezen markeren
-    if (next && unread > 0) {
-      fetch("/api/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "markRead" }),
-      })
-        .then(() => setUnread(0))
-        .catch(() => {});
+  const [filter, setFilter] = useState("all");
+
+  const toggle = () => setOpen((o) => !o);
+
+  // Esc sluit de sidebar
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const markRead = (id) => {
+    fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "markRead", ...(id ? { id } : {}) }),
+    }).catch(() => {});
+    if (id) {
+      setItems((list) => list.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      setUnread((u) => Math.max(0, u - 1));
+    } else {
+      setItems((list) => list.map((n) => ({ ...n, read: true })));
+      setUnread(0);
     }
   };
 
-  const go = (href) => {
+  const go = (n) => {
+    if (n && !n.read) markRead(n.id);
     setOpen(false);
-    router.push(href || "/product-launching");
+    router.push((n && n.href) || "/product-launching");
   };
+
+  // Type herkennen aan de tekst van de melding (voor de filter-tabs)
+  const notifType = (n) => {
+    const t = String(n.text || "").toLowerCase();
+    if (/qa check/.test(t)) return "qa";
+    if (/sales page copy|pipeline|ready for build|creative batch|launch/.test(t)) return "pipeline";
+    return "other";
+  };
+  const filtered = items.filter((n) => {
+    if (filter === "unread") return !n.read;
+    if (filter === "pipeline") return notifType(n) === "pipeline";
+    if (filter === "qa") return notifType(n) === "qa";
+    return true;
+  });
+
+  // Groepering per dag
+  const dayKey = (iso) => {
+    const d = new Date(iso);
+    const today = new Date();
+    const yesterday = new Date(today.getTime() - 86400000);
+    const same = (a, b) => a.toDateString() === b.toDateString();
+    if (same(d, today)) return "Today";
+    if (same(d, yesterday)) return "Yesterday";
+    return "Earlier";
+  };
+  const groups = [];
+  for (const n of filtered) {
+    const key = dayKey(n.at);
+    let g = groups[groups.length - 1];
+    if (!g || g.label !== key) {
+      g = { label: key, items: [] };
+      groups.push(g);
+    }
+    g.items.push(n);
+  }
 
   const badge = unread + (admin ? pending.length : 0);
 
@@ -528,31 +578,74 @@ function NotificationBell({ inline, admin }) {
 
       {open && (
         <div
-          style={{
-            position: "absolute",
-            top: "48px",
-            right: 0,
-            width: "320px",
-            background: "#ffffff",
-            border: "1px solid #eceef2",
-            borderRadius: "14px",
-            boxShadow: "0 16px 40px rgba(15,23,42,0.18)",
-            padding: "14px",
-            zIndex: 80,
-            maxHeight: "70vh",
-            overflowY: "auto",
-          }}
-        >
+          onClick={toggle}
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.35)", zIndex: 90 }}
+        />
+      )}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          height: "100vh",
+          width: "min(400px, 92vw)",
+          background: "#ffffff",
+          borderLeft: "1px solid #eceef2",
+          boxShadow: open ? "-16px 0 48px rgba(15,23,42,0.18)" : "none",
+          zIndex: 95,
+          display: "flex",
+          flexDirection: "column",
+          transform: open ? "translateX(0)" : "translateX(110%)",
+          transition: "transform 0.25s ease",
+        }}
+      >
+        {/* Kop */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 18px", borderBottom: "1px solid #eef0f3" }}>
+          <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>
+            Notifications{unread > 0 && <span style={{ marginLeft: "8px", fontSize: "11.5px", fontWeight: 700, color: "#2563eb", background: "#eff6ff", padding: "2px 8px", borderRadius: "999px" }}>{unread} new</span>}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {unread > 0 && (
+              <a onClick={() => markRead()} style={{ fontSize: "12px", fontWeight: 600, color: "#2563eb", cursor: "pointer" }}>Mark all as read</a>
+            )}
+            <button onClick={toggle} style={{ width: "30px", height: "30px", borderRadius: "9px", border: "1px solid #eceef2", background: "#ffffff", cursor: "pointer", fontSize: "14px", color: "#64748b" }}>✕</button>
+          </div>
+        </div>
+
+        {/* Filter-tabs */}
+        <div style={{ display: "flex", gap: "6px", padding: "12px 18px 4px 18px" }}>
+          {[["all", "All"], ["unread", "Unread"], ["pipeline", "Pipeline"], ["qa", "QA"]].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "999px",
+                border: "1px solid " + (filter === key ? "#0f172a" : "#e2e8f0"),
+                background: filter === key ? "#0f172a" : "#ffffff",
+                color: filter === key ? "#ffffff" : "#64748b",
+                fontSize: "12px",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Inhoud */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "10px 18px 18px 18px" }}>
           {/* Admin: nieuwe account-aanvragen */}
           {admin && pending.length > 0 && (
             <div style={{ marginBottom: "12px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 700, color: "#b45309", marginBottom: "8px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: "#b45309", margin: "8px 0" }}>
                 ⏳ Account requests ({pending.length})
               </div>
               {pending.map((u) => (
                 <div
                   key={u.id}
-                  onClick={() => go("/accounts")}
+                  onClick={() => go({ href: "/accounts", read: true })}
                   style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 10px", background: "#fef9ec", borderRadius: "10px", cursor: "pointer", marginBottom: "5px" }}
                 >
                   <div style={{ width: "28px", height: "28px", borderRadius: "999px", background: "#fde68a", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "12px", color: "#92400e", flexShrink: 0 }}>
@@ -567,31 +660,42 @@ function NotificationBell({ inline, admin }) {
             </div>
           )}
 
-          {/* Eigen meldingen */}
-          <div style={{ fontSize: "12px", fontWeight: 700, color: "#0f172a", marginBottom: "8px" }}>Notifications</div>
-          {items.length === 0 ? (
-            <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8" }}>No notifications yet.</p>
+          {groups.length === 0 ? (
+            <p style={{ margin: "24px 0 0 0", fontSize: "12.5px", color: "#94a3b8", textAlign: "center" }}>
+              {filter === "unread" ? "You're all caught up 🎉" : "No notifications yet."}
+            </p>
           ) : (
-            items.map((n) => (
-              <div
-                key={n.id}
-                onClick={() => go(n.href)}
-                style={{
-                  padding: "8px 10px",
-                  background: n.read ? "#ffffff" : "#eff6ff",
-                  border: "1px solid #eef0f3",
-                  borderRadius: "10px",
-                  cursor: "pointer",
-                  marginBottom: "5px",
-                }}
-              >
-                <div style={{ fontSize: "12px", color: "#0f172a", lineHeight: 1.45 }}>{n.text}</div>
-                <div style={{ fontSize: "10.5px", color: "#94a3b8", marginTop: "2px" }}>{timeAgo(n.at)}</div>
+            groups.map((g) => (
+              <div key={g.label}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.7px", margin: "12px 0 6px 0" }}>{g.label}</div>
+                {g.items.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => go(n)}
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      padding: "9px 10px",
+                      background: n.read ? "#ffffff" : "#eff6ff",
+                      border: "1px solid #eef0f3",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      marginBottom: "5px",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    {!n.read && <span style={{ width: "7px", height: "7px", borderRadius: "999px", background: "#2563eb", marginTop: "6px", flexShrink: 0 }} />}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: "12.5px", color: "#0f172a", lineHeight: 1.45 }}>{n.text}</div>
+                      <div style={{ fontSize: "10.5px", color: "#94a3b8", marginTop: "2px" }}>{timeAgo(n.at)}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             ))
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
