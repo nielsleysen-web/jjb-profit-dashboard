@@ -506,8 +506,23 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
   const currentOrders = orders.filter((o) =>
     inCurrent(localDateStr(new Date(o.createdAt)))
   );
-  const prevOrders = orders.filter((o) =>
-    inPrev(localDateStr(new Date(o.createdAt)))
+
+  // Vergelijken we VANDAAG met gisteren? Dan telt gisteren alleen mee tot
+  // HETZELFDE tijdstip als nu — anders vergelijk je een halve dag met een hele
+  // en sta je elke ochtend onterecht op rood.
+  const todayStr = localDateStr(new Date());
+  const sameTimeCompare = dateFrom === dateTo && dateTo === todayStr;
+  const nowTimeOfDay = new Date().toLocaleTimeString("en-GB", {
+    timeZone: STORE_TIMEZONE,
+    hour12: false,
+  }); // "HH:MM:SS" in winkeltijd
+  const orderTimeOfDay = (o) =>
+    new Date(o.createdAt).toLocaleTimeString("en-GB", { timeZone: STORE_TIMEZONE, hour12: false });
+
+  const prevOrders = orders.filter(
+    (o) =>
+      inPrev(localDateStr(new Date(o.createdAt))) &&
+      (!sameTimeCompare || orderTimeOfDay(o) <= nowTimeOfDay)
   );
 
   const cur = summarizeOrders(currentOrders);
@@ -519,6 +534,13 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
   for (const [day, spend] of Object.entries(meta.dailySpend)) {
     if (inCurrent(day)) adSpend += spend;
     else if (inPrev(day)) prevAdSpend += spend;
+  }
+  if (sameTimeCompare) {
+    // Meta geeft alleen dagtotalen — spend van gisteren naar rato van het
+    // verstreken deel van de dag, zodat de profit-vergelijking ook eerlijk is
+    const [hh, mm, ss] = nowTimeOfDay.split(":").map(Number);
+    const dayFraction = Math.min(1, (hh * 3600 + mm * 60 + ss) / 86400);
+    prevAdSpend *= dayFraction;
   }
 
   matchAdSpendToProducts(cur.productMap, meta.campaignSpend, inCurrent);
@@ -618,6 +640,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
 
   return {
     currency: "EUR",
+    sameTimeCompare,
     totalOrders: cur.totalOrders,
     ordersChange: round1(pctChange(cur.totalOrders, prev.totalOrders)),
     revenue: round2(cur.revenue),
