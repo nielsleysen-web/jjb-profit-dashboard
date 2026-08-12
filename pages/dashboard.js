@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [customTo, setCustomTo] = useState("");
   const [refreshedAt, setRefreshedAt] = useState("");
   const [storeTime, setStoreTime] = useState("");
+  const [supplierFee, setSupplierFee] = useState(true); // 2,5% fee standaard AAN
   const inFlight = useRef(false);
   const isMobile = useIsMobile();
 
@@ -62,7 +63,7 @@ export default function Dashboard() {
     if (dateRange === "custom" && (!customFrom || !customTo)) return;
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, customFrom, customTo]);
+  }, [dateRange, customFrom, customTo, supplierFee]);
 
   // silent = achtergrond-refresh: geen loading-flikkering, fouten stil houden
   const fetchData = async (silent = false) => {
@@ -73,10 +74,11 @@ export default function Dashboard() {
       setError("");
     }
     try {
+      const feeParam = `&supplierFee=${supplierFee ? 1 : 0}`;
       const url =
         dateRange === "custom"
-          ? `/api/dashboard?range=custom&from=${customFrom}&to=${customTo}`
-          : `/api/dashboard?range=${dateRange}`;
+          ? `/api/dashboard?range=custom&from=${customFrom}&to=${customTo}${feeParam}`
+          : `/api/dashboard?range=${dateRange}${feeParam}`;
       const response = await fetch(url);
       const result = await response.json();
       if (!result.success) throw new Error(result.error);
@@ -106,7 +108,7 @@ export default function Dashboard() {
     }, intervalMs);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, customFrom, customTo]);
+  }, [dateRange, customFrom, customTo, supplierFee]);
 
   // Live klok in de tijdzone van de winkel
   useEffect(() => {
@@ -284,7 +286,19 @@ export default function Dashboard() {
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="COGS + Fees" value={formatCurrency(data.cogsAndFees)} sub={`COGS ${formatCurrency(data.cogs)} · fees ${formatCurrency(data.fees)}`} />
-        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue · +${formatCurrency(data.adSupplierFee)} supplier fee (2.5%)`} />
+        <div onClick={() => setSupplierFee((v) => !v)} style={{ cursor: "pointer" }} title={supplierFee ? "Click to exclude the 2.5% supplier fee from profit" : "Click to include the 2.5% supplier fee in profit"}>
+          <Card
+            compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}
+            small
+            label="Ad Spend (Meta)"
+            value={formatCurrency(data.adSpend)}
+            sub={
+              supplierFee
+                ? `${(data.adSpendPercent || 0).toFixed(1)}% of revenue · +${formatCurrency(data.adSupplierFee)} supplier fee (2.5%)`
+                : `${(data.adSpendPercent || 0).toFixed(1)}% of revenue · supplier fee OFF — profit excl. 2.5%`
+            }
+          />
+        </div>
       </div>
 
       {/* Products */}
