@@ -274,17 +274,17 @@ export default function Dashboard() {
 
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "16px" }}>
-        <Card label="Total Orders" value={data.totalOrders || 0} change={data.ordersChange} />
-        <Card label="Net Profit" value={formatCurrency(data.netProfit)} change={data.profitChange} accent={data.netProfit >= 0 ? "#16a34a" : "#dc2626"} />
-        <Card label="Revenue" value={formatCurrency(data.revenue)} change={data.revenueChange} />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Total Orders" value={data.totalOrders || 0} change={data.ordersChange} />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Net Profit" value={formatCurrency(data.netProfit)} change={data.profitChange} accent={data.netProfit >= 0 ? "#16a34a" : "#dc2626"} />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Revenue" value={formatCurrency(data.revenue)} change={data.revenueChange} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "20px" }}>
-        <Card small label="Profit %" value={`${(data.profitPercent || 0).toFixed(1)}%`} change={data.profitPercentChange} />
-        <Card small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
-        <Card small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
-        <Card small label="COGS + Fees" value={formatCurrency(data.cogsAndFees)} sub={`COGS ${formatCurrency(data.cogs)} · fees ${formatCurrency(data.fees)}`} />
-        <Card small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue · +${formatCurrency(data.adSupplierFee)} supplier fee (2.5%)`} />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Profit %" value={`${(data.profitPercent || 0).toFixed(1)}%`} change={data.profitPercentChange} />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="COGS + Fees" value={formatCurrency(data.cogsAndFees)} sub={`COGS ${formatCurrency(data.cogs)} · fees ${formatCurrency(data.fees)}`} />
+        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Ad Spend (Meta)" value={formatCurrency(data.adSpend)} sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue · +${formatCurrency(data.adSupplierFee)} supplier fee (2.5%)`} />
       </div>
 
       {/* Products */}
@@ -480,7 +480,7 @@ function RecentActivity({ formatCurrency, isMobile }) {
 
 const cellR = { padding: "10px 12px", textAlign: "right", color: "#334155", fontVariantNumeric: "tabular-nums" };
 
-function Card({ label, value, change, sub, accent, small }) {
+function Card({ label, value, change, sub, accent, small, compareLabel }) {
   return (
     <div style={{ ...ui.card, padding: small ? "18px 20px" : "22px 24px" }}>
       <div style={{ ...ui.label, marginBottom: small ? "8px" : "10px" }}>{label}</div>
@@ -517,7 +517,7 @@ function Card({ label, value, change, sub, accent, small }) {
               </span>
             );
           })()}
-          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "6px" }}>vs. previous period</span>
+          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "6px" }}>{compareLabel || "vs. previous period"}</span>
         </span>
       )}
     </div>
