@@ -445,7 +445,7 @@ function summarizeOrders(orders) {
 }
 
 function pctChange(current, previous) {
-  if (!previous) return 0;
+  if (!previous) return current > 0 ? 100 : 0; // vanaf nul gegroeid telt als +100%
   return ((current - previous) / previous) * 100;
 }
 
@@ -519,11 +519,12 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
   const orderTimeOfDay = (o) =>
     new Date(o.createdAt).toLocaleTimeString("en-GB", { timeZone: STORE_TIMEZONE, hour12: false });
 
-  const prevOrders = orders.filter(
-    (o) =>
-      inPrev(localDateStr(new Date(o.createdAt))) &&
-      (!sameTimeCompare || orderTimeOfDay(o) <= nowTimeOfDay)
-  );
+  // Volledige vorige periode: voedt de gestippelde gisteren-lijn in de grafiek
+  const prevOrdersAll = orders.filter((o) => inPrev(localDateStr(new Date(o.createdAt))));
+  // Tot ditzelfde tijdstip: voedt alle vergelijkingspercentages (totaal vandaag vs totaal gisteren-tot-nu)
+  const prevOrders = sameTimeCompare
+    ? prevOrdersAll.filter((o) => orderTimeOfDay(o) <= nowTimeOfDay)
+    : prevOrdersAll;
 
   const cur = summarizeOrders(currentOrders);
   const prev = summarizeOrders(prevOrders);
@@ -605,7 +606,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
     revenueChart = {
       granularity: "hour",
       points: buildHourly(currentOrders),
-      compare: buildHourly(prevOrders),
+      compare: buildHourly(prevOrdersAll), // hele dag van gisteren blijft zichtbaar als referentie
     };
   } else {
     revenueChart = {
