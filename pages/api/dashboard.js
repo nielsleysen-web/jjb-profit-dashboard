@@ -65,6 +65,8 @@ export default async function handler(req, res) {
 
   try {
     const { range = "7d", from, to } = req.query;
+    // supplierFee=0: de 2,5% ad account supplier fee buiten de profit-berekening laten (toggle op de Ad Spend-kaart)
+    const includeSupplierFee = req.query.supplierFee !== "0";
     const { dateFrom, dateTo, prevFrom, prevTo } = getDateRange(range, from, to);
 
     // 1 window = huidige + vorige periode → in één keer ophalen, daarna splitsen
@@ -73,7 +75,7 @@ export default async function handler(req, res) {
       fetchMetaData(prevFrom, dateTo),
     ]);
 
-    const dashboard = buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo });
+    const dashboard = buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee });
 
     return res.status(200).json({
       success: true,
@@ -499,7 +501,8 @@ function matchAdSpendToProducts(productMap, campaignSpend, inPeriod) {
   }
 }
 
-function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
+function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee = true }) {
+  const feePct = includeSupplierFee ? AD_SUPPLIER_FEE_PERCENT : 0;
   const inCurrent = (d) => d >= dateFrom && d <= dateTo;
   const inPrev = (d) => d >= prevFrom && d <= prevTo;
 
@@ -546,9 +549,9 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
 
   matchAdSpendToProducts(cur.productMap, meta.campaignSpend, inCurrent);
 
-  // Kerncijfers (incl. 2,5% ad account supplier fee)
-  const adSupplierFee = adSpend * AD_SUPPLIER_FEE_PERCENT;
-  const prevAdSupplierFee = prevAdSpend * AD_SUPPLIER_FEE_PERCENT;
+  // Kerncijfers (incl. 2,5% ad account supplier fee, tenzij uitgezet via de toggle)
+  const adSupplierFee = adSpend * feePct;
+  const prevAdSupplierFee = prevAdSpend * feePct;
   const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend - adSupplierFee;
   const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend - prevAdSupplierFee;
   const avgOrderValue = cur.totalOrders > 0 ? cur.revenue / cur.totalOrders : 0;
@@ -569,7 +572,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo }) {
       cogs: round2(day.cogs),
       fees: round2(day.fees),
       adSpend: round2(spend),
-      profit: round2(day.revenue - day.cogs - day.fees - spend - spend * AD_SUPPLIER_FEE_PERCENT),
+      profit: round2(day.revenue - day.cogs - day.fees - spend - spend * feePct),
     });
   }
 
