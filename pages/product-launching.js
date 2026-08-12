@@ -74,7 +74,9 @@ const btnGhost = {
 
 const STATUSES = ["Task Start", "AI Translation", "Ready For Build", "In Production", "QA Check", "First Creative Batch", "Ready to launch", "Launched"];
 // Board toont t/m First Creative Batch — Ready to launch zit bij Media Buying, Launched bij het Launched-tabblad
-const BOARD_STATUSES = STATUSES.slice(0, 6);
+// First Creative Batch staat niet meer op dit board: bij die status wordt automatisch
+// een Graphic Designer-taak in "Ready To Work" aangemaakt en verhuist het werk daarheen
+const BOARD_STATUSES = STATUSES.slice(0, 5);
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
 const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
@@ -351,7 +353,7 @@ export default function ProductLaunching() {
               </div>
 
               {/* Kaarten */}
-              <div style={{ display: "grid", gap: "8px", minHeight: "40px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: "8px", minHeight: "40px" }}>
                 {columnTasks.map((t) => (
                   <div
                     key={t.id}
@@ -1749,6 +1751,19 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
               ) : (
                 <span style={{ fontSize: "13px", color: "#cbd5e1" }}>{t.productName || "—"}</span>
               )}
+              <div style={{ marginTop: "8px" }}>
+                <Field label="Source (feeds the Growth Model — own funnel or swiped)">
+                  {canEdit ? (
+                    <select value={t.source || ""} onChange={(e) => save("source", e.target.value)} style={selectStyle}>
+                      <option value="">—</option>
+                      <option>Own Write</option>
+                      <option>Swipe</option>
+                    </select>
+                  ) : (
+                    <span style={{ fontSize: "13px" }}>{t.source || "—"}</span>
+                  )}
+                </Field>
+              </div>
               <div style={{ marginTop: "8px" }}>
                 <Field label="Alibaba Link" last>
                   <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
