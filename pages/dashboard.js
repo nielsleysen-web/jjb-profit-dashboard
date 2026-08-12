@@ -269,7 +269,7 @@ export default function Dashboard() {
             )}
           </span>
         </div>
-        <RevenueChart chart={data.revenueChart} formatCurrency={formatCurrency} />
+        <RevenueChart chart={data.revenueChart} formatCurrency={formatCurrency} live={!!data.sameTimeCompare} />
       </div>
 
       {/* Summary cards */}
@@ -703,7 +703,7 @@ function niceTicks(maxValue) {
   return ticks;
 }
 
-function RevenueChart({ chart, formatCurrency }) {
+function RevenueChart({ chart, formatCurrency, live }) {
   const [hover, setHover] = useState(null);
   const days = chart?.points || [];
   const compare = chart?.compare || null; // gisteren, per uur
@@ -775,6 +775,12 @@ function RevenueChart({ chart, formatCurrency }) {
 
   const labelStep = isHourly ? 3 : Math.max(1, Math.ceil(days.length / 10));
 
+  // Gloeiend bolletje op het huidige uur (winkeltijd) — alleen op de live Today-grafiek
+  const nowHour = live && isHourly
+    ? parseInt(new Date().toLocaleString("en-GB", { timeZone: "Europe/Brussels", hour: "2-digit", hourCycle: "h23" }), 10)
+    : null;
+  const nowPt = nowHour != null && nowHour >= 0 && nowHour < pts.length ? pts[nowHour] : null;
+
   return (
     <div style={{ position: "relative" }}>
       <svg
@@ -815,6 +821,17 @@ function RevenueChart({ chart, formatCurrency }) {
         {/* area + lijn */}
         <path d={areaPath} fill="url(#revenueFill)" />
         <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth="1.2" strokeLinecap="round" />
+
+        {/* live: gloeiend bolletje op het huidige uur */}
+        {nowPt && (
+          <g>
+            <circle cx={nowPt[0]} cy={nowPt[1]} r="6" fill="#3b82f6" opacity="0.25">
+              <animate attributeName="r" values="4;10;4" dur="2s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.35;0.05;0.35" dur="2s" repeatCount="indefinite" />
+            </circle>
+            <circle cx={nowPt[0]} cy={nowPt[1]} r="3" fill="#3b82f6" stroke="#ffffff" strokeWidth="1.3" />
+          </g>
+        )}
 
         {/* hover indicator */}
         {hover != null && (
