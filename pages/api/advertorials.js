@@ -14,7 +14,8 @@
 //   5. Publish: alles toepassen, keep-images re-hosten op Shopify CDN, finale HTML opslaan.
 //      De pagina wordt geserveerd via pages/a/[slug].js — edits updaten dezelfde link.
 //
-// Toegang: admin + Funnel Builder. Model hardcoded (zelfde afspraak als de salescopy-pipeline).
+// Toegang: admin + Funnel Builder. Model: goedkoop klein model (vertaalwerk) — de
+// salescopy-pipeline blijft onveranderd op Fable 5.
 
 import axios from "axios";
 import crypto from "crypto";
@@ -23,7 +24,10 @@ export const config = { maxDuration: 300, api: { bodyParser: { sizeLimit: "8mb" 
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
-const MODEL = "claude-fable-5"; // vast model, nooit een ander
+// Vertalen/lokaliseren is regelvolgend werk, geen copywriting: een klein model doet dit
+// prima en is ~10x goedkoper dan Fable 5 (±€0,50-1 per advertorial i.p.v. €5-8).
+// Ander model proberen? Zet ADVERTORIAL_MODEL in Vercel (env var), geen code nodig.
+const MODEL = process.env.ADVERTORIAL_MODEL || "claude-haiku-4-5";
 const CHUNK_STORE_SIZE = 60000;   // metaobject-veld blijft onder de limiet
 const AI_CHUNK_SIZE = 12000;      // HTML-chunkgrootte per vertaalstap
 const PARALLEL_CHUNKS = 5;        // vertalingen tegelijk per serverbeurt
