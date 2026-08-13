@@ -522,6 +522,12 @@ export default async function handler(req, res) {
     if (req.method === "GET") {
       if (req.query.list === "1") {
         const index = await getIndex();
+        // Watchdog: verwerkende builds die >2 min stil liggen weer aantrappen
+        const stalled = index.builds.filter((b) => b.status === "processing" && b.updatedAt && Date.now() - Date.parse(b.updatedAt) > 120000).slice(0, 3);
+        for (const b of stalled) {
+          const rec = await readData(`advertorial-${b.id}`);
+          if (rec?.queue?.active) await kickQueue(req, b.id, 1500);
+        }
         return res.status(200).json({ success: true, builds: index.builds, me: { email: session.email, name: session.name, admin: isAdmin } });
       }
       if (rawId) {
@@ -668,7 +674,7 @@ export default async function handler(req, res) {
       build.queue.updatedAt = new Date().toISOString();
       await writeData(`advertorial-${build.id}`, build);
       await saveIndexEntry(build);
-      if (queuePending(build) && build.queue.active) await kickQueue(req, build.id);
+      if (queuePending(build) && build.queue.active) await kickQueue(req, build.id, 8000); // ruime aflevertijd: keten mag niet vallen
       return res.status(200).json({ success: true });
     }
 
