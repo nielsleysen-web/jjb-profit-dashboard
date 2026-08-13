@@ -29,7 +29,8 @@ const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_
 // Ander model proberen? Zet ADVERTORIAL_MODEL in Vercel (env var), geen code nodig.
 const MODEL = process.env.ADVERTORIAL_MODEL || "claude-haiku-4-5";
 const CHUNK_STORE_SIZE = 60000;   // metaobject-veld blijft onder de limiet
-const AI_CHUNK_SIZE = 12000;      // HTML-chunkgrootte per vertaalstap
+const AI_CHUNK_SIZE = 12000;      // (legacy) HTML-chunkgrootte
+const SEG_GROUP = 50;             // tekstsegmenten per vertaalstap
 const PARALLEL_CHUNKS = 5;        // vertalingen tegelijk per serverbeurt
 const PARALLEL_IMAGES = 4;        // vision-analyses tegelijk per serverbeurt
 const MAX_ATTEMPTS = 3;
@@ -248,6 +249,83 @@ function wrapImagesInNextStep(html) {
   return out;
 }
 
+// Tekstsegmenten uit de HTML halen en vervangen door placeholders.
+// Het model vertaalt ALLEEN de segmenten — de HTML-structuur blijft onaantastbaar.
+function extractSegments(html, ownName) {
+  const guards = [];
+  let masked = String(html).replace(/<style\b[\s\S]*?<\/style\s*>/gi, (m) => {
+    guards.push(m);
+    return `\u27EA${guards.length - 1}\u27EB`;
+  });
+  const segments = [];
+  const urlSwaps = [];
+  const grab = (text) => {
+    const id = segments.length;
+    segments.push(String(text));
+    return `\u27E6${id}\u27E7`;
+  };
+  // Anchor-bereiken bepalen zodat we weten of een tekstnode al in een <a> staat
+  const anchorRanges = [];
+  const aRe = /<a\b[\s\S]*?<\/a\s*>/gi;
+  let am;
+  while ((am = aRe.exec(masked))) anchorRanges.push([am.index, am.index + am[0].length]);
+  const inAnchor = (idx) => anchorRanges.some(([a, b]) => idx >= a && idx < b);
+
+  // Tekstnodes (tussen > en <) met letters, cijfers of valuta erin
+  masked = masked.replace(/>([^<>]+)</g, (m, t, offset) => {
+    if (!t.trim()) return m;
+    if (/[\u27EA\u27EB]/.test(t)) return m; // gemaskeerd stijlblok: nooit als tekst grijpen
+    const lead = t.match(/^\s*/)[0];
+    const tail = t.match(/\s*$/)[0];
+    // Zichtbare URL-tekst: NOOIT naar het model — direct vervangen door de eigen
+    // productnaam als #next-step-link (of alleen de naam als hij al in een link staat)
+    if (/^(https?:\/\/|www\.)\S+$/i.test(t.trim())) {
+      const rep = inAnchor(offset) ? ownName : `<a href="#next-step">${ownName}</a>`;
+      urlSwaps.push({ before: t.trim(), after: `${ownName} → #next-step` });
+      return `>${lead}${rep}${tail}<`;
+    }
+    if (!/[A-Za-zÀ-ÿ\u0590-\u05FF\d€$£₪]/.test(t)) return m;
+    return `>${lead}${grab(t.trim())}${tail}<`;
+  });
+  // Zichtbare attributen
+  masked = masked.replace(/(alt|title|placeholder)\s*=\s*"([^"]+)"/gi, (m, attr, val) =>
+    /[A-Za-zÀ-ÿ\u0590-\u05FF]/.test(val) ? `${attr}="${grab(val)}"` : m
+  );
+  const template = masked.replace(/\u27EA(\d+)\u27EB/g, (m, i) => guards[+i]);
+  return { template, segments, urlSwaps };
+}
+
+function segmentPrompt(build, items) {
+  const market = MARKETS[build.targetMarket] || { language: build.targetLanguage, currency: "local currency" };
+  const source = build.sourceLanguage === "auto" ? "auto-detect the source language" : `the source language is ${build.sourceLanguage}`;
+  return `You are localising text segments from a direct-response advertorial page for the ${build.targetMarket} market; ${source}.
+
+Translate every segment to ${market.language} — natural and native, never literal. Preserve the persuasive tone, claims, numbers and urgency exactly. The segments are fragments of ONE page (headlines, paragraphs, buttons, image alt texts) in page order.
+
+LOCALISE while translating:
+- "${build.competitorName}" (all inflections, possessive forms, ™/® variants) → "${build.ownProductName}", everywhere.
+- Currency → ${market.currency} with sensible charm pricing.
+- Cities/regions/country → credible ${build.targetMarket} equivalents.
+- Person names → natural local names, same gender.
+- Schools/universities/medical institutions → compose credible local ones tied to the discipline; NEVER a real famous hospital or university.
+- Brands → local equivalent or neutral description.
+- Weight/distance/dimensions/temperature → local units, values converted correctly. Clothing sizes → local convention.
+- Date and number formats → local convention.
+
+HARD RULES
+- NEVER output a URL, domain or link. If a segment contains a URL, replace that URL with "${build.ownProductName}". Never invent domains.
+- Return the SAME number of segments with the SAME "i" values. Never merge, split, drop or reorder segments.
+- A segment that is only a number, symbol or code: return it unchanged.
+- Keep leading/trailing punctuation of each segment.
+
+OUTPUT: only valid JSON, no markdown, no text before or after:
+{"segments":[{"i":0,"t":"..."}],"changes":[{"category":"product|currency|places|people|institutions|brands|units|dates|numbers|other","before":"...","after":"...","confidence":"high|low"}]}
+List in "changes" only the localisation swaps (names, prices, places, institutions, units, dates) — not ordinary translations. Use confidence "low" when you invented something (e.g. a composed clinic name).
+
+SEGMENTS:
+${JSON.stringify(items)}`;
+}
+
 // HTML in chunks knippen op tag-grenzen (nooit midden in een tag)
 function chunkHtml(html, size) {
   const chunks = [];
@@ -437,31 +515,30 @@ async function kickQueue(req, id, timeoutMs = 2500) {
 async function runOneStep(req, build) {
   const q = build.queue;
   if (q.chunksDone < q.chunksTotal) {
-    // BATCH: tot PARALLEL_CHUNKS chunks tegelijk. Chunks zonder leesbare tekst
-    // (pure CSS/code) gaan er 1-op-1 doorheen zonder AI-call — dat is het gros
-    // van een volledige paginabron en scheelt enorm veel tijd.
-    const src = await readLarge(`advertorial-${build.id}-src`);
-    const chunks = chunkHtml(src, AI_CHUNK_SIZE);
+    // BATCH: tot PARALLEL_CHUNKS segmentgroepen tegelijk. Het model ziet alleen
+    // tekst — de HTML-structuur wordt nooit aangeraakt en kan dus niet breken.
+    const segRaw = await readLarge(`advertorial-${build.id}-seg`);
+    const allSeg = JSON.parse(segRaw || "[]");
     const batch = [];
-    for (let k = q.chunksDone; k < Math.min(q.chunksDone + PARALLEL_CHUNKS, q.chunksTotal); k++) batch.push(k);
+    for (let g = q.chunksDone; g < Math.min(q.chunksDone + PARALLEL_CHUNKS, q.chunksTotal); g++) batch.push(g);
     const results = await Promise.all(
-      batch.map(async (i) => {
-        const chunk = chunks[i];
-        if (!needsTranslation(chunk)) return { i, html: chunk, changes: [] }; // passthrough
+      batch.map(async (g) => {
+        const items = allSeg.slice(g * SEG_GROUP, (g + 1) * SEG_GROUP).map((t, k) => ({ i: g * SEG_GROUP + k, t }));
+        if (!items.length) return { g, items, changes: [] };
         try {
-          const text = await callClaude({ prompt: localisePrompt(build, chunk, i, chunks.length), maxTokens: 16000, timeoutMs: 240000 });
+          const text = await callClaude({ prompt: segmentPrompt(build, items), maxTokens: 8000, timeoutMs: 180000 });
           const obj = parseJsonLoose(text);
-          const html = String(obj.html || "");
-          if (!html.trim()) throw new Error("empty output");
-          return { i, html, changes: Array.isArray(obj.changes) ? obj.changes : [] };
+          const map = {};
+          for (const seg of obj.segments || []) map[seg.i] = String(seg.t ?? "");
+          const translated = items.map((it) => ({ i: it.i, t: map[it.i] != null && map[it.i] !== "" ? map[it.i] : it.t }));
+          return { g, items: translated, changes: Array.isArray(obj.changes) ? obj.changes : [] };
         } catch (e) {
-          // Mislukte chunk: origineel doorlaten + waarschuwing, run loopt altijd door
-          return { i, html: chunk, changes: [{ category: "other", before: `section ${i + 1}`, after: `⚠ NOT localised (${String(e.message).slice(0, 60)}) — edit manually`, confidence: "low" }] };
+          return { g, items, changes: [{ category: "other", before: `text group ${g + 1}`, after: `⚠ NOT localised (${String(e.message).slice(0, 60)}) — edit manually`, confidence: "low" }] };
         }
       })
     );
     for (const r of results) {
-      await writeData(`advertorial-${build.id}-part-${r.i}`, { data: r.html });
+      await writeData(`advertorial-${build.id}-part-${r.g}`, { data: JSON.stringify(r.items) });
       const newChanges = r.changes.slice(0, 30).map((c) => ({
         id: uid(),
         category: String(c.category || "other"),
@@ -471,7 +548,6 @@ async function runOneStep(req, build) {
       }));
       build.changes = [...(build.changes || []), ...newChanges];
     }
-    // Totaalcap: het buildrecord moet in één metaobject blijven passen
     if (build.changes.length > 300) {
       const dropped = build.changes.length - 300;
       build.changes = build.changes.slice(0, 300);
@@ -481,12 +557,24 @@ async function runOneStep(req, build) {
     return;
   }
   if (!q.assembled) {
-    // Alle chunks klaar: delen parallel inlezen en samenvoegen tot de gelokaliseerde HTML
-    const parts = await Promise.all(
-      Array.from({ length: q.chunksTotal }, (_, i) => readData(`advertorial-${build.id}-part-${i}`))
-    );
-    const full = parts.map((p) => p?.data || "").join("");
-    if (!full.trim()) throw new Error("Assembled HTML is empty — press Resume");
+    // Template + vertaalde segmenten samenvoegen tot de gelokaliseerde HTML
+    const [tpl, segRaw, ...parts] = await Promise.all([
+      readLarge(`advertorial-${build.id}-tpl`),
+      readLarge(`advertorial-${build.id}-seg`),
+      ...Array.from({ length: q.chunksTotal }, (_, g) => readData(`advertorial-${build.id}-part-${g}`)),
+    ]);
+    const original = JSON.parse(segRaw || "[]");
+    const dict = {};
+    for (const p of parts) {
+      try {
+        for (const it of JSON.parse(p?.data || "[]")) dict[it.i] = it.t;
+      } catch {}
+    }
+    if (!tpl.trim()) throw new Error("Template missing — press Resume");
+    const full = tpl.replace(/\u27E6(\d+)\u27E7/g, (m, i) => {
+      const v = dict[+i];
+      return v != null && v !== "" ? v : original[+i] || "";
+    });
     await writeLarge(`advertorial-${build.id}-loc`, full);
     q.assembled = true;
     return;
@@ -692,15 +780,24 @@ export default async function handler(req, res) {
       html = wrapImagesInNextStep(html);
       build.images = collectImages(html);
 
-      await writeLarge(`advertorial-${build.id}-src`, html);
-      const chunks = chunkHtml(html, AI_CHUNK_SIZE);
-      build.changes = [];
-      build.queue = { active: true, chunksTotal: chunks.length, chunksDone: 0, assembled: false, imagesDone: 0, runs: 0, attempts: 0, error: "", updatedAt: new Date().toISOString() };
+      const { template, segments, urlSwaps } = extractSegments(html, build.ownProductName);
+      await writeLarge(`advertorial-${build.id}-tpl`, template);
+      await writeLarge(`advertorial-${build.id}-seg`, JSON.stringify(segments));
+      const groups = Math.max(1, Math.ceil(segments.length / SEG_GROUP));
+      build.segCount = segments.length;
+      build.changes = urlSwaps.slice(0, 30).map((u) => ({
+        id: uid(),
+        category: "product",
+        before: String(u.before).slice(0, 160),
+        after: String(u.after).slice(0, 160),
+        confidence: "high",
+      }));
+      build.queue = { active: true, chunksTotal: groups, chunksDone: 0, assembled: false, imagesDone: 0, runs: 0, attempts: 0, error: "", updatedAt: new Date().toISOString() };
       build.status = "processing";
       await writeData(`advertorial-${build.id}`, build);
       await saveIndexEntry(build);
       await kickQueue(req, build.id);
-      return res.status(200).json({ success: true, chunks: chunks.length, images: build.images.length, removedScripts: build.removedScripts });
+      return res.status(200).json({ success: true, chunks: groups, images: build.images.length, removedScripts: build.removedScripts });
     }
 
     /* ---------- runQueue (interne keten) ---------- */
@@ -725,14 +822,16 @@ export default async function handler(req, res) {
         if (build.queue.attempts >= MAX_ATTEMPTS) {
           // Batch bleef catastrofaal falen (bv. netwerkstoring): batch overslaan met origineel
           if (build.queue.chunksDone < build.queue.chunksTotal) {
-            build.changes.push({ id: uid(), category: "other", before: `sections ${build.queue.chunksDone + 1}+`, after: "⚠ NOT localised — press Resume or edit manually", confidence: "low" });
-            const src = await readLarge(`advertorial-${build.id}-src`);
-            const chunks = chunkHtml(src, AI_CHUNK_SIZE);
-            for (let k = build.queue.chunksDone; k < Math.min(build.queue.chunksDone + PARALLEL_CHUNKS, build.queue.chunksTotal); k++) {
-              await writeData(`advertorial-${build.id}-part-${k}`, { data: chunks[k] });
-              build.queue.chunksDone++;
+            build.changes.push({ id: uid(), category: "other", before: `text groups ${build.queue.chunksDone + 1}+`, after: "⚠ NOT localised — press Resume or edit manually", confidence: "low" });
+            const segRaw2 = await readLarge(`advertorial-${build.id}-seg`);
+            const allSeg2 = JSON.parse(segRaw2 || "[]");
+            const upto = Math.min(build.queue.chunksDone + PARALLEL_CHUNKS, build.queue.chunksTotal);
+            for (let g = build.queue.chunksDone; g < upto; g++) {
+              const items = allSeg2.slice(g * SEG_GROUP, (g + 1) * SEG_GROUP).map((t, k) => ({ i: g * SEG_GROUP + k, t }));
+              await writeData(`advertorial-${build.id}-part-${g}`, { data: JSON.stringify(items) });
             }
-          } else if (!build.queue.assembled) {
+            build.queue.chunksDone = upto;
+                    } else if (!build.queue.assembled) {
             build.queue.active = false; // samenvoegen faalt: stoppen, Resume probeert opnieuw
           } else {
             build.queue.imagesDone += PARALLEL_IMAGES;
@@ -873,7 +972,7 @@ export default async function handler(req, res) {
       const copy = { ...JSON.parse(JSON.stringify(build)), id: id2, slug: slug2, taskName: `${build.taskName} (copy)`, status: build.status === "live" ? "review" : build.status, publishedAt: undefined, createdAt: new Date().toISOString() };
       copy.queue = { ...copy.queue, active: false };
       await writeData(`advertorial-${id2}`, copy);
-      for (const suffix of ["src", "loc"]) {
+      for (const suffix of ["tpl", "seg", "loc"]) {
         const content = await readLarge(`advertorial-${build.id}-${suffix}`);
         if (content) await writeLarge(`advertorial-${id2}-${suffix}`, content);
       }
