@@ -75,6 +75,8 @@ export default function AdvertorialBuilder() {
 
   // Stap 2/3/4-state
   const [pastedHtml, setPastedHtml] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
   const [queueStatus, setQueueStatus] = useState(null);
   const [device, setDevice] = useState("mobile");
   const [openCat, setOpenCat] = useState("");
@@ -202,6 +204,19 @@ export default function AdvertorialBuilder() {
       await loadBuild(r.id, false);
       setStep(2);
       setScreen("wizard");
+    } catch (e) {
+      setError(e.message);
+    }
+    setBusy(false);
+  };
+
+  const submitUrl = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await api({ action: "fetchUrl", id: build.id, url: sourceUrl });
+      setQueueStatus({ status: "processing", queue: { chunksTotal: r.chunks, chunksDone: 0, imagesDone: 0, active: true }, imagesTotal: r.images });
+      startPolling(build.id);
     } catch (e) {
       setError(e.message);
     }
@@ -615,21 +630,46 @@ export default function AdvertorialBuilder() {
       {/* ========== STAP 2: PASTE HTML ========== */}
       {step === 2 && build && !queueStatus && (
         <div style={{ ...ui.card, maxWidth: "860px", padding: "24px 26px" }}>
-          <span style={ui.label}>Paste the competitor's full page HTML</span>
+          <span style={ui.label}>Competitor advertorial URL</span>
           <p style={{ fontSize: "12px", color: "#8a92a3", margin: "4px 0 10px 0" }}>
-            Right-click the competitor page → View page source → select all → copy → paste here. Scripts and tracking are stripped automatically.
+            Paste the link — the tool fetches the page itself, fixes all image links and strips scripts &amp; tracking automatically.
           </p>
-          <textarea
-            style={{ ...ui.input, height: "320px", fontFamily: "monospace", fontSize: "11.5px", resize: "vertical" }}
-            placeholder="<!DOCTYPE html> …"
-            value={pastedHtml}
-            onChange={(e) => setPastedHtml(e.target.value)}
-          />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px" }}>
-            <span style={{ fontSize: "11.5px", color: "#a4adbd" }}>{pastedHtml.length.toLocaleString()} characters</span>
-            <button style={{ ...ui.btnDark, opacity: pastedHtml.trim().length > 500 ? 1 : 0.4 }} disabled={busy || pastedHtml.trim().length < 500} onClick={submitHtml}>
-              {busy ? "Starting…" : "Localise → " + (MARKETS.find((m) => m.value === build.targetMarket)?.label || build.targetMarket)}
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input
+              style={{ ...ui.input, flex: 1 }}
+              placeholder="https://competitor-site.com/advertorial…"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+            />
+            <button
+              style={{ ...ui.btnDark, whiteSpace: "nowrap", opacity: /^https?:\/\//i.test(sourceUrl.trim()) ? 1 : 0.4 }}
+              disabled={busy || !/^https?:\/\//i.test(sourceUrl.trim())}
+              onClick={submitUrl}
+            >
+              {busy ? "Fetching…" : "Localise → " + (MARKETS.find((m) => m.value === build.targetMarket)?.label || build.targetMarket)}
             </button>
+          </div>
+
+          <div style={{ margin: "18px 0 0 0", borderTop: "1px solid #f1f5f9", paddingTop: "14px" }}>
+            <a onClick={() => setShowPaste(!showPaste)} style={{ fontSize: "12px", fontWeight: 600, color: "#2563eb", cursor: "pointer" }}>
+              {showPaste ? "▾" : "▸"} Page blocked or fetch failed? Paste the HTML manually
+            </a>
+            {showPaste && (
+              <div style={{ marginTop: "10px" }}>
+                <textarea
+                  style={{ ...ui.input, height: "260px", fontFamily: "monospace", fontSize: "11.5px", resize: "vertical" }}
+                  placeholder="<!DOCTYPE html> … (right-click the page → View page source → copy everything)"
+                  value={pastedHtml}
+                  onChange={(e) => setPastedHtml(e.target.value)}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "10px" }}>
+                  <span style={{ fontSize: "11.5px", color: "#a4adbd" }}>{pastedHtml.length.toLocaleString()} characters</span>
+                  <button style={{ ...ui.btnDark, opacity: pastedHtml.trim().length > 500 ? 1 : 0.4 }} disabled={busy || pastedHtml.trim().length < 500} onClick={submitHtml}>
+                    {busy ? "Starting…" : "Localise pasted HTML"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
