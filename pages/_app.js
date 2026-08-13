@@ -38,6 +38,7 @@ const CATEGORIES = [
     perm: "launching",
     items: [
       { href: "/product-launching", label: "Product Pipeline", icon: "🚀" },
+      { href: "/advertorial-builder", label: "Advertorial Builder", icon: "🛠️" },
       { href: "/funnel-assets", label: "Assets", icon: "📁" },
     ],
   },
