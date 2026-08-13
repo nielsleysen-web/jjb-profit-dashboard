@@ -11,6 +11,9 @@
     },
     "pages/api/advertorials.js": {
       "maxDuration": 300
+    },
+    "pages/api/creative-copy.js": {
+      "maxDuration": 300
     }
   }
 }
