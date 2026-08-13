@@ -119,9 +119,11 @@ async function writeData(handle, value) {
 async function writeLarge(base, str) {
   const s = String(str || "");
   const total = Math.max(1, Math.ceil(s.length / CHUNK_STORE_SIZE));
+  const jobs = [];
   for (let i = 0; i < total; i++) {
-    await writeData(`${base}-${i}`, { i, total, data: s.slice(i * CHUNK_STORE_SIZE, (i + 1) * CHUNK_STORE_SIZE) });
+    jobs.push(writeData(`${base}-${i}`, { i, total, data: s.slice(i * CHUNK_STORE_SIZE, (i + 1) * CHUNK_STORE_SIZE) }));
   }
+  await Promise.all(jobs); // parallel: start is seconden sneller
 }
 async function readLarge(base) {
   const first = await readData(`${base}-0`);
@@ -368,12 +370,14 @@ async function uploadToShopifyCdn(buf, filename, mimeType) {
 }
 
 /* ================= queue ================= */
-async function kickQueue(req, id) {
+async function kickQueue(req, id, timeoutMs = 2500) {
   const host = req.headers.host || process.env.VERCEL_URL;
   if (!host) return;
   const proto = String(host).startsWith("localhost") ? "http" : "https";
+  // Korte timeout: de aanroep hoeft alleen AFGELEVERD te worden, het antwoord boeit niet.
+  // Valt een keten hierdoor stil, dan trapt de watchdog in de status-poll hem weer aan.
   await axios
-    .post(`${proto}://${host}/api/advertorials`, { action: "runQueue", id, internalKey: internalKey(id) }, { timeout: 10000 })
+    .post(`${proto}://${host}/api/advertorials`, { action: "runQueue", id, internalKey: internalKey(id) }, { timeout: timeoutMs })
     .catch((e) => console.error("adv kickQueue:", e.message));
 }
 
@@ -524,6 +528,12 @@ export default async function handler(req, res) {
         const build = await readData(`advertorial-${rawId}`);
         if (!build) return res.status(404).json({ success: false, error: "Build not found" });
         if (req.query.status === "1") {
+          // Watchdog: het voortgangsscherm pollt elke 3s — is de actieve run >90s stil,
+          // dan is de zelf-kettende keten gestorven en trappen we hem hier weer aan.
+          const q = build.queue || {};
+          if (q.active && q.updatedAt && Date.now() - Date.parse(q.updatedAt) > 90000) {
+            await kickQueue(req, build.id, 1500);
+          }
           return res.status(200).json({
             success: true,
             status: build.status,
