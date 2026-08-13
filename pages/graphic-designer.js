@@ -452,6 +452,144 @@ export default function GraphicDesigner() {
 
 /* ================= herbruikbare componenten ================= */
 
+/* ================= Creative Copy — automatische image-ad headlines =================
+   Wordt gegenereerd zodra de taak in "Ready To Work" komt (trigger in design-tasks.js).
+   Bron: research-JSON uit de product pipeline, anders de advertorial-link.
+   Engels + markttaal, bewerkbare tabel (edits herbouwen het XLSX stil), Regenerate. */
+function CreativeCopySection({ taskId, canEdit }) {
+  const [data, setData] = useState(null); // { store, rows, canEdit }
+  const [editCell, setEditCell] = useState(null); // { key, en, tr }
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const timerRef = useRef(null);
+
+  const load = async () => {
+    try {
+      const r = await fetch(`/api/creative-copy?taskId=${taskId}`).then((x) => x.json());
+      if (r.success) setData(r);
+    } catch {}
+  };
+
+  useEffect(() => {
+    setData(null);
+    setEditCell(null);
+    load();
+    return () => clearInterval(timerRef.current);
+  }, [taskId]);
+
+  // Poll elke 5s zolang er gegenereerd wordt
+  useEffect(() => {
+    clearInterval(timerRef.current);
+    if (data?.store?.status === "generating") timerRef.current = setInterval(load, 5000);
+    return () => clearInterval(timerRef.current);
+  }, [data?.store?.status]);
+
+  const post = async (body) => {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/creative-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...body, taskId }),
+      }).then((x) => x.json());
+      if (!r.success) throw new Error(r.error || "Something went wrong");
+      if (r.store) setData((d) => ({ ...d, store: r.store }));
+      else load();
+    } catch (e) {
+      setErr(e.message);
+    }
+    setBusy(false);
+  };
+
+  const st = data?.store;
+  const rows = data?.rows || [];
+  const mayEdit = canEdit && data?.canEdit;
+  const btn = { padding: "7px 14px", borderRadius: "9px", border: "1px solid #d7dce3", background: "#fff", fontSize: "12px", fontWeight: 700, color: "#334155", cursor: "pointer", fontFamily: "inherit" };
+
+  return (
+    <div style={{ padding: "10px 0 2px 0" }}>
+      <div style={{ ...ui.label, marginBottom: "6px" }}>Creative Copy</div>
+      {err && <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#b91c1c" }}>{err} <a onClick={() => setErr("")} style={{ cursor: "pointer", fontWeight: 700 }}>✕</a></p>}
+
+      {!st || !st.status ? (
+        <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
+          Headlines are generated automatically when this task hits “Ready To Work”.
+          {mayEdit && <> {" "}<a onClick={() => post({ action: "generate", force: true })} style={{ color: "#3b82f6", fontWeight: 700, cursor: "pointer" }}>Generate now</a></>}
+        </p>
+      ) : st.status === "generating" ? (
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12.5px", color: "#4f46e5", fontWeight: 600 }}>
+          <span style={{ width: "12px", height: "12px", border: "2px solid #c7d2fe", borderTopColor: "#4f46e5", borderRadius: "999px", display: "inline-block", animation: "ccspin 0.9s linear infinite" }} />
+          Writing the headlines… (English + {st.language || "market language"}) — this takes 1-2 minutes
+          <style>{`@keyframes ccspin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      ) : st.status === "error" ? (
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", color: "#b91c1c" }}>
+          ⚠ {st.error || "Generation failed"}
+          {mayEdit && <button style={{ ...btn, marginLeft: "10px", padding: "5px 12px", fontSize: "11.5px" }} disabled={busy} onClick={() => post({ action: "generate", force: true })}>↻ Retry</button>}
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+            {st.xlsxUrl && (
+              <a href={st.xlsxUrl} target="_blank" rel="noreferrer" style={{ ...btn, textDecoration: "none", color: "#166534", borderColor: "#bbf7d0", background: "#f0fdf4" }}>
+                📄 {st.xlsxName || "creative-copy-headlines.xlsx"} ⬇
+              </a>
+            )}
+            {mayEdit && (
+              <button style={btn} disabled={busy} onClick={() => { if (confirm("Regenerate all headlines? Manual edits will be overwritten.")) post({ action: "generate", force: true }); }}>
+                ↻ Regenerate
+              </button>
+            )}
+            <span style={{ fontSize: "11px", color: "#94a3b8" }}>source: {st.source || "—"}</span>
+          </div>
+          <div style={{ border: "1px solid #eceef2", borderRadius: "10px", overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: "10.5px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px", width: "170px" }}>Category</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: "10.5px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px" }}>English</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left", fontSize: "10.5px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px" }}>{st.language || "Translation"}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const editing = editCell?.key === r.key;
+                  return (
+                    <tr key={r.key} style={{ borderTop: "1px solid #f4f5f7", verticalAlign: "top" }}>
+                      <td style={{ padding: "8px 10px", fontWeight: 700, color: "#475569" }}>{r.label}</td>
+                      {editing ? (
+                        <td colSpan={2} style={{ padding: "8px 10px" }}>
+                          <textarea value={editCell.en} onChange={(e) => setEditCell({ ...editCell, en: e.target.value })} rows={3} style={{ width: "100%", boxSizing: "border-box", padding: "8px", border: "1px solid #d7dce3", borderRadius: "8px", fontSize: "12px", fontFamily: "inherit", marginBottom: "6px" }} placeholder="English" />
+                          <textarea value={editCell.tr} onChange={(e) => setEditCell({ ...editCell, tr: e.target.value })} rows={3} style={{ width: "100%", boxSizing: "border-box", padding: "8px", border: "1px solid #d7dce3", borderRadius: "8px", fontSize: "12px", fontFamily: "inherit", marginBottom: "6px" }} placeholder={st.language || "Translation"} />
+                          <button style={{ ...btn, marginRight: "6px", background: "#0f172a", color: "#fff", border: "none" }} disabled={busy} onClick={async () => { await post({ action: "saveCell", cellKey: r.key, en: editCell.en, tr: editCell.tr }); setEditCell(null); }}>
+                            {busy ? "Saving…" : "Save"}
+                          </button>
+                          <button style={btn} onClick={() => setEditCell(null)}>Cancel</button>
+                        </td>
+                      ) : (
+                        <>
+                          <td style={{ padding: "8px 10px", whiteSpace: "pre-wrap", cursor: mayEdit ? "pointer" : "default" }} title={mayEdit ? "Click to edit" : ""} onClick={() => mayEdit && setEditCell({ key: r.key, en: st.en?.[r.key] || "", tr: st.tr?.[r.key] || "" })}>
+                            {st.en?.[r.key] || <span style={{ color: "#cbd5e1" }}>—</span>}
+                          </td>
+                          <td style={{ padding: "8px 10px", whiteSpace: "pre-wrap", cursor: mayEdit ? "pointer" : "default", direction: st.language === "Hebrew" ? "rtl" : "ltr" }} title={mayEdit ? "Click to edit" : ""} onClick={() => mayEdit && setEditCell({ key: r.key, en: st.en?.[r.key] || "", tr: st.tr?.[r.key] || "" })}>
+                            {st.tr?.[r.key] || <span style={{ color: "#cbd5e1" }}>—</span>}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {mayEdit && <p style={{ margin: "6px 0 0 0", fontSize: "11px", color: "#a4adbd" }}>Click a cell to edit — the .xlsx rebuilds automatically after saving.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Section({ title, children }) {
   return (
     <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "14px", padding: "14px 18px", marginBottom: "14px" }}>
@@ -1635,27 +1773,15 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                   ))}
                 </>
               )}
-              {t.batchType === "First Creative Batch" && (
-                <div style={{ padding: "10px 0 2px 0" }}>
-                  <div style={{ ...ui.label, marginBottom: "6px" }}>Creative Copy</div>
-                  {t.creativeCopy ? (
-                    <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
-                      <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.creativeCopy}</pre>
-                      <a
-                        href={`data:text/plain;charset=utf-8,${encodeURIComponent(t.creativeCopy)}`}
-                        download={`${naming || t.product?.title || "creative"} - copy.txt`}
-                        style={{ display: "inline-block", marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#3b82f6" }}
-                      >
-                        ⬇ Download .txt
-                      </a>
-                    </div>
-                  ) : (
-                    <p style={{ margin: 0, fontSize: "12px", color: "#94a3b8", fontStyle: "italic" }}>
-                      The creative copy from the Product Launching automation will appear here automatically (phase 2).
-                    </p>
-                  )}
+              <CreativeCopySection taskId={t.id} canEdit={canEdit} />
+              {t.creativeCopy ? (
+                <div style={{ padding: "6px 0 2px 0" }}>
+                  <div style={{ ...ui.label, marginBottom: "6px" }}>Creative Copy (manual notes)</div>
+                  <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px" }}>
+                    <pre style={{ margin: 0, fontSize: "12px", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>{t.creativeCopy}</pre>
+                  </div>
                 </div>
-              )}
+              ) : null}
             </Section>
 
             {/* Market */}
