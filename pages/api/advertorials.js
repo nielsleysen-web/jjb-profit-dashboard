@@ -344,6 +344,27 @@ function wrapImagesInNextStep(html) {
   return out;
 }
 
+// Echte <button>-elementen (geen links) klikbaar maken naar #next-step.
+// Zeldzaam op advertorials (CTA's zijn meestal <a>-links), maar zonder scripts
+// zou zo'n knop anders dood zijn. Buttons die al in een <a> zitten laten we staan.
+function wrapButtonsInNextStep(html) {
+  const anchorRanges = [];
+  const aRe = /<a\b[\s\S]*?<\/a\s*>/gi;
+  let m;
+  while ((m = aRe.exec(html))) anchorRanges.push([m.index, m.index + m[0].length]);
+  const inAnchor = (idx) => anchorRanges.some(([s, e]) => idx >= s && idx < e);
+  let out = "";
+  let last = 0;
+  const bRe = /<button\b[\s\S]*?<\/button\s*>/gi;
+  while ((m = bRe.exec(html))) {
+    out += html.slice(last, m.index);
+    out += inAnchor(m.index) ? m[0] : `<a href="#next-step" style="text-decoration:none">${m[0]}</a>`;
+    last = m.index + m[0].length;
+  }
+  out += html.slice(last);
+  return out;
+}
+
 // Tekstsegmenten uit de HTML halen en vervangen door placeholders.
 // Het model vertaalt ALLEEN de segmenten — de HTML-structuur blijft onaantastbaar.
 function extractSegments(html, ownName) {
@@ -879,8 +900,9 @@ export default async function handler(req, res) {
         decision: l.count === maxCount && maxCount >= 2 ? "next-step" : "pending",
       }));
 
-      // Afbeeldingen verzamelen + elke losse img klikbaar maken naar #next-step
+      // Afbeeldingen verzamelen + elke losse img én losse <button> klikbaar maken naar #next-step
       html = wrapImagesInNextStep(html);
+      html = wrapButtonsInNextStep(html);
       build.images = collectImages(html);
 
       const { template, segments, urlSwaps } = extractSegments(html, build.ownProductName);
