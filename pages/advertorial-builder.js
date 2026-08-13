@@ -54,6 +54,8 @@ export default function AdvertorialBuilder() {
   const isMobile = useIsMobile();
   const [me, setMe] = useState(null);
   const [funnelBuilders, setFunnelBuilders] = useState([]);
+  const [pipelineTasks, setPipelineTasks] = useState([]);
+  const [matchedTask, setMatchedTask] = useState(null);
   const [builds, setBuilds] = useState([]);
   const [screen, setScreen] = useState("library"); // library | wizard
   const [step, setStep] = useState(1);
@@ -82,6 +84,37 @@ export default function AdvertorialBuilder() {
   const [filterMarket, setFilterMarket] = useState("");
   const pollRef = useRef(null);
 
+  // Naamconventie zoals op de kanban-kaarten: PRODUCT | CODE | NAAM | DD-MM-YYYY
+  const taskLabel = (t) => {
+    const first = (t.assigneeName || "").trim().split(/\s+/)[0] || "";
+    let d = "";
+    if (t.deadline) {
+      const dd = new Date(t.deadline);
+      if (!isNaN(dd)) d = `${String(dd.getDate()).padStart(2, "0")}-${String(dd.getMonth() + 1).padStart(2, "0")}-${dd.getFullYear()}`;
+    }
+    return [t.productName, t.countryCode, first, d].filter(Boolean).join(" | ").toUpperCase();
+  };
+  const CODE_TO_MARKET = { IT: "Italy", FR: "France", IL: "Israel", SE: "Sweden" };
+
+  // Bij het typen van de taaknaam: matchen op een pipeline-taak en autofillen
+  const tryMatchTask = (value) => {
+    const v = String(value || "").trim().toUpperCase();
+    if (v.length < 3) return setMatchedTask(null);
+    const firstPart = v.split("|")[0].trim();
+    const t =
+      pipelineTasks.find((x) => taskLabel(x) === v) ||
+      pipelineTasks.find((x) => (x.productName || "").toUpperCase() === firstPart) ||
+      pipelineTasks.find((x) => (x.product?.title || "").toUpperCase() === firstPart);
+    setMatchedTask(t || null);
+    if (t) {
+      // Productnaam exact zoals op Shopify (product.title), anders de taaknaam
+      setOwnProductName(t.product?.title || t.productName || "");
+      const market = CODE_TO_MARKET[(t.countryCode || "").toUpperCase()] || (t.marketCountry && CODE_TO_MARKET[t.marketCountry] ? CODE_TO_MARKET[t.marketCountry] : t.marketCountry);
+      if (market && MARKETS.some((m) => m.value === market)) setTargetMarket(market);
+      if (t.assigneeEmail && funnelBuilders.some((f) => f.email === t.assigneeEmail)) setBuilderEmail(t.assigneeEmail);
+    }
+  };
+
   const api = async (body) => {
     const r = await fetch("/api/advertorials", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((x) => x.json());
     if (!r.success) throw new Error(r.error || "Request failed");
@@ -107,6 +140,7 @@ export default function AdvertorialBuilder() {
       .then((r) => {
         if (r?.success) {
           setFunnelBuilders(r.funnelBuilders || []);
+          setPipelineTasks((r.tasks || []).filter((t) => t.status !== "Launched"));
           if (r.me?.email) setBuilderEmail((prev) => prev || r.me.email);
         }
       })
@@ -472,7 +506,30 @@ export default function AdvertorialBuilder() {
           </div>
           <div style={{ marginBottom: "18px" }}>
             <span style={ui.label}>Task name</span>
-            <input style={{ ...ui.input, marginTop: "6px" }} placeholder="e.g. HepaFlush IT — advertorial v1" value={taskName} onChange={(e) => setTaskName(e.target.value)} />
+            <input
+              style={{ ...ui.input, marginTop: "6px" }}
+              placeholder="Start typing a pipeline task… e.g. MULORIA MULLEIN DROPS | IT | SHAWN | 11-08-2026"
+              value={taskName}
+              list="pipeline-task-suggestions"
+              onChange={(e) => {
+                setTaskName(e.target.value);
+                tryMatchTask(e.target.value);
+              }}
+            />
+            <datalist id="pipeline-task-suggestions">
+              {pipelineTasks.map((t) => (
+                <option key={t.id} value={taskLabel(t)} />
+              ))}
+            </datalist>
+            {matchedTask ? (
+              <p style={{ fontSize: "11.5px", color: "#16a34a", fontWeight: 600, margin: "6px 0 0 0" }}>
+                ✓ Linked to pipeline task — Shopify product "{matchedTask.product?.title || matchedTask.productName}", market and builder pre-filled below.
+              </p>
+            ) : (
+              <p style={{ fontSize: "11.5px", color: "#a4adbd", margin: "6px 0 0 0" }}>
+                Pick a task from the suggestions to auto-fill the product name (from Shopify), market and builder.
+              </p>
+            )}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 34px 1fr", gap: "8px", alignItems: "end", marginBottom: "18px" }}>
             <div>
