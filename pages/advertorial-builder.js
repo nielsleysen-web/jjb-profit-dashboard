@@ -245,10 +245,16 @@ export default function AdvertorialBuilder() {
     }
   };
 
+  // Beslissingen worden GESERIALISEERD naar de server gestuurd: de databank heeft
+  // geen locking, dus twee gelijktijdige clicks zouden elkaars beslissing overschrijven
+  // (dat veroorzaakte "Still undecided: 1 image" terwijl alles beslist leek).
+  const decideQ = useRef(Promise.resolve());
+  const serialize = (fn) => (decideQ.current = decideQ.current.then(fn, fn));
+
   const decideLink = async (href, decision) => {
+    setBuild((b) => ({ ...b, links: b.links.map((l) => (l.href === href ? { ...l, decision } : l)) }));
     try {
-      await api({ action: "decideLink", id: build.id, href, decision });
-      setBuild((b) => ({ ...b, links: b.links.map((l) => (l.href === href ? { ...l, decision } : l)) }));
+      await serialize(() => api({ action: "decideLink", id: build.id, href, decision }));
     } catch (e) {
       setError(e.message);
     }
@@ -267,9 +273,9 @@ export default function AdvertorialBuilder() {
   };
 
   const decideImage = async (url, decision, newUrl) => {
+    setBuild((b) => ({ ...b, images: b.images.map((i) => (i.url === url ? { ...i, decision, newUrl: newUrl || "" } : i)) }));
     try {
-      await api({ action: "decideImage", id: build.id, url, decision, newUrl });
-      setBuild((b) => ({ ...b, images: b.images.map((i) => (i.url === url ? { ...i, decision, newUrl: newUrl || "" } : i)) }));
+      await serialize(() => api({ action: "decideImage", id: build.id, url, decision, newUrl }));
     } catch (e) {
       setError(e.message);
     }
@@ -296,11 +302,11 @@ export default function AdvertorialBuilder() {
     setBusy(false);
   };
 
-  const publish = async () => {
+  const publish = async (force) => {
     setBusy(true);
     setError("");
     try {
-      const r = await api({ action: "publish", id: build.id });
+      const r = await api({ action: "publish", id: build.id, force: force === true });
       setPublishedUrl(r.url);
       await loadLibrary();
     } catch (e) {
@@ -351,6 +357,15 @@ export default function AdvertorialBuilder() {
     error ? (
       <div style={{ ...ui.card, padding: "10px 14px", marginBottom: "14px", background: "#fef2f2", borderColor: "#fecaca", fontSize: "12.5px", color: "#b91c1c" }}>
         {error} <a onClick={() => setError("")} style={{ marginLeft: "8px", cursor: "pointer", fontWeight: 700 }}>✕</a>
+        {error.startsWith("Still undecided") && (
+          <button
+            style={{ marginLeft: "12px", padding: "6px 14px", borderRadius: "8px", border: "none", background: "#0f172a", color: "#fff", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            onClick={() => { setError(""); publish(true); }}
+            title="Anything still open gets safe defaults: links → #next-step, images → keep (re-hosted on your CDN)"
+          >
+            Publish anyway →
+          </button>
+        )}
       </div>
     ) : null;
 
