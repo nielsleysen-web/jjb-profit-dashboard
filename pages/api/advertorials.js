@@ -25,7 +25,9 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLower
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 const MODEL = "claude-fable-5"; // vast model, nooit een ander
 const CHUNK_STORE_SIZE = 60000;   // metaobject-veld blijft onder de limiet
-const AI_CHUNK_SIZE = 7000;       // HTML-chunkgrootte per vertaalstap
+const AI_CHUNK_SIZE = 12000;      // HTML-chunkgrootte per vertaalstap
+const PARALLEL_CHUNKS = 5;        // vertalingen tegelijk per serverbeurt
+const PARALLEL_IMAGES = 4;        // vision-analyses tegelijk per serverbeurt
 const MAX_ATTEMPTS = 3;
 const MAX_QUEUE_RUNS = 150;
 const MAX_IMAGES = 25;            // vision-analyse cap
@@ -382,50 +384,98 @@ async function runOneStep(req, build) {
     const i = q.chunksDone;
     const src = await readLarge(`advertorial-${build.id}-src`);
     const chunks = chunkHtml(src, AI_CHUNK_SIZE);
-    const text = await callClaude({ prompt: localisePrompt(build, chunks[i], i, chunks.length), maxTokens: 12000, timeoutMs: 240000 });
-    const obj = parseJsonLoose(text);
-    const html = String(obj.html || "");
-    if (!html.trim()) throw new Error("Empty localisation output");
-    // Chunkresultaat bijschrijven op de -loc-opslag
-    const prev = i === 0 ? "" : await readLarge(`advertorial-${build.id}-loc`);
-    await writeLarge(`advertorial-${build.id}-loc`, prev + html);
-    const newChanges = (Array.isArray(obj.changes) ? obj.changes : []).slice(0, 60).map((c) => ({
-      id: uid(),
-      category: String(c.category || "other"),
-      before: String(c.before || "").slice(0, 300),
-      after: String(c.after || "").slice(0, 300),
-      confidence: c.confidence === "low" ? "low" : "high",
-    }));
-    build.changes = [...(build.changes || []), ...newChanges];
-    q.chunksDone++;
+    // BATCH: tot PARALLEL_CHUNKS chunks tegelijk. Chunks zonder leesbare tekst
+    // (pure CSS/code) gaan er 1-op-1 doorheen zonder AI-call — dat is het gros
+    // van een volledige paginabron en scheelt enorm veel tijd.
+    const src = await readLarge(`advertorial-${build.id}-src`);
+    const chunks = chunkHtml(src, AI_CHUNK_SIZE);
+    const batch = [];
+    for (let k = q.chunksDone; k < Math.min(q.chunksDone + PARALLEL_CHUNKS, q.chunksTotal); k++) batch.push(k);
+    const results = await Promise.all(
+      batch.map(async (i) => {
+        const chunk = chunks[i];
+        if (!needsTranslation(chunk)) return { i, html: chunk, changes: [] }; // passthrough
+        try {
+          const text = await callClaude({ prompt: localisePrompt(build, chunk, i, chunks.length), maxTokens: 16000, timeoutMs: 240000 });
+          const obj = parseJsonLoose(text);
+          const html = String(obj.html || "");
+          if (!html.trim()) throw new Error("empty output");
+          return { i, html, changes: Array.isArray(obj.changes) ? obj.changes : [] };
+        } catch (e) {
+          // Mislukte chunk: origineel doorlaten + waarschuwing, run loopt altijd door
+          return { i, html: chunk, changes: [{ category: "other", before: `section ${i + 1}`, after: `⚠ NOT localised (${String(e.message).slice(0, 60)}) — edit manually`, confidence: "low" }] };
+        }
+      })
+    );
+    for (const r of results) {
+      await writeData(`advertorial-${build.id}-part-${r.i}`, { data: r.html });
+      const newChanges = r.changes.slice(0, 60).map((c) => ({
+        id: uid(),
+        category: String(c.category || "other"),
+        before: String(c.before || "").slice(0, 300),
+        after: String(c.after || "").slice(0, 300),
+        confidence: c.confidence === "low" ? "low" : "high",
+      }));
+      build.changes = [...(build.changes || []), ...newChanges];
+    }
+    q.chunksDone += batch.length;
+    return;
+  }
+  if (!q.assembled) {
+    // Alle chunks klaar: delen samenvoegen tot de gelokaliseerde HTML
+    let full = "";
+    for (let i = 0; i < q.chunksTotal; i++) {
+      const part = await readData(`advertorial-${build.id}-part-${i}`);
+      full += part?.data || "";
+    }
+    await writeLarge(`advertorial-${build.id}-loc`, full);
+    q.assembled = true;
     return;
   }
   if (q.imagesDone < (build.images || []).length) {
-    const img = build.images[q.imagesDone];
-    try {
-      const { buf, media } = await fetchImage(img.url);
-      const text = await callClaude({
-        prompt: VISION_PROMPT,
-        image: { media_type: media, data: buf.toString("base64") },
-        maxTokens: 300,
-        timeoutMs: 90000,
-      });
-      const obj = parseJsonLoose(text);
-      img.containsText = !!obj.contains_text;
-      img.isProduct = !!obj.is_product_packshot;
-      img.description = String(obj.description || "").slice(0, 80);
-    } catch (e) {
-      img.description = `analysis failed: ${e.message}`.slice(0, 80);
-      img.containsText = null;
-    }
-    q.imagesDone++;
+    // BATCH: tot PARALLEL_IMAGES vision-analyses tegelijk
+    const batch = (build.images || []).slice(q.imagesDone, q.imagesDone + PARALLEL_IMAGES);
+    await Promise.all(
+      batch.map(async (img) => {
+        try {
+          const { buf, media } = await fetchImage(img.url);
+          const text = await callClaude({
+            prompt: VISION_PROMPT,
+            image: { media_type: media, data: buf.toString("base64") },
+            maxTokens: 300,
+            timeoutMs: 90000,
+          });
+          const obj = parseJsonLoose(text);
+          img.containsText = !!obj.contains_text;
+          img.isProduct = !!obj.is_product_packshot;
+          img.description = String(obj.description || "").slice(0, 80);
+        } catch (e) {
+          img.description = `analysis failed: ${e.message}`.slice(0, 80);
+          img.containsText = null;
+        }
+      })
+    );
+    q.imagesDone += batch.length;
     return;
   }
 }
 
+// Bevat deze chunk vertaalbare tekst? Pure CSS/JS/markup-chunks slaan we over.
+function needsTranslation(chunk) {
+  let visible = String(chunk)
+    .replace(/<style\b[\s\S]*?<\/style\s*>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z#0-9]+;/gi, " ");
+  const words = visible.match(/[A-Za-zÀ-ÿ\u0590-\u05FF]{3,}/g) || [];
+  if (words.length < 8) return false; // vrijwel geen tekst
+  const codeSigns = (visible.match(/[{};:=]/g) || []).length;
+  if (codeSigns > words.length) return false; // ziet eruit als CSS/JS
+  return true;
+}
+
 function queuePending(build) {
   const q = build.queue || {};
-  return q.chunksDone < q.chunksTotal || q.imagesDone < (build.images || []).length;
+  return q.chunksDone < q.chunksTotal || !q.assembled || q.imagesDone < (build.images || []).length;
 }
 
 /* ================= index helpers ================= */
@@ -523,7 +573,7 @@ export default async function handler(req, res) {
         links: [],
         images: [],
         removedScripts: 0,
-        queue: { active: false, chunksTotal: 0, chunksDone: 0, imagesDone: 0, runs: 0, attempts: 0, error: "", updatedAt: null },
+        queue: { active: false, chunksTotal: 0, chunksDone: 0, assembled: true, imagesDone: 0, runs: 0, attempts: 0, error: "", updatedAt: null },
         createdAt: new Date().toISOString(),
       };
       await writeData(`advertorial-${id}`, build);
@@ -559,7 +609,7 @@ export default async function handler(req, res) {
       await writeLarge(`advertorial-${build.id}-src`, html);
       const chunks = chunkHtml(html, AI_CHUNK_SIZE);
       build.changes = [];
-      build.queue = { active: true, chunksTotal: chunks.length, chunksDone: 0, imagesDone: 0, runs: 0, attempts: 0, error: "", updatedAt: new Date().toISOString() };
+      build.queue = { active: true, chunksTotal: chunks.length, chunksDone: 0, assembled: false, imagesDone: 0, runs: 0, attempts: 0, error: "", updatedAt: new Date().toISOString() };
       build.status = "processing";
       await writeData(`advertorial-${build.id}`, build);
       await saveIndexEntry(build);
@@ -587,16 +637,19 @@ export default async function handler(req, res) {
         build.queue.attempts = (build.queue.attempts || 0) + 1;
         build.queue.error = e.message;
         if (build.queue.attempts >= MAX_ATTEMPTS) {
-          // Chunk overslaan met origineel (onvertaald) zodat de run nooit vastloopt
+          // Batch bleef catastrofaal falen (bv. netwerkstoring): batch overslaan met origineel
           if (build.queue.chunksDone < build.queue.chunksTotal) {
+            build.changes.push({ id: uid(), category: "other", before: `sections ${build.queue.chunksDone + 1}+`, after: "⚠ NOT localised — press Resume or edit manually", confidence: "low" });
             const src = await readLarge(`advertorial-${build.id}-src`);
             const chunks = chunkHtml(src, AI_CHUNK_SIZE);
-            const prev = build.queue.chunksDone === 0 ? "" : await readLarge(`advertorial-${build.id}-loc`);
-            await writeLarge(`advertorial-${build.id}-loc`, prev + chunks[build.queue.chunksDone]);
-            build.changes.push({ id: uid(), category: "other", before: `chunk ${build.queue.chunksDone + 1}`, after: "⚠ NOT localised — edit manually", confidence: "low" });
-            build.queue.chunksDone++;
+            for (let k = build.queue.chunksDone; k < Math.min(build.queue.chunksDone + PARALLEL_CHUNKS, build.queue.chunksTotal); k++) {
+              await writeData(`advertorial-${build.id}-part-${k}`, { data: chunks[k] });
+              build.queue.chunksDone++;
+            }
+          } else if (!build.queue.assembled) {
+            build.queue.active = false; // samenvoegen faalt: stoppen, Resume probeert opnieuw
           } else {
-            build.queue.imagesDone++;
+            build.queue.imagesDone += PARALLEL_IMAGES;
           }
           build.queue.attempts = 0;
         }
