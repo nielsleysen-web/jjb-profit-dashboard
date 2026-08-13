@@ -381,9 +381,6 @@ async function kickQueue(req, id) {
 async function runOneStep(req, build) {
   const q = build.queue;
   if (q.chunksDone < q.chunksTotal) {
-    const i = q.chunksDone;
-    const src = await readLarge(`advertorial-${build.id}-src`);
-    const chunks = chunkHtml(src, AI_CHUNK_SIZE);
     // BATCH: tot PARALLEL_CHUNKS chunks tegelijk. Chunks zonder leesbare tekst
     // (pure CSS/code) gaan er 1-op-1 doorheen zonder AI-call — dat is het gros
     // van een volledige paginabron en scheelt enorm veel tijd.
