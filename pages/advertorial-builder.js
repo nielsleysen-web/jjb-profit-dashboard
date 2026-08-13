@@ -56,6 +56,7 @@ export default function AdvertorialBuilder() {
   const [funnelBuilders, setFunnelBuilders] = useState([]);
   const [pipelineTasks, setPipelineTasks] = useState([]);
   const [matchedTask, setMatchedTask] = useState(null);
+  const [showTaskSugs, setShowTaskSugs] = useState(false);
   const [builds, setBuilds] = useState([]);
   const [screen, setScreen] = useState("library"); // library | wizard
   const [step, setStep] = useState(1);
@@ -506,21 +507,61 @@ export default function AdvertorialBuilder() {
           </div>
           <div style={{ marginBottom: "18px" }}>
             <span style={ui.label}>Task name</span>
-            <input
-              style={{ ...ui.input, marginTop: "6px" }}
-              placeholder="Start typing a pipeline task… e.g. MULORIA MULLEIN DROPS | IT | SHAWN | 11-08-2026"
-              value={taskName}
-              list="pipeline-task-suggestions"
-              onChange={(e) => {
-                setTaskName(e.target.value);
-                tryMatchTask(e.target.value);
-              }}
-            />
-            <datalist id="pipeline-task-suggestions">
-              {pipelineTasks.map((t) => (
-                <option key={t.id} value={taskLabel(t)} />
-              ))}
-            </datalist>
+            <div style={{ position: "relative" }}>
+              <input
+                style={{ ...ui.input, marginTop: "6px" }}
+                placeholder="Start typing a pipeline task… e.g. MULORIA MULLEIN DROPS | IT | SHAWN | 11-08-2026"
+                value={taskName}
+                onFocus={() => setShowTaskSugs(true)}
+                onBlur={() => setTimeout(() => setShowTaskSugs(false), 180)}
+                onChange={(e) => {
+                  setTaskName(e.target.value);
+                  tryMatchTask(e.target.value);
+                  setShowTaskSugs(true);
+                }}
+              />
+              {showTaskSugs && (() => {
+                const q = taskName.trim().toUpperCase();
+                const sugs = pipelineTasks
+                  .filter((t) => !q || taskLabel(t).includes(q) || (t.productName || "").toUpperCase().includes(q))
+                  .slice(0, 8);
+                if (!sugs.length) return null;
+                return (
+                  <div style={{ position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0, background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", boxShadow: "0 14px 38px rgba(15,23,42,0.14)", zIndex: 40, overflow: "hidden", maxHeight: "300px", overflowY: "auto" }}>
+                    {sugs.map((t) => {
+                      const label = taskLabel(t);
+                      const parts = label.split(" | ");
+                      return (
+                        <div
+                          key={t.id}
+                          onMouseDown={() => {
+                            setTaskName(label);
+                            tryMatchTask(label);
+                            setShowTaskSugs(false);
+                          }}
+                          style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f4f5f7", background: "#ffffff" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "#ffffff")}
+                        >
+                          {t.product?.image ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={t.product.image} alt="" style={{ width: "28px", height: "28px", borderRadius: "7px", objectFit: "cover", border: "1px solid #eef0f3", flexShrink: 0 }} />
+                          ) : (
+                            <div style={{ width: "28px", height: "28px", borderRadius: "7px", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 700, color: "#94a3b8", flexShrink: 0 }}>
+                              {(parts[0] || "?").charAt(0)}
+                            </div>
+                          )}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{parts[0]}</div>
+                            <div style={{ fontSize: "11px", color: "#8a92a3" }}>{parts.slice(1).join(" · ")}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
             {matchedTask ? (
               <p style={{ fontSize: "11.5px", color: "#16a34a", fontWeight: 600, margin: "6px 0 0 0" }}>
                 ✓ Linked to pipeline task — Shopify product "{matchedTask.product?.title || matchedTask.productName}", market and builder pre-filled below.
