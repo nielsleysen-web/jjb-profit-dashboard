@@ -74,9 +74,11 @@ const btnGhost = {
 
 const STATUSES = ["Task Start", "AI Translation", "Ready For Build", "In Production", "QA Check", "First Creative Batch", "Ready to launch", "Launched"];
 // Board toont t/m First Creative Batch — Ready to launch zit bij Media Buying, Launched bij het Launched-tabblad
-// First Creative Batch staat niet meer op dit board: bij die status wordt automatisch
-// een Graphic Designer-taak in "Ready To Work" aangemaakt en verhuist het werk daarheen
-const BOARD_STATUSES = STATUSES.slice(0, 5);
+// First Creative Batch is de "wachtkamer": de funnel builder schuift de taak hierheen na
+// goedkeuring van de funnel -> automatisch een Graphic Designer-taak in "Ready To Work".
+// Zodra de designer begint (GD-taak naar In Production) springt de launch-taak automatisch
+// naar "Ready to launch" en verdwijnt hij van dit board.
+const BOARD_STATUSES = STATUSES.slice(0, 6);
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
 const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
