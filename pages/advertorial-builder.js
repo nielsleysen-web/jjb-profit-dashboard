@@ -141,7 +141,8 @@ export default function AdvertorialBuilder() {
       .then((r) => {
         if (r?.success) {
           setFunnelBuilders(r.funnelBuilders || []);
-          setPipelineTasks((r.tasks || []).filter((t) => t.status !== "Launched"));
+          // Alleen taken waar de funnel builder nu echt aan bouwt: Ready For Build / In Production
+          setPipelineTasks((r.tasks || []).filter((t) => t.status === "Ready For Build" || t.status === "In Production"));
           if (r.me?.email) setBuilderEmail((prev) => prev || r.me.email);
         }
       })
