@@ -34,7 +34,8 @@ const ui = {
 
 // category: "Documents" | "Tools" — nieuwe categorie? Gewoon een nieuwe string gebruiken,
 // de pagina maakt er automatisch een sectie voor (volgorde via CATEGORY_ORDER).
-const CATEGORY_ORDER = ["Documents", "Tools"];
+const CATEGORY_ORDER = ["Documents", "Tools", "Marketing Creatives"];
+const CATEGORY_ICONS = { Documents: "📄", Tools: "🛠️", "Marketing Creatives": "🎨" };
 const ASSETS = [
   {
     category: "Documents",
@@ -51,6 +52,14 @@ const ASSETS = [
     description: "Paste a competitor advertorial, localise everything to your market (names, prices, institutions, units), replace images, get a live link for Funnelish.",
     href: "/advertorial-builder",
     tag: "Tool",
+  },
+  {
+    category: "Marketing Creatives",
+    icon: "🖋️",
+    title: "Image Ad Headlines — Prompts",
+    description: "The prompt collection for writing the headlines that go on our auto-generated image creatives.",
+    href: "https://docs.google.com/document/d/1ftuzOJeE1NcXa74n79kl1ebc46XkePJH993AG0tDfJs/edit?usp=sharing",
+    tag: "Prompts",
   },
   {
     category: "Documents",
@@ -77,7 +86,7 @@ export default function FunnelAssets() {
         return (
           <div key={cat} style={{ marginBottom: "28px" }}>
             <h2 style={{ margin: "0 0 12px 0", fontSize: "13px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.7px" }}>
-              {cat === "Documents" ? "📄" : "🛠️"} {cat}
+              {CATEGORY_ICONS[cat] || "📁"} {cat}
             </h2>
             {items.length === 0 ? (
               <p style={{ margin: 0, fontSize: "12.5px", color: "#a4adbd", fontStyle: "italic" }}>
