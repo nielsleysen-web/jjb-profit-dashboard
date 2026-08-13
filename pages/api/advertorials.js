@@ -306,6 +306,7 @@ contains_text = readable overlaid or embedded text in the image (any language). 
 
 /* ================= image helpers ================= */
 async function fetchImage(url) {
+  if (!/^https?:\/\//i.test(String(url))) throw new Error("relative URL — upload a replacement");
   const r = await axios.get(url, { responseType: "arraybuffer", timeout: 25000, maxRedirects: 5 });
   const buf = Buffer.from(r.data);
   if (buf.length > IMG_MAX_BYTES) throw new Error("Image larger than 4.5 MB");
@@ -410,25 +411,31 @@ async function runOneStep(req, build) {
     );
     for (const r of results) {
       await writeData(`advertorial-${build.id}-part-${r.i}`, { data: r.html });
-      const newChanges = r.changes.slice(0, 60).map((c) => ({
+      const newChanges = r.changes.slice(0, 30).map((c) => ({
         id: uid(),
         category: String(c.category || "other"),
-        before: String(c.before || "").slice(0, 300),
-        after: String(c.after || "").slice(0, 300),
+        before: String(c.before || "").slice(0, 160),
+        after: String(c.after || "").slice(0, 160),
         confidence: c.confidence === "low" ? "low" : "high",
       }));
       build.changes = [...(build.changes || []), ...newChanges];
+    }
+    // Totaalcap: het buildrecord moet in één metaobject blijven passen
+    if (build.changes.length > 300) {
+      const dropped = build.changes.length - 300;
+      build.changes = build.changes.slice(0, 300);
+      build.changes.push({ id: uid(), category: "other", before: `${dropped} more small changes`, after: "list truncated — check the preview", confidence: "high" });
     }
     q.chunksDone += batch.length;
     return;
   }
   if (!q.assembled) {
-    // Alle chunks klaar: delen samenvoegen tot de gelokaliseerde HTML
-    let full = "";
-    for (let i = 0; i < q.chunksTotal; i++) {
-      const part = await readData(`advertorial-${build.id}-part-${i}`);
-      full += part?.data || "";
-    }
+    // Alle chunks klaar: delen parallel inlezen en samenvoegen tot de gelokaliseerde HTML
+    const parts = await Promise.all(
+      Array.from({ length: q.chunksTotal }, (_, i) => readData(`advertorial-${build.id}-part-${i}`))
+    );
+    const full = parts.map((p) => p?.data || "").join("");
+    if (!full.trim()) throw new Error("Assembled HTML is empty — press Resume");
     await writeLarge(`advertorial-${build.id}-loc`, full);
     q.assembled = true;
     return;
@@ -672,7 +679,14 @@ export default async function handler(req, res) {
         build.status = "review";
       }
       build.queue.updatedAt = new Date().toISOString();
-      await writeData(`advertorial-${build.id}`, build);
+      try {
+        await writeData(`advertorial-${build.id}`, build);
+      } catch (e) {
+        // Record te groot (bv. lange wijzigingenlijst): hard inkorten en opnieuw proberen
+        build.changes = (build.changes || []).slice(0, 120);
+        build.changes.push({ id: uid(), category: "other", before: "changes list", after: "trimmed to fit storage", confidence: "high" });
+        await writeData(`advertorial-${build.id}`, build);
+      }
       await saveIndexEntry(build);
       if (queuePending(build) && build.queue.active) await kickQueue(req, build.id, 8000); // ruime aflevertijd: keten mag niet vallen
       return res.status(200).json({ success: true });
