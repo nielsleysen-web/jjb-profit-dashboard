@@ -36,7 +36,10 @@ const CATEGORIES = [
   {
     name: "Product Launching",
     perm: "launching",
-    items: [{ href: "/product-launching", label: "Product Pipeline", icon: "🚀" }],
+    items: [
+      { href: "/product-launching", label: "Product Pipeline", icon: "🚀" },
+      { href: "/funnel-assets", label: "Assets", icon: "📁" },
+    ],
   },
   {
     name: "Marketing Creatives",
