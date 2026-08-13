@@ -32,8 +32,12 @@ const ui = {
   },
 };
 
+// category: "Documents" | "Tools" — nieuwe categorie? Gewoon een nieuwe string gebruiken,
+// de pagina maakt er automatisch een sectie voor (volgorde via CATEGORY_ORDER).
+const CATEGORY_ORDER = ["Documents", "Tools"];
 const ASSETS = [
   {
+    category: "Documents",
     icon: "🖼️",
     title: "Sales Page Images — SOP",
     description: "Step-by-step standard operating procedure for creating and placing every image on the sales page.",
@@ -41,6 +45,7 @@ const ASSETS = [
     tag: "SOP",
   },
   {
+    category: "Documents",
     icon: "✍️",
     title: "Sales Page Copy — Prompts",
     description: "The prompt collection for writing the sales page copy — use these when working outside the automated pipeline.",
@@ -59,8 +64,20 @@ export default function FunnelAssets() {
         SOPs, prompts and reference documents for building funnels. Bookmark-worthy — these are the source of truth.
       </p>
 
+      {CATEGORY_ORDER.map((cat) => {
+        const items = ASSETS.filter((a) => a.category === cat);
+        return (
+          <div key={cat} style={{ marginBottom: "28px" }}>
+            <h2 style={{ margin: "0 0 12px 0", fontSize: "13px", fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.7px" }}>
+              {cat === "Documents" ? "📄" : "🛠️"} {cat}
+            </h2>
+            {items.length === 0 ? (
+              <p style={{ margin: 0, fontSize: "12.5px", color: "#a4adbd", fontStyle: "italic" }}>
+                Coming soon — the Advertorial HTML Builder will live here.
+              </p>
+            ) : (
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(340px, 1fr))", gap: "16px", maxWidth: "1100px" }}>
-        {ASSETS.map((a) => (
+        {items.map((a) => (
           <a
             key={a.href}
             href={a.href}
@@ -86,6 +103,10 @@ export default function FunnelAssets() {
           </a>
         ))}
       </div>
+            )}
+          </div>
+        );
+      })}
 
       <p style={{ margin: "24px 0 0 0", fontSize: "12px", color: "#a4adbd" }}>
         Need an asset added here? Ask Niels.
