@@ -35,7 +35,7 @@ const PARALLEL_CHUNKS = 5;        // vertalingen tegelijk per serverbeurt
 const PARALLEL_IMAGES = 4;        // vision-analyses tegelijk per serverbeurt
 const MAX_ATTEMPTS = 3;
 const MAX_QUEUE_RUNS = 150;
-const MAX_IMAGES = 25;            // vision-analyse cap
+const MAX_IMAGES = 40;            // vision-analyse cap
 const IMG_MAX_BYTES = 4.5 * 1024 * 1024;
 
 const MARKETS = {
@@ -187,16 +187,89 @@ function stripScripts(html) {
     removed++;
     return "";
   });
-  out = out.replace(/<noscript\b[\s\S]*?<\/noscript\s*>/gi, () => {
-    removed++;
-    return "";
-  });
+  // <noscript> wordt hier NIET verwijderd — lazy-loaders zetten daar vaak de echte
+  // <img>-fallbacks in. recoverLazyImages() haalt die eruit en unwrapt de blokken.
   // Losse tracking-pixels (1x1 imgs van bekende trackers)
   out = out.replace(/<img[^>]+(facebook\.com\/tr|googletagmanager|google-analytics|doubleclick|hotjar|clarity\.ms)[^>]*>/gi, () => {
     removed++;
     return "";
   });
   return { html: out, removed };
+}
+
+// Lazy-loaded afbeeldingen terughalen. Moderne pagina's laden images via JS:
+// de echte URL staat dan in data-src/data-lazy-src/... en src is een placeholder,
+// of de echte <img> staat als fallback in <noscript>. Omdat wij alle scripts
+// strippen zou de pagina anders alleen placeholders tonen — én collectImages
+// zou die images missen. Dit draait vóór het verzamelen van images.
+const LAZY_ATTRS = ["data-src", "data-lazy-src", "data-original", "data-lazy", "data-image", "data-echo"];
+function recoverLazyImages(html) {
+  let out = String(html);
+
+  // 1. Alle lazy-URL's verzamelen (voor dedup met de noscript-fallbacks)
+  const lazySet = new Set();
+  const lazyAttrRe = /\bdata-(?:src|lazy-src|original|lazy|image|echo)\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while ((m = lazyAttrRe.exec(out))) lazySet.add(m[1].trim());
+
+  // 2. <noscript>-blokken unwrappen: de <img>-fallbacks eruit houden (behalve als
+  //    dezelfde URL al als lazy-attribuut op een gewone <img> staat — anders dubbel),
+  //    tracking-pixels eruit, de rest van het blok weg (browsers renderen noscript niet).
+  out = out.replace(/<noscript\b[^>]*>([\s\S]*?)<\/noscript\s*>/gi, (block, inner) => {
+    const imgs = inner.match(/<img\b[^>]*>/gi) || [];
+    const keep = imgs.filter((tag) => {
+      if (/(facebook\.com\/tr|googletagmanager|google-analytics|doubleclick|hotjar|clarity\.ms)/i.test(tag)) return false;
+      const sm = tag.match(/(?<![-\w])src\s*=\s*["']([^"']+)["']/i); // lookbehind: niet de "src" in data-src matchen
+      return sm && sm[1].trim() && !lazySet.has(sm[1].trim());
+    });
+    return keep.join("");
+  });
+
+  // 3. <source>-tags binnen <picture> weg: die zouden anders (met competitor-URL's)
+  //    voorrang krijgen op de src die wij re-hosten/vervangen.
+  out = out.replace(/<picture\b[^>]*>([\s\S]*?)<\/picture\s*>/gi, (block, inner) => block.replace(inner, inner.replace(/<source\b[^>]*\/?>/gi, "")));
+
+  // 4. Lazy-attributen op <img> promoveren naar echte src + srcset/lazy-attrs strippen
+  //    (src wordt zo de enige bron — belangrijk voor re-hosten en vervangen).
+  out = out.replace(/<img\b[^>]*>/gi, (tag) => {
+    let t = tag;
+    let lazyUrl = "";
+    for (const attr of LAZY_ATTRS) {
+      const am = t.match(new RegExp("\\b" + attr + "\\s*=\\s*[\"']([^\"']+)[\"']", "i"));
+      const v = am ? am[1].trim() : "";
+      if (v && !v.startsWith("data:")) { lazyUrl = v; break; }
+    }
+    if (!lazyUrl) {
+      const sm = t.match(/\bdata-(?:lazy-)?srcset\s*=\s*["']([^"']+)["']/i);
+      if (sm) {
+        const first = sm[1].split(",")[0].trim().split(/\s+/)[0];
+        if (first && !first.startsWith("data:")) lazyUrl = first;
+      }
+    }
+    if (lazyUrl) {
+      // (?<![-\w]) — anders matcht dit óók de "src" binnen "data-src" (hyphen = woordgrens)
+      const srcM = t.match(/(?<![-\w])src\s*=\s*["']([^"']*)["']/i);
+      const cur = srcM ? srcM[1].trim() : "";
+      const isPlaceholder = !cur || cur.startsWith("data:") || /(1x1|blank|placeholder|spacer|pixel|loading|lazy)/i.test(cur);
+      if (srcM && isPlaceholder) t = t.replace(srcM[0], `src="${lazyUrl}"`);
+      else if (!srcM) t = t.replace(/<img\b/i, `<img src="${lazyUrl}"`);
+    }
+    // srcset/sizes/lazy-attrs strippen zodat de browser altijd onze src gebruikt
+    t = t.replace(/\s(?:srcset|sizes|data-(?:src|lazy-src|original|lazy|image|echo|srcset|lazy-srcset|sizes))\s*=\s*["'][^"']*["']/gi, "");
+    return t;
+  });
+
+  // 5. data-bg / data-background-image → echte inline background-image
+  out = out.replace(/<[a-z][^>]*\bdata-(?:bg|background(?:-image)?)\s*=\s*["'][^"']+["'][^>]*>/gi, (tag) => {
+    const bm = tag.match(/\bdata-(?:bg|background(?:-image)?)\s*=\s*["']([^"']+)["']/i);
+    const url = bm ? bm[1].trim() : "";
+    if (!url || url.startsWith("data:") || /background-image\s*:/i.test(tag)) return tag;
+    const styleM = tag.match(/\bstyle\s*=\s*"([^"]*)"/i);
+    if (styleM) return tag.replace(styleM[0], `style="${styleM[1]};background-image:url('${url}')"`);
+    return tag.replace(/^<([a-z][a-z0-9]*)/i, `<$1 style="background-image:url('${url}')"`);
+  });
+
+  return out;
 }
 
 function collectLinks(html) {
@@ -222,10 +295,14 @@ function collectImages(html) {
     map[u].count++;
   };
   let m;
-  const imgRe = /<img\b[^>]*src\s*=\s*["']([^"']+)["']/gi;
+  const imgRe = /<img\b[^>]*?(?<![-\w])src\s*=\s*["']([^"']+)["']/gi;
   while ((m = imgRe.exec(html))) add(m[1], "img");
   const bgRe = /background(?:-image)?\s*:\s*[^;"']*url\(\s*["']?([^"')]+)["']?\s*\)/gi;
   while ((m = bgRe.exec(html))) add(m[1], "background");
+  // Vangnet: elk data-attribuut dat een directe afbeeldings-URL bevat
+  // (lazy-load-varianten die recoverLazyImages niet kende)
+  const dataRe = /\bdata-[a-z][a-z0-9-]*\s*=\s*["'](https?:\/\/[^"'\s]+\.(?:jpe?g|png|webp|gif|avif)(?:\?[^"']*)?)["']/gi;
+  while ((m = dataRe.exec(html))) add(m[1], "img");
   return Object.values(map).slice(0, MAX_IMAGES);
 }
 
@@ -418,11 +495,11 @@ function absolutise(u, base) {
 }
 function resolveRelativeUrls(html, base) {
   let out = String(html);
-  out = out.replace(/(src|href|poster)\s*=\s*"([^"]*)"/gi, (m, attr, val) => `${attr}="${absolutise(val, base)}"`);
-  out = out.replace(/(src|href|poster)\s*=\s*'([^']*)'/gi, (m, attr, val) => `${attr}='${absolutise(val, base)}'`);
+  out = out.replace(/(src|href|poster|data-src|data-lazy-src|data-original|data-lazy|data-image|data-echo|data-bg|data-background(?:-image)?)\s*=\s*"([^"]*)"/gi, (m, attr, val) => `${attr}="${absolutise(val, base)}"`);
+  out = out.replace(/(src|href|poster|data-src|data-lazy-src|data-original|data-lazy|data-image|data-echo|data-bg|data-background(?:-image)?)\s*=\s*'([^']*)'/gi, (m, attr, val) => `${attr}='${absolutise(val, base)}'`);
   out = out.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q, val) => `url(${q}${absolutise(val, base)}${q})`);
-  out = out.replace(/srcset\s*=\s*"([^"]*)"/gi, (m, val) =>
-    `srcset="${val
+  out = out.replace(/((?:data-(?:lazy-)?)?srcset)\s*=\s*"([^"]*)"/gi, (m, attr, val) =>
+    `${attr}="${val
       .split(",")
       .map((p) => {
         const bits = p.trim().split(/\s+/);
@@ -765,7 +842,9 @@ export default async function handler(req, res) {
       if (raw.trim().length < 500) return res.status(400).json({ success: false, error: "That doesn't look like a full advertorial page (too short)" });
 
       const stripped = stripScripts(raw);
-      let html = stripped.html;
+      // Lazy-loaded images terughalen (data-src → src, noscript-fallbacks, data-bg)
+      // vóór het verzamelen — anders zien we alleen de placeholders.
+      let html = recoverLazyImages(stripped.html);
       build.removedScripts = stripped.removed;
 
       // Links verzamelen: meest voorkomende bestemming = CTA → automatisch #next-step
