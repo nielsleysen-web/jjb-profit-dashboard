@@ -144,7 +144,10 @@ function addLog(task, session, text) {
 }
 
 /* ---------------- status side effects ---------------- */
-async function applyStatusChange(task, newStatus, session, mediaBuyers) {
+// Interne sleutel voor de Creative Copy-trigger (zelfde recept als in creative-copy.js)
+const creativeCopyKey = (taskId) => crypto.createHmac("sha256", SESSION_SECRET).update(`creative-copy:${taskId}`).digest("base64url");
+
+async function applyStatusChange(task, newStatus, session, mediaBuyers, host) {
   const notifications = [];
   task.status = newStatus;
   addLog(task, session, `changed status to "${newStatus}"`);
@@ -153,6 +156,18 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers) {
 
   if (newStatus === "Ready To Work" && task.assigneeEmail && task.assigneeEmail !== session.email) {
     notifications.push({ email: task.assigneeEmail, text: `"${productName}" is Ready To Work — you can start designing` });
+  }
+  if (newStatus === "Ready To Work" && host) {
+    // Trigger: automatisch de Creative Copy headlines genereren (geen "Ready for AI"-gate).
+    // Fire-and-forget met korte timeout — creative-copy.js draait zelf verder en slaat
+    // dubbele starts over (al gegenereerd of al bezig = skip).
+    try {
+      await axios.post(
+        `https://${host}/api/creative-copy`,
+        { action: "generate", taskId: task.id, key: creativeCopyKey(task.id) },
+        { timeout: 2500 }
+      ).catch(() => {});
+    } catch {}
   }
   if (newStatus === "In Production" && task.batchType === "First Creative Batch" && task.sourceLaunchTaskId) {
     // Designer is gestart met de First Creative Batch → de launch-taak verdwijnt van het funnel-board
@@ -285,7 +300,7 @@ export default async function handler(req, res) {
         notifs.push({ email: t.assigneeEmail, text: `You've been assigned to a new design task${t.product?.title ? ` for "${t.product.title}"` : ""}` });
       }
       if (t.status !== "Task Start") {
-        await applyStatusChange(t, t.status, session, mediaBuyers);
+        await applyStatusChange(t, t.status, session, mediaBuyers, req.headers.host);
       }
       store.tasks.push(t);
       await writeData("design-tasks", store);
@@ -325,7 +340,7 @@ export default async function handler(req, res) {
     if (action === "status") {
       if (!canStatus) return res.status(403).json({ success: false, error: "No permission to change status" });
       if (!STATUSES.includes(status)) return res.status(400).json({ success: false, error: "Invalid status" });
-      await applyStatusChange(task, status, session, mediaBuyers);
+      await applyStatusChange(task, status, session, mediaBuyers, req.headers.host);
       await writeData("design-tasks", store);
       return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
     }
