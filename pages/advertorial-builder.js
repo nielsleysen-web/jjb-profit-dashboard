@@ -82,6 +82,7 @@ export default function AdvertorialBuilder() {
   const [openCat, setOpenCat] = useState("");
   const [publishedUrl, setPublishedUrl] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedHtml, setCopiedHtml] = useState(false);
   const [search, setSearch] = useState("");
   const [filterBuilder, setFilterBuilder] = useState("");
   const [filterMarket, setFilterMarket] = useState("");
@@ -322,13 +323,32 @@ export default function AdvertorialBuilder() {
     });
   };
 
-  const downloadHtml = async () => {
-    const html = localizedHtml || "";
-    const blob = new Blob([html], { type: "text/html" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${build.slug}.html`;
-    a.click();
+  // De finale HTML (zoals de live link hem serveert) naar het klembord — direct
+  // te plakken in Funnelish. We halen hem van de live pagina zelf, zodat dit ook
+  // werkt als de end-card rechtstreeks vanuit de Library wordt geopend.
+  const copyHtml = async () => {
+    try {
+      const html = await fetch(publishedUrl).then((r) => r.text());
+      await navigator.clipboard.writeText(html);
+      setCopiedHtml(true);
+      setTimeout(() => setCopiedHtml(false), 1800);
+    } catch (e) {
+      setError("Could not copy the HTML — open Preview page and copy it from there");
+    }
+  };
+
+  // Vanuit de Library rechtstreeks naar de end-card ("Your advertorial is live")
+  const openLive = async (b) => {
+    if (b.status !== "live") return openWizard(b);
+    setError("");
+    try {
+      await loadBuild(b.id, true);
+      setPublishedUrl(`${window.location.origin}/a/${b.slug}`);
+      setScreen("wizard");
+      setStep(4);
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   /* ================= render-helpers ================= */
@@ -432,7 +452,15 @@ export default function AdvertorialBuilder() {
               ) : (
                 filtered.map((b) => (
                   <tr key={b.id} style={{ borderBottom: "1px solid #f4f5f7" }}>
-                    <td style={{ padding: "11px 12px", fontWeight: 700 }}>{b.taskName}</td>
+                    <td
+                      style={{ padding: "11px 12px", fontWeight: 700, cursor: "pointer" }}
+                      onClick={() => openLive(b)}
+                      onMouseEnter={(e) => (e.currentTarget.style.textDecoration = "underline")}
+                      onMouseLeave={(e) => (e.currentTarget.style.textDecoration = "none")}
+                      title={b.status === "live" ? "Open the live card (link + copy HTML)" : "Continue this build"}
+                    >
+                      {b.taskName}
+                    </td>
                     <td style={{ padding: "11px 12px" }}>{b.builderName || b.builderEmail}</td>
                     <td style={{ padding: "11px 12px" }}>{marketLabel(b.targetMarket)}</td>
                     <td style={{ padding: "11px 12px" }}>
@@ -885,9 +913,8 @@ export default function AdvertorialBuilder() {
           </p>
           <div style={{ display: "flex", gap: "8px", justifyContent: "center", borderTop: "1px solid #f1f5f9", paddingTop: "14px", flexWrap: "wrap" }}>
             <a href={publishedUrl} target="_blank" rel="noreferrer" style={{ ...ui.btn, textDecoration: "none", display: "inline-block" }}>👁 Preview page</a>
-            <button style={ui.btn} onClick={downloadHtml}>⬇ Download .html</button>
+            <button style={ui.btn} onClick={copyHtml}>{copiedHtml ? "✓ Copied" : "⧉ Copy HTML"}</button>
             <button style={ui.btn} onClick={() => setStep(3)}>✎ Back to editing</button>
-            <button style={ui.btn} onClick={() => { setScreen("library"); loadLibrary(); }}>Library</button>
           </div>
         </div>
       )}
