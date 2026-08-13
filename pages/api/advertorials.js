@@ -308,6 +308,53 @@ const VISION_PROMPT = `Analyse this image from an advertorial page. Return ONLY 
 {"contains_text": true|false, "is_product_packshot": true|false, "description": "max 8 words"}
 contains_text = readable overlaid or embedded text in the image (any language). is_product_packshot = the image mainly shows a product/packaging.`;
 
+/* ================= pagina ophalen (URL-modus) ================= */
+async function fetchPage(url) {
+  const r = await axios.get(url, {
+    timeout: 30000,
+    maxRedirects: 5,
+    responseType: "text",
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.8",
+    },
+    validateStatus: (st) => st >= 200 && st < 400,
+  });
+  const html = String(r.data || "");
+  if (html.length < 500) throw new Error("The page returned almost no HTML — paste the source manually instead");
+  return html;
+}
+
+// Relatieve src/href/background-URL's omzetten naar absolute, zodat afbeeldingen
+// analyseerbaar en re-hostbaar zijn. #-ankers, data:, mailto: enz. blijven onaangeraakt.
+function absolutise(u, base) {
+  const v = String(u || "").trim();
+  if (!v || /^(https?:|#|data:|mailto:|tel:|javascript:)/i.test(v)) return v;
+  if (v.startsWith("//")) return "https:" + v;
+  try {
+    return new URL(v, base).href;
+  } catch {
+    return v;
+  }
+}
+function resolveRelativeUrls(html, base) {
+  let out = String(html);
+  out = out.replace(/(src|href|poster)\s*=\s*"([^"]*)"/gi, (m, attr, val) => `${attr}="${absolutise(val, base)}"`);
+  out = out.replace(/(src|href|poster)\s*=\s*'([^']*)'/gi, (m, attr, val) => `${attr}='${absolutise(val, base)}'`);
+  out = out.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (m, q, val) => `url(${q}${absolutise(val, base)}${q})`);
+  out = out.replace(/srcset\s*=\s*"([^"]*)"/gi, (m, val) =>
+    `srcset="${val
+      .split(",")
+      .map((p) => {
+        const bits = p.trim().split(/\s+/);
+        return [absolutise(bits[0], base), bits[1]].filter(Boolean).join(" ");
+      })
+      .join(", ")}"`
+  );
+  return out;
+}
+
 /* ================= image helpers ================= */
 async function fetchImage(url) {
   if (!/^https?:\/\//i.test(String(url))) throw new Error("relative URL — upload a replacement");
@@ -609,8 +656,23 @@ export default async function handler(req, res) {
     const build = await readData(`advertorial-${rawId}`);
     if (!build) return res.status(404).json({ success: false, error: "Build not found" });
 
+    /* ---------- fetchUrl: pagina zelf ophalen en run starten ---------- */
+    if (action === "fetchUrl") {
+      const url = String(req.body.url || "").trim();
+      if (!/^https?:\/\//i.test(url)) return res.status(400).json({ success: false, error: "Enter a full URL starting with https://" });
+      let raw;
+      try {
+        raw = await fetchPage(url);
+      } catch (e) {
+        return res.status(400).json({ success: false, error: `Could not fetch the page (${String(e.message).slice(0, 120)}). Paste the HTML manually instead.` });
+      }
+      raw = resolveRelativeUrls(raw, url);
+      build.sourceUrl = url;
+      req.body.html = raw; // zelfde pad als saveHtml hieronder
+    }
+
     /* ---------- saveHtml: prep + run starten ---------- */
-    if (action === "saveHtml") {
+    if (action === "saveHtml" || action === "fetchUrl") {
       const raw = String(req.body.html || "");
       if (raw.trim().length < 500) return res.status(400).json({ success: false, error: "That doesn't look like a full advertorial page (too short)" });
 
