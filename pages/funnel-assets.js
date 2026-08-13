@@ -45,6 +45,14 @@ const ASSETS = [
     tag: "SOP",
   },
   {
+    category: "Tools",
+    icon: "🛠️",
+    title: "Advertorial HTML Builder",
+    description: "Paste a competitor advertorial, localise everything to your market (names, prices, institutions, units), replace images, get a live link for Funnelish.",
+    href: "/advertorial-builder",
+    tag: "Tool",
+  },
+  {
     category: "Documents",
     icon: "✍️",
     title: "Sales Page Copy — Prompts",
@@ -81,7 +89,7 @@ export default function FunnelAssets() {
           <a
             key={a.href}
             href={a.href}
-            target="_blank"
+            target={a.href.startsWith("/") ? "_self" : "_blank"}
             rel="noreferrer"
             style={{ ...ui.card, padding: "20px 22px", display: "block", textDecoration: "none", color: "inherit", transition: "box-shadow 0.15s" }}
             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 6px 20px rgba(15,23,42,0.10)")}
@@ -99,7 +107,7 @@ export default function FunnelAssets() {
               </div>
             </div>
             <p style={{ margin: 0, fontSize: "12.5px", color: "#64748b", lineHeight: 1.55 }}>{a.description}</p>
-            <div style={{ marginTop: "12px", fontSize: "12.5px", fontWeight: 700, color: "#2563eb" }}>Open document ↗</div>
+            <div style={{ marginTop: "12px", fontSize: "12.5px", fontWeight: 700, color: "#2563eb" }}>{a.href.startsWith("/") ? "Open tool →" : "Open document ↗"}</div>
           </a>
         ))}
       </div>
