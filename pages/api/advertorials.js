@@ -197,6 +197,24 @@ function stripScripts(html) {
   return { html: out, removed };
 }
 
+// Tags normaliseren zodat alle regex-verwerking hierna veilig is. Funnelish-pagina's
+// bevatten (a) '>' BINNEN gequote attribuutwaarden (media="(width > 1024px)") waardoor
+// elke [^>]*-tagregex het einde van de tag verkeerd ziet en halve tags als tekst
+// achterblijven, en (b) ongequote attribuutwaarden (src=//img...) die alle
+// quote-gebaseerde regexes missen. Dit loopt tag-voor-tag (quote-bewust):
+//   1. '>' en '<' binnen gequote waarden → &gt;/&lt; (browser decodeert dit identiek)
+//   2. kale attribuutwaarden krijgen quotes: src=//x → src="//x"
+function normalizeTags(html) {
+  return String(html).replace(/<[a-zA-Z][^\s>]*(?:[^>"']|"[^"]*"|'[^']*')*>/g, (tag) => {
+    let body = tag.slice(1, -1);
+    body = body.replace(/"[^"]*"|'[^']*'|(?<![-\w])([a-zA-Z][a-zA-Z0-9-]*)\s*=\s*([^\s"'=<>`]+)/g, (m, attr, val) => {
+      if (attr) return `${attr}="${val}"`; // kale waarde → gequote
+      return m[0] + m.slice(1, -1).replace(/>/g, "&gt;").replace(/</g, "&lt;") + m[0];
+    });
+    return `<${body}>`;
+  });
+}
+
 // Lazy-loaded afbeeldingen terughalen. Moderne pagina's laden images via JS:
 // de echte URL staat dan in data-src/data-lazy-src/... en src is een placeholder,
 // of de echte <img> staat als fallback in <noscript>. Omdat wij alle scripts
@@ -486,7 +504,8 @@ async function fetchPage(url) {
 function absolutise(u, base) {
   const v = String(u || "").trim();
   if (!v || /^(https?:|#|data:|mailto:|tel:|javascript:)/i.test(v)) return v;
-  if (v.startsWith("//")) return "https:" + v;
+  // Protocol-relatief, incl. Funnelish-eigenaardigheid met extra slashes (////cdn...)
+  if (/^\/\//.test(v)) return "https://" + v.replace(/^\/+/, "");
   try {
     return new URL(v, base).href;
   } catch {
@@ -648,9 +667,12 @@ async function runOneStep(req, build) {
       } catch {}
     }
     if (!tpl.trim()) throw new Error("Template missing — press Resume");
+    // Escapen bij terugplaatsen: een vertaling met een " of > in een alt/title-attribuut
+    // zou anders de tag openbreken en halve attributen als zichtbare tekst lekken.
+    const escSeg = (s) => String(s).replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const full = tpl.replace(/\u27E6(\d+)\u27E7/g, (m, i) => {
       const v = dict[+i];
-      return v != null && v !== "" ? v : original[+i] || "";
+      return escSeg(v != null && v !== "" ? v : original[+i] || "");
     });
     await writeLarge(`advertorial-${build.id}-loc`, full);
     q.assembled = true;
@@ -831,9 +853,8 @@ export default async function handler(req, res) {
       } catch (e) {
         return res.status(400).json({ success: false, error: `Could not fetch the page (${String(e.message).slice(0, 120)}). Paste the HTML manually instead.` });
       }
-      raw = resolveRelativeUrls(raw, url);
       build.sourceUrl = url;
-      req.body.html = raw; // zelfde pad als saveHtml hieronder
+      req.body.html = raw; // zelfde pad als saveHtml hieronder (absolutiseren gebeurt daar, ná normalizeTags)
     }
 
     /* ---------- saveHtml: prep + run starten ---------- */
@@ -842,9 +863,12 @@ export default async function handler(req, res) {
       if (raw.trim().length < 500) return res.status(400).json({ success: false, error: "That doesn't look like a full advertorial page (too short)" });
 
       const stripped = stripScripts(raw);
-      // Lazy-loaded images terughalen (data-src → src, noscript-fallbacks, data-bg)
-      // vóór het verzamelen — anders zien we alleen de placeholders.
-      let html = recoverLazyImages(stripped.html);
+      // 1) Tags normaliseren ('>' in attributen escapen, kale waarden quoten) — hierna
+      //    zijn alle regexes veilig. 2) Relatieve URL's absoluut maken (URL-import).
+      // 3) Lazy-loaded images terughalen (data-src → src, noscript-fallbacks, data-bg).
+      let html = normalizeTags(stripped.html);
+      if (build.sourceUrl) html = resolveRelativeUrls(html, build.sourceUrl);
+      html = recoverLazyImages(html);
       build.removedScripts = stripped.removed;
 
       // Links verzamelen: meest voorkomende bestemming = CTA → automatisch #next-step
@@ -990,9 +1014,13 @@ export default async function handler(req, res) {
     if (action === "publish") {
       const pendingLinks = (build.links || []).filter((l) => l.decision === "pending");
       const pendingImages = (build.images || []).filter((i) => i.decision === "pending");
-      if (pendingLinks.length || pendingImages.length) {
+      if ((pendingLinks.length || pendingImages.length) && req.body.force !== true) {
         return res.status(400).json({ success: false, error: `Still undecided: ${pendingLinks.length} link(s), ${pendingImages.length} image(s)` });
       }
+      // force ("Publish anyway"): veilige defaults voor wat nog open stond —
+      // links → #next-step, images → keep (re-host op eigen CDN)
+      for (const l of pendingLinks) l.decision = "next-step";
+      for (const i of pendingImages) i.decision = "keep";
       let html = await readLarge(`advertorial-${build.id}-loc`);
       if (!html) return res.status(400).json({ success: false, error: "No localised HTML yet — run the localisation first" });
 
