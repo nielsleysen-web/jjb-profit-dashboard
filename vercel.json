@@ -8,6 +8,9 @@
     },
     "pages/api/growth-model.js": {
       "maxDuration": 300
+    },
+    "pages/api/advertorials.js": {
+      "maxDuration": 300
     }
   }
 }
