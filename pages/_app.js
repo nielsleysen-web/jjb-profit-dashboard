@@ -38,6 +38,12 @@ const CATEGORIES = [
     perm: "launching",
     items: [
       { href: "/product-launching", label: "Product Pipeline", icon: "🚀" },
+    ],
+  },
+  {
+    name: "Assets",
+    perm: "assets",
+    items: [
       { href: "/funnel-assets", label: "Assets", icon: "📁" },
     ],
   },
@@ -166,6 +172,9 @@ export default function App({ Component, pageProps }) {
     ? {
         ...user,
         launching: user.admin || userRoles.includes("Funnel Builder"),
+        // Assets: iedereen met een account ziet het menu — wélke assets iemand ziet
+        // wordt per asset bepaald (toegangsbeheer in de Assets-pagina zelf)
+        assets: true,
         mediabuying: user.admin || userRoles.includes("Media Buyer"),
         creatives:
           user.admin ||
