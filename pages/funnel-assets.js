@@ -1,7 +1,7 @@
 // pages/funnel-assets.js
 // Assets — eigen menu-item. Dynamisch beheerd via /api/assets:
 // - Iedereen ziet alleen de assets waar hij/zij toegang toe heeft
-//   (access "all" = heel het team, "restricted" = aangeduide personen).
+//   (access "all" = heel het team, "restricted" = aangeduide rollen).
 // - Admin: assets toevoegen/bewerken/verwijderen + per asset personen aanduiden.
 
 import { useState, useEffect } from "react";
@@ -27,11 +27,11 @@ const ui = {
 };
 
 const CATEGORY_ICONS = { Documents: "📄", Tools: "🛠️", "Marketing Creatives": "🎨" };
-const EMPTY_FORM = { id: "", category: "Documents", icon: "📄", title: "", description: "", href: "", tag: "", access: "all", allowedEmails: [] };
+const EMPTY_FORM = { id: "", category: "Documents", icon: "📄", title: "", description: "", href: "", tag: "", access: "all", allowedRoles: [] };
 
 export default function FunnelAssets() {
   const isMobile = useIsMobile();
-  const [data, setData] = useState(null); // { assets, categories, isAdmin, team }
+  const [data, setData] = useState(null); // { assets, categories, isAdmin, roles }
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState(null); // null = geen formulier, anders asset-form
@@ -63,7 +63,7 @@ export default function FunnelAssets() {
     setBusy(false);
   };
 
-  const saveAccess = (asset, access, allowedEmails) => post({ action: "save", asset: { ...asset, access, allowedEmails } });
+  const saveAccess = (asset, access, allowedRoles) => post({ action: "save", asset: { ...asset, access, allowedRoles } });
 
   if (!data) {
     return (
@@ -73,7 +73,7 @@ export default function FunnelAssets() {
     );
   }
 
-  const { assets, categories, isAdmin, team } = data;
+  const { assets, categories, isAdmin, roles } = data;
 
   return (
     <div style={{ ...ui.page, padding: isMobile ? "16px" : ui.page.padding }}>
@@ -147,7 +147,7 @@ export default function FunnelAssets() {
                           </span>
                           {isAdmin && a.access === "restricted" && (
                             <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#b45309", background: "#fffbeb", padding: "2px 8px", borderRadius: "999px", marginLeft: "6px" }}>
-                              🔒 {(a.allowedEmails || []).length} people
+                              🔒 {(a.allowedRoles || []).length ? (a.allowedRoles || []).join(", ") : "no roles yet"}
                             </span>
                           )}
                         </div>
@@ -179,32 +179,30 @@ export default function FunnelAssets() {
                               <input
                                 type="checkbox"
                                 checked={a.access !== "restricted"}
-                                onChange={(e) => saveAccess(a, e.target.checked ? "all" : "restricted", a.allowedEmails || [])}
+                                onChange={(e) => saveAccess(a, e.target.checked ? "all" : "restricted", a.allowedRoles || [])}
                               />
                               Everyone on the team
                             </label>
                             {a.access === "restricted" && (
-                              <div style={{ maxHeight: "170px", overflowY: "auto" }}>
-                                {(team || []).map((u) => {
-                                  const list = (a.allowedEmails || []).map((e) => e.toLowerCase());
-                                  const checked = list.includes((u.email || "").toLowerCase());
+                              <div>
+                                {(roles || []).map((role) => {
+                                  const checked = (a.allowedRoles || []).includes(role);
                                   return (
-                                    <label key={u.email} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", padding: "3px 0", cursor: "pointer" }}>
+                                    <label key={role} style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", padding: "3px 0", cursor: "pointer" }}>
                                       <input
                                         type="checkbox"
                                         checked={checked}
                                         onChange={(e) => {
                                           const next = e.target.checked
-                                            ? [...(a.allowedEmails || []), u.email]
-                                            : (a.allowedEmails || []).filter((x) => x.toLowerCase() !== (u.email || "").toLowerCase());
+                                            ? [...(a.allowedRoles || []), role]
+                                            : (a.allowedRoles || []).filter((r) => r !== role);
                                           saveAccess(a, "restricted", next);
                                         }}
                                       />
-                                      {u.name} <span style={{ color: "#a4adbd", fontSize: "11px" }}>{(u.roles || []).join(", ")}</span>
+                                      {role}
                                     </label>
                                   );
                                 })}
-                                {(team || []).length === 0 && <p style={{ margin: 0, fontSize: "11.5px", color: "#a4adbd" }}>No active team members found.</p>}
                               </div>
                             )}
                           </div>
@@ -220,7 +218,7 @@ export default function FunnelAssets() {
       })}
 
       <p style={{ margin: "24px 0 0 0", fontSize: "12px", color: "#a4adbd" }}>
-        {isAdmin ? "🔒 Access shows who can see a restricted asset — team members never see assets they don't have access to." : "Need an asset added here? Ask Niels."}
+        {isAdmin ? "🔒 Access is set per role — team members only see assets their role has access to." : "Need an asset added here? Ask Niels."}
       </p>
     </div>
   );
