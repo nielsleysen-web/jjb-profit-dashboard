@@ -277,8 +277,21 @@ export default function Dashboard() {
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "16px" }}>
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Total Orders" value={data.totalOrders || 0} change={data.ordersChange} />
-        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Net Profit" value={formatCurrency(data.netProfit)} change={data.profitChange} accent={data.netProfit >= 0 ? "#16a34a" : "#dc2626"} />
-        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Revenue" value={formatCurrency(data.revenue)} change={data.revenueChange} />
+        <Card
+          compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}
+          label="Net Profit"
+          value={formatCurrency(data.netProfit)}
+          change={data.profitChange}
+          accent={data.netProfit >= 0 ? "#16a34a" : "#dc2626"}
+          extra={data.shippingProfit > 0 ? `🚚 incl. ${formatCurrency(data.shippingProfit)} shipping profit` : undefined}
+        />
+        <Card
+          compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}
+          label="Revenue"
+          value={formatCurrency(data.revenue)}
+          change={data.revenueChange}
+          extra={data.shippingProfit > 0 ? "excl. paid shipping — counted as pure profit" : undefined}
+        />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "20px" }}>
@@ -494,7 +507,7 @@ function RecentActivity({ formatCurrency, isMobile }) {
 
 const cellR = { padding: "10px 12px", textAlign: "right", color: "#334155", fontVariantNumeric: "tabular-nums" };
 
-function Card({ label, value, change, sub, accent, small, compareLabel }) {
+function Card({ label, value, change, sub, accent, small, compareLabel, extra }) {
   return (
     <div style={{ ...ui.card, padding: small ? "18px 20px" : "22px 24px" }}>
       <div style={{ ...ui.label, marginBottom: small ? "8px" : "10px" }}>{label}</div>
@@ -534,6 +547,7 @@ function Card({ label, value, change, sub, accent, small, compareLabel }) {
           <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "6px" }}>{compareLabel || "vs. previous period"}</span>
         </span>
       )}
+      {extra != null && <div style={{ fontSize: "11.5px", color: "#0e7490", fontWeight: 600, marginTop: "5px" }}>{extra}</div>}
     </div>
   );
 }
