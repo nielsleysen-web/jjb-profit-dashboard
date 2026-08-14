@@ -379,6 +379,11 @@ export default function Dashboard() {
         <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
           Ad spend matched by campaign name • product profit = revenue − COGS − matched ad spend • CVR = orders / unique outbound clicks of the matched campaigns
         </p>
+        {data.isAdmin && (data.unmatchedCampaigns || []).length > 0 && (
+          <p style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#b45309", fontWeight: 600 }}>
+            ⚠ {(data.unmatchedCampaigns || []).length} campaign(s) with spend not linked to any product — link them in <a href="/product-economics" style={{ color: "#b45309" }}>Product Economics</a>
+          </p>
+        )}
       </div>
       </div>
 
