@@ -152,6 +152,7 @@ const ORDERS_QUERY = `
         createdAt
         currentTotalPriceSet { shopMoney { amount } }
         currentSubtotalPriceSet { shopMoney { amount } }
+        totalShippingPriceSet { shopMoney { amount } }
         totalRefundedSet { shopMoney { amount } }
         lineItems(first: 50) {
           nodes {
@@ -398,8 +399,9 @@ function summarizeOrders(orders) {
   let revenue = 0;
   let cogs = 0;
   let fees = 0;
+  let shipping = 0; // betaalde verzendopties (bv. "Spedizione assicurata") = pure extra winst
   const productMap = {};
-  const daily = {}; // { day: { orders, revenue, cogs, fees } }
+  const daily = {}; // { day: { orders, revenue, cogs, fees, shipping } }
 
   for (const order of orders) {
     totalOrders++;
@@ -407,17 +409,22 @@ function summarizeOrders(orders) {
     const refunded = parseFloat(
       order.totalRefundedSet?.shopMoney?.amount || 0
     );
-    const net = gross - refunded;
+    // Shipping wordt UIT de omzet gehaald en apart geteld: het is geen productomzet
+    // maar pure extra winst (de verzendoptie kost ons niets extra).
+    const ship = parseFloat(order.totalShippingPriceSet?.shopMoney?.amount || 0);
+    const net = gross - refunded - ship;
     revenue += net;
+    shipping += ship;
 
     const f = orderFees(order);
     fees += f;
 
     const day = localDateStr(new Date(order.createdAt));
-    if (!daily[day]) daily[day] = { orders: 0, revenue: 0, cogs: 0, fees: 0 };
+    if (!daily[day]) daily[day] = { orders: 0, revenue: 0, cogs: 0, fees: 0, shipping: 0 };
     daily[day].orders++;
     daily[day].revenue += net;
     daily[day].fees += f;
+    daily[day].shipping += ship;
 
     for (const item of order.lineItems.nodes) {
       const name = item.product?.title || item.title;
@@ -443,7 +450,7 @@ function summarizeOrders(orders) {
     }
   }
 
-  return { totalOrders, revenue, cogs, fees, productMap, daily };
+  return { totalOrders, revenue, cogs, fees, shipping, productMap, daily };
 }
 
 function pctChange(current, previous) {
@@ -552,8 +559,9 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
   // Kerncijfers (incl. 2,5% ad account supplier fee, tenzij uitgezet via de toggle)
   const adSupplierFee = adSpend * feePct;
   const prevAdSupplierFee = prevAdSpend * feePct;
-  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend - adSupplierFee;
-  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend - prevAdSupplierFee;
+  // Shipping-opbrengst telt NIET mee als omzet, maar wel als pure extra winst
+  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend - adSupplierFee + cur.shipping;
+  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend - prevAdSupplierFee + prev.shipping;
   const avgOrderValue = cur.totalOrders > 0 ? cur.revenue / cur.totalOrders : 0;
   const prevAOV = prev.totalOrders > 0 ? prev.revenue / prev.totalOrders : 0;
   const profitPercent = cur.revenue > 0 ? (netProfit / cur.revenue) * 100 : 0;
@@ -563,7 +571,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
   // Profit per day (chart)
   const profitPerDay = [];
   for (let d = dateFrom; d <= dateTo; d = shiftDays(d, 1)) {
-    const day = cur.daily[d] || { orders: 0, revenue: 0, cogs: 0, fees: 0 };
+    const day = cur.daily[d] || { orders: 0, revenue: 0, cogs: 0, fees: 0, shipping: 0 };
     const spend = inCurrent(d) ? meta.dailySpend[d] || 0 : 0;
     profitPerDay.push({
       date: d,
@@ -571,8 +579,9 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
       revenue: round2(day.revenue),
       cogs: round2(day.cogs),
       fees: round2(day.fees),
+      shippingProfit: round2(day.shipping || 0),
       adSpend: round2(spend),
-      profit: round2(day.revenue - day.cogs - day.fees - spend - spend * feePct),
+      profit: round2(day.revenue - day.cogs - day.fees - spend - spend * feePct + (day.shipping || 0)),
     });
   }
 
@@ -590,8 +599,9 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
         });
         const gross = parseFloat(order.currentTotalPriceSet.shopMoney.amount);
         const refunded = parseFloat(order.totalRefundedSet?.shopMoney?.amount || 0);
+        const ship = parseFloat(order.totalShippingPriceSet?.shopMoney?.amount || 0);
         if (!hourly[h]) hourly[h] = { revenue: 0, orders: 0 };
-        hourly[h].revenue += gross - refunded;
+        hourly[h].revenue += gross - refunded - ship; // omzet excl. shipping, consistent met de kaarten
         hourly[h].orders++;
       }
       const points = [];
@@ -662,6 +672,8 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
       cur.revenue > 0 ? round1((adSpend / cur.revenue) * 100) : 0,
     roas: adSpend > 0 ? round2(cur.revenue / adSpend) : 0,
     netProfit: round2(netProfit),
+    shippingProfit: round2(cur.shipping),
+    prevShippingProfit: round2(prev.shipping),
     profitChange: round1(pctChange(netProfit, prevNetProfit)),
     profitPercent: round1(profitPercent),
     profitPercentChange: round1(profitPercent - prevProfitPercent),
