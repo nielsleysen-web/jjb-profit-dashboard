@@ -215,8 +215,16 @@ export default function ProductEconomics() {
       )}
 
       {isAdmin && unmatchedCampaigns.length > 0 && (
-        <div style={{ ...ui.card, padding: "12px 18px", marginBottom: "16px", background: "#fffbeb", borderColor: "#fde68a", fontSize: "12.5px", color: "#92400e", fontWeight: 600 }}>
-          ⚠ {unmatchedCampaigns.length} Meta campaign(s) with spend are not linked to any product — open “🔗 Link campaigns” on the right product to fix the tracking.
+        <div style={{ ...ui.card, padding: "12px 18px", marginBottom: "16px", background: "#fffbeb", borderColor: "#fde68a" }}>
+          <div style={{ fontSize: "12.5px", color: "#92400e", fontWeight: 600, marginBottom: "8px" }}>
+            ⚠ {unmatchedCampaigns.length} Meta campaign(s) with spend are not linked to any product — open “🔗 Link campaigns” on the right product to fix the tracking.
+          </div>
+          {unmatchedCampaigns.map((c) => (
+            <div key={c.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", padding: "5px 0", borderTop: "1px solid #fde68a", fontSize: "12px" }}>
+              <span style={{ color: "#78350f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+              <span style={{ color: "#92400e", fontWeight: 700, flexShrink: 0 }}>{fmtEur(c.spend)}</span>
+            </div>
+          ))}
         </div>
       )}
 
