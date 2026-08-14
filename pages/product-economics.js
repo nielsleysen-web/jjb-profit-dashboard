@@ -63,6 +63,14 @@ export default function ProductEconomics() {
   const [editing, setEditing] = useState({}); // { productId: { invItemId: "12.50" } }
   const [saving, setSaving] = useState(null);
   const isMobile = useIsMobile();
+  // Handmatige product ↔ Meta-campagne-koppeling (admin)
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [campaignAliases, setCampaignAliases] = useState({});
+  const [unmatchedCampaigns, setUnmatchedCampaigns] = useState([]);
+  const [linkFor, setLinkFor] = useState(null); // producttitel waarvan het koppelpaneel open staat
+  const [aliasDraft, setAliasDraft] = useState([]);
+  const [aliasInput, setAliasInput] = useState("");
+  const [linkBusy, setLinkBusy] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -82,6 +90,9 @@ export default function ProductEconomics() {
       const sold = {};
       if (dashRes?.success) {
         for (const p of dashRes.data.products || []) sold[p.name] = p.orders;
+        setIsAdmin(!!dashRes.data.isAdmin);
+        setCampaignAliases(dashRes.data.campaignAliases || {});
+        setUnmatchedCampaigns(dashRes.data.unmatchedCampaigns || []);
       }
       setSoldMap(sold);
     } catch (err) {
@@ -93,6 +104,30 @@ export default function ProductEconomics() {
 
   // Getrackte producten = minstens één variant met unitCost ingevuld
   const tracked = products.filter((p) => p.variants.some((v) => v.unitCost != null));
+
+  const openLinkPanel = (productTitle) => {
+    setLinkFor(productTitle);
+    setAliasDraft(campaignAliases[productTitle] || []);
+    setAliasInput("");
+  };
+  const saveCampaignLink = async () => {
+    setLinkBusy(true);
+    try {
+      const r = await fetch("/api/dashboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "saveCampaignLink", product: linkFor, aliases: aliasDraft }),
+      }).then((x) => x.json());
+      if (!r.success) throw new Error(r.error || "Could not save");
+      setCampaignAliases(r.aliases || {});
+      setLinkFor(null);
+      loadData();
+    } catch (e) {
+      alert(e.message);
+    }
+    setLinkBusy(false);
+  };
+  const fmtEur = (v) => new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(v || 0);
 
   const startEdit = (product) => {
     const values = {};
@@ -179,6 +214,12 @@ export default function ProductEconomics() {
         <div style={{ ...ui.card, padding: "16px 20px", marginBottom: "16px", color: "#dc2626" }}>Error: {error}</div>
       )}
 
+      {isAdmin && unmatchedCampaigns.length > 0 && (
+        <div style={{ ...ui.card, padding: "12px 18px", marginBottom: "16px", background: "#fffbeb", borderColor: "#fde68a", fontSize: "12.5px", color: "#92400e", fontWeight: 600 }}>
+          ⚠ {unmatchedCampaigns.length} Meta campaign(s) with spend are not linked to any product — open “🔗 Link campaigns” on the right product to fix the tracking.
+        </div>
+      )}
+
       {/* Tracked products */}
       {tracked.length === 0 ? (
         <div style={{ ...ui.card, padding: "48px", textAlign: "center" }}>
@@ -216,7 +257,18 @@ export default function ProductEconomics() {
                       </button>
                     </div>
                   ) : (
-                    <button onClick={() => startEdit(product)} style={btnGhost}>Edit COGS</button>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      {isAdmin && (
+                        <button
+                          onClick={() => openLinkPanel(product.title)}
+                          title="Link Meta campaigns to this product manually"
+                          style={{ ...btnGhost, color: "#4f46e5", background: (campaignAliases[product.title] || []).length ? "#eef2ff" : btnGhost.background }}
+                        >
+                          🔗 Link campaigns{(campaignAliases[product.title] || []).length ? ` (${(campaignAliases[product.title] || []).length})` : ""}
+                        </button>
+                      )}
+                      <button onClick={() => startEdit(product)} style={btnGhost}>Edit COGS</button>
+                    </div>
                   )}
                 </div>
 
@@ -241,6 +293,71 @@ export default function ProductEconomics() {
             loadData();
           }}
         />
+      )}
+
+      {/* ===== Campagne-koppelpaneel (admin) ===== */}
+      {linkFor && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }} onClick={() => setLinkFor(null)}>
+          <div style={{ ...ui.card, background: "#fff", width: "100%", maxWidth: "560px", maxHeight: "84vh", overflowY: "auto", padding: "22px 24px" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "15px", fontWeight: 700 }}>🔗 Link Meta campaigns — {linkFor}</h3>
+            <p style={{ margin: "0 0 14px 0", fontSize: "12px", color: "#8a92a3" }}>
+              Add a keyword that appears in the campaign name (e.g. “muloria”), or link an unmatched campaign directly. All campaigns containing a keyword count towards this product on the dashboard — now and in the future.
+            </p>
+
+            {/* Huidige koppelingen */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
+              {aliasDraft.length === 0 && <span style={{ fontSize: "12px", color: "#a4adbd", fontStyle: "italic" }}>No manual links yet.</span>}
+              {aliasDraft.map((a) => (
+                <span key={a} style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#eef2ff", color: "#4f46e5", fontSize: "12px", fontWeight: 700, padding: "4px 10px", borderRadius: "999px" }}>
+                  {a}
+                  <a onClick={() => setAliasDraft(aliasDraft.filter((x) => x !== a))} style={{ cursor: "pointer", fontWeight: 700 }}>✕</a>
+                </span>
+              ))}
+            </div>
+
+            {/* Keyword toevoegen */}
+            <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+              <input
+                value={aliasInput}
+                onChange={(e) => setAliasInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && aliasInput.trim()) { setAliasDraft([...new Set([...aliasDraft, aliasInput.trim()])]); setAliasInput(""); } }}
+                placeholder="Keyword from the campaign name…"
+                style={{ flex: 1, padding: "9px 12px", border: "1px solid #d7dce3", borderRadius: "9px", fontSize: "12.5px", fontFamily: "inherit", outline: "none" }}
+              />
+              <button style={btnGhost} onClick={() => { if (aliasInput.trim()) { setAliasDraft([...new Set([...aliasDraft, aliasInput.trim()])]); setAliasInput(""); } }}>
+                + Add
+              </button>
+            </div>
+
+            {/* Ongekoppelde campagnes (laatste 30 dagen) */}
+            {unmatchedCampaigns.length > 0 && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "6px" }}>
+                  Campaigns with spend, not linked to any product (last 30 days)
+                </div>
+                {unmatchedCampaigns.map((c) => (
+                  <div key={c.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", padding: "7px 10px", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "9px", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "12px", color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                    <span style={{ fontSize: "12px", color: "#8a92a3", flexShrink: 0 }}>{fmtEur(c.spend)}</span>
+                    <button
+                      onClick={() => setAliasDraft([...new Set([...aliasDraft, c.name])])}
+                      style={{ ...btnPrimary, padding: "4px 10px", fontSize: "11px", flexShrink: 0 }}
+                    >
+                      + Link
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", borderTop: "1px solid #f1f5f9", paddingTop: "14px" }}>
+              <button onClick={() => setLinkFor(null)} style={btnGhost}>Cancel</button>
+              <button onClick={saveCampaignLink} disabled={linkBusy} style={btnPrimary}>
+                {linkBusy ? "Saving…" : "Save links"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
