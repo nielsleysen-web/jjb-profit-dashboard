@@ -54,13 +54,35 @@ const COGS_MAP = {
 };
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
   const session = getSession(req);
   if (!session || !(session.finance || session.admin)) {
     return res.status(401).json({ success: false, error: "No access — sign in with an account that has Finance permission" });
+  }
+
+  // POST: handmatige product ↔ campagne-koppelingen opslaan (alleen admin).
+  // Voor als de Shopify-productnaam niet in de campagnenaam voorkomt (spelfout,
+  // andere schrijfwijze) en de automatische matching de spend dus niet vindt.
+  if (req.method === "POST") {
+    if (!session.admin) return res.status(403).json({ success: false, error: "Only the administrator can link campaigns" });
+    try {
+      const { action, product, aliases } = req.body || {};
+      if (action !== "saveCampaignLink" || !product) return res.status(400).json({ success: false, error: "Unknown action" });
+      const store = await readCampaignLinks(true);
+      const clean = (Array.isArray(aliases) ? aliases : [])
+        .map((a) => String(a).trim().slice(0, 120))
+        .filter(Boolean)
+        .slice(0, 20);
+      if (clean.length) store.aliases[String(product).slice(0, 160)] = clean;
+      else delete store.aliases[String(product).slice(0, 160)];
+      await writeCampaignLinks(store);
+      return res.status(200).json({ success: true, aliases: store.aliases });
+    } catch (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
@@ -70,12 +92,15 @@ export default async function handler(req, res) {
     const { dateFrom, dateTo, prevFrom, prevTo } = getDateRange(range, from, to);
 
     // 1 window = huidige + vorige periode → in één keer ophalen, daarna splitsen
-    const [orders, meta] = await Promise.all([
+    const [orders, meta, links] = await Promise.all([
       fetchShopifyOrders(prevFrom, dateTo),
       fetchMetaData(prevFrom, dateTo),
+      readCampaignLinks(),
     ]);
 
-    const dashboard = buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee });
+    const dashboard = buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee, aliases: links.aliases });
+    dashboard.isAdmin = !!session.admin;
+    dashboard.campaignAliases = links.aliases;
 
     return res.status(200).json({
       success: true,
@@ -281,6 +306,56 @@ async function fetchShopifyOrders(dateFrom, dateTo) {
   return orders;
 }
 
+/* ---------------- handmatige campagne-koppelingen (metaobject) ---------------- */
+// { aliases: { "<Shopify productnaam>": ["muloria", "MULORIA | IT | ..."] } }
+// Een alias is een stukje tekst dat in de campagnenaam voorkomt (of de hele naam).
+// 60s module-cache: het dashboard pollt elke 3s, de koppelingen wijzigen zelden.
+let campaignLinksCache = { at: 0, data: null };
+
+async function metaobjectGraphql(query, variables) {
+  const storeUrl = process.env.SHOPIFY_STORE_URL;
+  const token = await getShopifyToken(storeUrl);
+  const response = await axios.post(
+    `https://${storeUrl}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+    { query, variables },
+    { headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" }, timeout: 15000 }
+  );
+  if (response.data.errors) throw new Error(JSON.stringify(response.data.errors));
+  return response.data.data;
+}
+
+async function readCampaignLinks(fresh = false) {
+  if (!fresh && campaignLinksCache.data && Date.now() - campaignLinksCache.at < 60000) return campaignLinksCache.data;
+  let store = { aliases: {} };
+  try {
+    const d = await metaobjectGraphql(
+      `query Get($handle: String!) { metaobjectByHandle(handle: { type: "jjb_dashboard_data", handle: $handle }) { field(key: "data") { value } } }`,
+      { handle: "campaign-links" }
+    );
+    const raw = d?.metaobjectByHandle?.field?.value;
+    if (raw) store = JSON.parse(raw);
+  } catch {}
+  if (!store || typeof store !== "object") store = { aliases: {} };
+  if (!store.aliases) store.aliases = {};
+  campaignLinksCache = { at: Date.now(), data: store };
+  return store;
+}
+
+async function writeCampaignLinks(store) {
+  const d = await metaobjectGraphql(
+    `mutation Save($handle: String!, $value: String!) {
+      metaobjectUpsert(handle: { type: "jjb_dashboard_data", handle: $handle }, metaobject: { fields: [{ key: "data", value: $value }] }) {
+        metaobject { id }
+        userErrors { message }
+      }
+    }`,
+    { handle: "campaign-links", value: JSON.stringify(store) }
+  );
+  const errs = d?.metaobjectUpsert?.userErrors || [];
+  if (errs.length) throw new Error(errs.map((e) => e.message).join(", "));
+  campaignLinksCache = { at: Date.now(), data: store };
+}
+
 /* ------------------------------ Meta (Ads) ------------------------------- */
 
 // Meta-spend 2 minuten cachen: het dashboard pollt elke 3s, maar ad spend verandert
@@ -477,15 +552,20 @@ function productKeywords(name) {
   return [...new Set([normalize(name), ...words])].filter(Boolean);
 }
 
-function matchAdSpendToProducts(productMap, campaignSpend, inPeriod) {
+function matchAdSpendToProducts(productMap, campaignSpend, inPeriod, aliases = {}) {
   // "Neurotone Drops" matcht zo ook campagnes als "NT10 | Neurotone | IT"
   // en "ArmLift" matcht "Arm Lift scale". Bij meerdere kandidaten wint de
   // langste (meest specifieke) match, en spend wordt maar 1x toegewezen.
+  // Handmatige aliases (campaign-links) tellen mee als extra sleutels — voor als
+  // de Shopify-productnaam anders gespeld is dan de campagnenaam.
   const candidates = Object.values(productMap).map((p) => ({
     product: p,
-    keys: productKeywords(p.name),
+    keys: [...new Set([...productKeywords(p.name), ...(aliases[p.name] || []).map(normalize).filter(Boolean)])],
   }));
 
+  // Campagnes mét spend die aan geen enkel product gekoppeld raken — teruggeven
+  // zodat de admin ze in de UI handmatig kan linken.
+  const unmatched = {};
   for (const row of campaignSpend) {
     if (!inPeriod(row.date)) continue;
     const campaign = normalize(row.name);
@@ -504,11 +584,17 @@ function matchAdSpendToProducts(productMap, campaignSpend, inPeriod) {
     if (best) {
       best.adSpend += row.spend;
       best.outboundClicks += row.outboundClicks || 0;
+    } else if (row.spend > 0) {
+      if (!unmatched[row.name]) unmatched[row.name] = { name: row.name, spend: 0 };
+      unmatched[row.name].spend += row.spend;
     }
   }
+  return Object.values(unmatched)
+    .map((u) => ({ name: u.name, spend: Math.round(u.spend * 100) / 100 }))
+    .sort((a, b) => b.spend - a.spend);
 }
 
-function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee = true }) {
+function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee = true, aliases = {} }) {
   const feePct = includeSupplierFee ? AD_SUPPLIER_FEE_PERCENT : 0;
   const inCurrent = (d) => d >= dateFrom && d <= dateTo;
   const inPrev = (d) => d >= prevFrom && d <= prevTo;
@@ -554,7 +640,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
     prevAdSpend *= dayFraction;
   }
 
-  matchAdSpendToProducts(cur.productMap, meta.campaignSpend, inCurrent);
+  const unmatchedCampaigns = matchAdSpendToProducts(cur.productMap, meta.campaignSpend, inCurrent, aliases);
 
   // Kerncijfers (incl. 2,5% ad account supplier fee, tenzij uitgezet via de toggle)
   const adSupplierFee = adSpend * feePct;
@@ -680,6 +766,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
     profitPerDay,
     revenueChart,
     products,
+    unmatchedCampaigns,
     metaAccounts: meta.accountsData,
   };
 }
