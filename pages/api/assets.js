@@ -1,7 +1,7 @@
 // pages/api/assets.js
 // Assets met toegangsbeheer per persoon.
 // - Iedereen met een account ziet de Assets-pagina; wélke assets iemand ziet wordt
-//   per asset bepaald: access "all" (heel het team) of "restricted" + allowedEmails.
+//   per asset bepaald: access "all" (heel het team) of "restricted" + allowedRoles.
 // - Admin beheert alles: assets toevoegen/bewerken/verwijderen + toegang aanduiden.
 // - Eerste keer draaien: de bestaande hardcoded assets worden automatisch als seed
 //   in de databank gezet (allemaal op "all", zoals ze nu zichtbaar zijn).
@@ -13,6 +13,7 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLower
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 
 const CATEGORIES = ["Documents", "Tools", "Marketing Creatives"];
+const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor", "Media Buyer"];
 
 /* ---------------- session ---------------- */
 function getSession(req) {
@@ -138,7 +139,7 @@ async function loadStore() {
   let store = await readData("assets");
   if (!store || !Array.isArray(store.assets)) {
     store = {
-      assets: SEED_ASSETS.map((a) => ({ ...a, id: uid(), access: "all", allowedEmails: [], createdAt: new Date().toISOString() })),
+      assets: SEED_ASSETS.map((a) => ({ ...a, id: uid(), access: "all", allowedRoles: [], createdAt: new Date().toISOString() })),
     };
     await writeData("assets", store);
   }
@@ -156,19 +157,12 @@ export default async function handler(req, res) {
     const store = await loadStore();
 
     if (req.method === "GET") {
-      const email = (session.email || "").toLowerCase();
-      // Zichtbaarheid: "all" = heel het team; "restricted" = alleen aangeduide personen. Admin ziet alles.
+      const userRoles = session.roles || [];
+      // Zichtbaarheid: "all" = heel het team; "restricted" = alleen de aangeduide ROLLEN. Admin ziet alles.
       const visible = isAdmin
         ? store.assets
-        : store.assets.filter((a) => a.access !== "restricted" || (a.allowedEmails || []).map((e) => e.toLowerCase()).includes(email));
-      let team = [];
-      if (isAdmin) {
-        const accounts = (await readData("accounts")) || { users: [] };
-        team = (accounts.users || [])
-          .filter((u) => u.status === "active")
-          .map((u) => ({ name: u.name, email: u.email, roles: u.roles || [] }));
-      }
-      return res.status(200).json({ success: true, assets: visible, categories: CATEGORIES, isAdmin, team });
+        : store.assets.filter((a) => a.access !== "restricted" || (a.allowedRoles || []).some((r) => userRoles.includes(r)));
+      return res.status(200).json({ success: true, assets: visible, categories: CATEGORIES, isAdmin, roles: ROLES });
     }
 
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
@@ -186,7 +180,7 @@ export default async function handler(req, res) {
         href: String(input.href || "").trim().slice(0, 600),
         tag: String(input.tag || "").trim().slice(0, 30),
         access: input.access === "restricted" ? "restricted" : "all",
-        allowedEmails: Array.isArray(input.allowedEmails) ? input.allowedEmails.map((e) => String(e).toLowerCase().slice(0, 120)).slice(0, 100) : [],
+        allowedRoles: Array.isArray(input.allowedRoles) ? input.allowedRoles.filter((r) => ROLES.includes(r)) : [],
       };
       if (!clean.title) return res.status(400).json({ success: false, error: "Title is required" });
       if (!clean.href || !(/^https?:\/\//i.test(clean.href) || clean.href.startsWith("/"))) {
