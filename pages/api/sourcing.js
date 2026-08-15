@@ -119,10 +119,13 @@ async function pushCrmNotification(email, text, href) {
   } catch {}
 }
 
+// Sourcing-berichten gaan naar het #cs-supplier kanaal (eigen webhook);
+// valt terug op de algemene notificatie-webhook zolang die er nog niet is.
 async function postSlack(text) {
-  if (!process.env.SLACK_WEBHOOK_URL) return;
+  const url = process.env.SLACK_SOURCING_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL;
+  if (!url) return;
   try {
-    await axios.post(process.env.SLACK_WEBHOOK_URL, { text }, { timeout: 8000 });
+    await axios.post(url, { text }, { timeout: 8000 });
   } catch (e) {
     console.error("Slack error:", e.message);
   }
@@ -276,10 +279,8 @@ async function runScan(force) {
       });
 
       await postSlack(
-        `${agentTag}🛒 *New winning product — pricing needed*\n` +
-          `*${product.title}* (${task?.marketCountry || "market unknown"}) just hit ${n} sales.\n` +
-          `A row has been added to the sourcing sheet — please fill in the *1 / 2 / 3 / 5 item prices in EUR (€)*:\n${SHEET_LINK}\n` +
-          (task?.alibabaLink ? `Alibaba: ${task.alibabaLink}` : "⚠ No Alibaba link on the pipeline card — check with the funnel builder.")
+        `${agentTag}please provide prices of *${product.title}* in ${SHEET_LINK} in euro's (€)` +
+          (task?.alibabaLink ? "" : `\n⚠ No Alibaba link on the pipeline card for this product — check with the funnel builder.`)
       );
       await pushCrmNotification(ADMIN_EMAIL, `Sourcing request sent for "${product.title}" (${n} sales) — waiting for prices in the sheet`);
 
