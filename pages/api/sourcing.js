@@ -185,8 +185,9 @@ async function getProductByTitle(title) {
         nodes {
           title
           handle
+          createdAt
           onlineStoreUrl
-          variants(first: 25) { nodes { title inventoryItem { id unitCost { amount } } } }
+          variants(first: 25) { nodes { title price inventoryItem { id unitCost { amount } } } }
         }
       }
     }`,
@@ -194,6 +195,20 @@ async function getProductByTitle(title) {
   );
   const nodes = d.products?.nodes || [];
   return nodes.find((p) => p.title.toLowerCase() === title.toLowerCase()) || nodes[0] || null;
+}
+
+// Alleen ECHT nieuwe producten mogen triggeren:
+// - Shopify-product recent aangemaakt (nieuwe launch), niet iets dat al maanden bestaat
+// - geen gratis geschenken / bundel-upsells (die hebben geen eigen sourcing nodig)
+const NEW_PRODUCT_MAX_AGE_DAYS = 45;
+const EXCLUDE_TITLE = /free|gratis|gratuit|gratuito|regalo|gift|cadeau|omaggio|1\s*\+\s*1/i;
+function isEligibleProduct(product) {
+  if (EXCLUDE_TITLE.test(product.title)) return "excluded-title";
+  const ageDays = (Date.now() - new Date(product.createdAt).getTime()) / 86400000;
+  if (!(ageDays <= NEW_PRODUCT_MAX_AGE_DAYS)) return "not-new";
+  const maxPrice = Math.max(0, ...product.variants.nodes.map((v) => parseFloat(v.price || 0)));
+  if (maxPrice <= 0) return "excluded-free";
+  return null; // geschikt
 }
 
 // Variant-titel → aantal stuks (1/2/3/5). "Default Title" of één variant = 1.
@@ -260,6 +275,12 @@ async function runScan(force) {
       const hasCost = product.variants.nodes.some((v) => v.inventoryItem?.unitCost?.amount != null);
       if (hasCost) {
         store.products[title] = { status: "already-tracked", at: new Date().toISOString() };
+        continue;
+      }
+      // Niet geschikt (bestaand product, gratis geschenk, bundel-upsell) → overslaan (permanent)
+      const ineligible = isEligibleProduct(product);
+      if (ineligible) {
+        store.products[title] = { status: ineligible, at: new Date().toISOString() };
         continue;
       }
       // Pipeline-card zoeken voor Alibaba-link + country
