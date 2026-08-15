@@ -102,6 +102,9 @@ export default async function handler(req, res) {
     dashboard.isAdmin = !!session.admin;
     dashboard.campaignAliases = links.aliases;
 
+    // Sourcing-automation: nieuwe winnaars (3+ sales) detecteren → sheet + Slack
+    await kickSourcingScan(req.headers.host);
+
     return res.status(200).json({
       success: true,
       data: dashboard,
@@ -311,6 +314,19 @@ async function fetchShopifyOrders(dateFrom, dateTo) {
 // Een alias is een stukje tekst dat in de campagnenaam voorkomt (of de hele naam).
 // 60s module-cache: het dashboard pollt elke 3s, de koppelingen wijzigen zelden.
 let campaignLinksCache = { at: 0, data: null };
+
+// Sourcing-scan aantrappen: het dashboard wordt de hele dag bekeken, dus dit is
+// onze "klok". Max 1 kick per 15 min per warme instance; de scan zelf throttlet
+// bovendien op 1x per uur (in /api/sourcing).
+let lastSourcingKick = 0;
+async function kickSourcingScan(host) {
+  if (Date.now() - lastSourcingKick < 15 * 60 * 1000) return;
+  lastSourcingKick = Date.now();
+  const key = crypto.createHmac("sha256", SESSION_SECRET).update("sourcing:scan").digest("base64url");
+  try {
+    await axios.post(`https://${host}/api/sourcing`, { action: "scan", key }, { timeout: 2000 }).catch(() => {});
+  } catch {}
+}
 
 async function metaobjectGraphql(query, variables) {
   const storeUrl = process.env.SHOPIFY_STORE_URL;
