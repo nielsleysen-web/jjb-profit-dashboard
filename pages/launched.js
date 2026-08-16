@@ -1,5 +1,7 @@
 // pages/launched.js
 // Launched overview — funnels and creatives.
+// Klik op een rij → volledige taakdetails (alle info van de product pipeline /
+// graphic designer / video editor taak, incl. links en activity log). Read-only.
 // Winner/Loser categorisation (Ads Manager data) comes in phase 2.
 
 import { useState, useEffect } from "react";
@@ -9,11 +11,96 @@ const ui = {
   card: { background: "#ffffff", borderRadius: "16px", border: "1px solid #eceef2", boxShadow: "0 1px 2px rgba(15,23,42,0.04)" },
 };
 
+/* Welke velden we per taaktype tonen in het detailvenster (lege velden worden overgeslagen) */
+const FUNNEL_FIELDS = [
+  { key: "productName", label: "Product Name" },
+  { key: "product", label: "Shopify Product", get: (t) => t.product?.title },
+  { key: "marketCountry", label: "Market", get: (t) => (t.marketCountry ? `${t.marketCountry}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
+  { key: "funnelAngle", label: "Funnel Angle" },
+  { key: "source", label: "Source" },
+  { key: "gender", label: "Gender" },
+  { key: "ageRange", label: "Age Range" },
+  { key: "assigneeName", label: "Funnel Builder" },
+  { key: "deadline", label: "Deadline" },
+  { key: "advertorialLink", label: "Advertorial", type: "url" },
+  { key: "funnelWorkspaceLink", label: "Funnel Workspace", type: "url" },
+  { key: "funnelishLink", label: "Funnelish", type: "url" },
+  { key: "alibabaLink", label: "Alibaba", type: "url" },
+  { key: "launchedDate", label: "Launched", type: "date" },
+];
+
+const CREATIVE_FIELDS = [
+  { key: "product", label: "Product", get: (t) => t.product?.title },
+  { key: "angle", label: "Angle" },
+  { key: "market", label: "Market", get: (t) => (t.market ? `${t.market}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
+  { key: "videoFormat", label: "Video Format" },
+  { key: "type", label: "Type" },
+  { key: "videoIteration", label: "Iteration" },
+  { key: "gender", label: "Gender" },
+  { key: "ageRange", label: "Age Range" },
+  { key: "strategistName", label: "Creative Strategist" },
+  { key: "assigneeName", label: "Video Editor" },
+  { key: "deadline", label: "Deadline" },
+  { key: "aRoll", label: "A-roll" },
+  { key: "aRollAvatarName", label: "Avatar" },
+  { key: "voiceName", label: "Voice" },
+  { key: "subtitles", label: "Subtitles" },
+  { key: "scriptLink", label: "Script", type: "url" },
+  { key: "advertorialLink", label: "Advertorial", type: "url" },
+  { key: "referenceAd", label: "Reference Ad", type: "url" },
+  { key: "inspirationLink", label: "Inspiration", type: "url" },
+  { key: "aRollLink", label: "A-roll Link", type: "url" },
+  { key: "frameioLink", label: "Frame.io", type: "url" },
+  { key: "finalOutputLink", label: "Final Output", type: "url" },
+  { key: "launchedDate", label: "Launched", type: "date" },
+];
+
+const DESIGN_FIELDS = [
+  { key: "product", label: "Product", get: (t) => t.product?.title },
+  { key: "angle", label: "Angle" },
+  { key: "market", label: "Market", get: (t) => (t.market ? `${t.market}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
+  { key: "batchType", label: "Batch Type" },
+  { key: "iterationType", label: "Iteration Type" },
+  { key: "gender", label: "Gender" },
+  { key: "ageRange", label: "Age Range" },
+  { key: "strategistName", label: "Creative Strategist" },
+  { key: "assigneeName", label: "Graphic Designer" },
+  { key: "deadline", label: "Deadline" },
+  { key: "advertorialLink", label: "Advertorial", type: "url" },
+  { key: "referenceAd", label: "Reference Ad", type: "url" },
+  { key: "topCompetitorCreative1", label: "Competitor creative 1", type: "url" },
+  { key: "topCompetitorCreative2", label: "Competitor creative 2", type: "url" },
+  { key: "topCompetitorCreative3", label: "Competitor creative 3", type: "url" },
+  { key: "topCompetitorCreative4", label: "Competitor creative 4", type: "url" },
+  { key: "topCompetitorCreative5", label: "Competitor creative 5", type: "url" },
+  { key: "visualBriefing", label: "Visual Briefing", type: "html" },
+  { key: "creativeCopy", label: "Creative Copy (notes)", type: "long" },
+  { key: "frameioLink", label: "Frame.io", type: "url" },
+  { key: "finalOutputLink", label: "Final Output", type: "url" },
+  { key: "launchedDate", label: "Launched", type: "date" },
+];
+
+const fmtDate = (v) => {
+  try {
+    return new Date(v).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  } catch {
+    return String(v);
+  }
+};
+const fmtWhen = (v) => {
+  try {
+    return new Date(v).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+};
+
 export default function Launched() {
   const [funnels, setFunnels] = useState([]);
   const [creatives, setCreatives] = useState([]);
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [detail, setDetail] = useState(null); // { kind: "funnel"|"creative"|"design", task }
 
   useEffect(() => {
     Promise.all([
@@ -37,8 +124,14 @@ export default function Launched() {
   const launchedDesigns = designs.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
   const total = launchedFunnels.length + launchedCreatives.length + launchedDesigns.length;
 
-  const Row = ({ title, image, sub, by, date }) => (
-    <div style={{ ...ui.card, padding: "16px 20px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap" }}>
+  const Row = ({ title, image, sub, by, date, onClick }) => (
+    <div
+      onClick={onClick}
+      style={{ ...ui.card, padding: "16px 20px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap", cursor: "pointer", transition: "box-shadow 0.15s" }}
+      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 6px 20px rgba(15,23,42,0.10)")}
+      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = ui.card.boxShadow)}
+      title="Click for full task details"
+    >
       {image && <img src={image} alt="" style={{ width: "38px", height: "38px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />}
       <div style={{ flex: 1, minWidth: "200px" }}>
         <div style={{ fontSize: "14px", fontWeight: 700 }}>{title}</div>
@@ -47,7 +140,7 @@ export default function Launched() {
       {by && <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>👤 {by}</span>}
       {date && (
         <span style={{ fontSize: "12px", color: "#166534", fontWeight: 700 }}>
-          🚀 {new Date(date).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+          🚀 {fmtDate(date)}
         </span>
       )}
       <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#94a3b8", background: "#f1f5f9", padding: "3px 10px", borderRadius: "999px" }}>
@@ -64,7 +157,7 @@ export default function Launched() {
           <span style={{ marginLeft: "10px", fontSize: "14px", fontWeight: 700, color: "#166534", background: "#dcfce7", padding: "3px 12px", borderRadius: "999px", verticalAlign: "middle" }}>{total}</span>
         </h1>
         <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Winner / Loser categorisation based on Ads Manager data coming soon (phase 2)
+          Click any row for the full task details · Winner / Loser categorisation coming soon (phase 2)
         </p>
       </div>
 
@@ -85,6 +178,7 @@ export default function Launched() {
                 sub={t.funnelAngle}
                 by={t.assigneeName}
                 date={t.launchedDate}
+                onClick={() => setDetail({ kind: "funnel", task: t })}
               />
             ))}
           </div>
@@ -103,6 +197,7 @@ export default function Launched() {
                 sub={t.angle}
                 by={t.assigneeName}
                 date={t.launchedDate}
+                onClick={() => setDetail({ kind: "creative", task: t })}
               />
             ))}
           </div>
@@ -121,11 +216,77 @@ export default function Launched() {
                 sub={t.angle}
                 by={t.assigneeName}
                 date={t.launchedDate}
+                onClick={() => setDetail({ kind: "design", task: t })}
               />
             ))}
           </div>
         </>
       )}
+
+      {/* ===== Detailvenster: alle taakinformatie, read-only ===== */}
+      {detail && (() => {
+        const { kind, task } = detail;
+        const defs = kind === "funnel" ? FUNNEL_FIELDS : kind === "creative" ? CREATIVE_FIELDS : DESIGN_FIELDS;
+        const heading = kind === "funnel" ? `🚀 ${task.productName || "Funnel task"}` : kind === "creative" ? `🎬 ${task.product?.title || "Creative task"}` : `🎨 ${task.product?.title || "Design task"}`;
+        const sourceLabel = kind === "funnel" ? "Product Pipeline task" : kind === "creative" ? "Video Editor task" : "Graphic Designer task";
+        const activity = (task.activity || []).filter((a) => (a.type === "log" || a.type === "chat") && !a.deleted);
+        const rows = defs
+          .map((d) => ({ ...d, value: d.get ? d.get(task) : task[d.key] }))
+          .filter((d) => d.value != null && String(d.value).trim() !== "");
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }} onClick={() => setDetail(null)}>
+            <div style={{ ...ui.card, width: "100%", maxWidth: "680px", maxHeight: "88vh", overflowY: "auto", padding: "24px 26px" }} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "10px", marginBottom: "4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  {task.product?.image && <img src={task.product.image} alt="" style={{ width: "44px", height: "44px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2" }} />}
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 700 }}>{heading}</h2>
+                    <span style={{ fontSize: "11.5px", color: "#8a92a3", fontWeight: 600 }}>{sourceLabel} · read-only</span>
+                  </div>
+                </div>
+                <button onClick={() => setDetail(null)} style={{ border: "1px solid #d7dce3", background: "#fff", borderRadius: "9px", padding: "6px 12px", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "#334155" }}>✕ Close</button>
+              </div>
+
+              <div style={{ marginTop: "14px" }}>
+                {rows.map((d) => (
+                  <div key={d.key} style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: "12px", padding: "8px 0", borderBottom: "1px solid #f4f5f7", fontSize: "12.5px" }}>
+                    <span style={{ fontWeight: 600, color: "#64748b" }}>{d.label}</span>
+                    {d.type === "url" ? (
+                      <a href={d.value} target="_blank" rel="noreferrer" style={{ color: "#2563eb", fontWeight: 600, overflowWrap: "anywhere" }}>Open ↗ <span style={{ color: "#a4adbd", fontWeight: 400 }}>({String(d.value).slice(0, 60)}{String(d.value).length > 60 ? "…" : ""})</span></a>
+                    ) : d.type === "date" ? (
+                      <span>{fmtDate(d.value)}</span>
+                    ) : d.type === "html" ? (
+                      <div style={{ background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "8px", padding: "10px", maxHeight: "220px", overflowY: "auto" }} dangerouslySetInnerHTML={{ __html: d.value }} />
+                    ) : d.type === "long" ? (
+                      <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "8px", padding: "10px", maxHeight: "220px", overflowY: "auto" }}>{d.value}</pre>
+                    ) : (
+                      <span style={{ overflowWrap: "anywhere" }}>{String(d.value)}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {activity.length > 0 && (
+                <div style={{ marginTop: "18px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "8px" }}>Activity & chat ({activity.length})</div>
+                  <div style={{ maxHeight: "260px", overflowY: "auto", display: "grid", gap: "6px" }}>
+                    {activity.map((a) => (
+                      <div key={a.id} style={{ background: a.type === "chat" ? "#eef2ff" : "#f8fafc", border: "1px solid #eef0f3", borderRadius: "9px", padding: "8px 10px", fontSize: "12px" }}>
+                        <span style={{ fontWeight: 700 }}>{a.author}</span>
+                        <span style={{ color: "#a4adbd", marginLeft: "6px", fontSize: "11px" }}>{fmtWhen(a.at)}</span>
+                        <div style={{ marginTop: "2px", color: "#334155", whiteSpace: "pre-wrap" }}>{a.text}</div>
+                        {a.attachment?.url && (
+                          <a href={a.attachment.url} target="_blank" rel="noreferrer" style={{ fontSize: "11.5px", color: "#2563eb", fontWeight: 600 }}>📎 {a.attachment.name || "attachment"} ↗</a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
