@@ -477,8 +477,30 @@ function Field({ label, children, last }) {
 }
 
 function TextField({ value, onSave, disabled, placeholder, type = "text" }) {
+  // AUTOSAVE: slaat vanzelf op 1,2s na de laatste toetsaanslag, bij het verlaten
+  // van het veld én bij het sluiten van het taakvenster — nooit meer werk kwijt.
   const [val, setVal] = useState(value || "");
-  useEffect(() => setVal(value || ""), [value]);
+  const focused = useRef(false);
+  const timer = useRef(null);
+  const state = useRef({ val: value || "", saved: value || "" });
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  useEffect(() => {
+    if (!focused.current) {
+      setVal(value || "");
+      state.current = { val: value || "", saved: value || "" };
+    } else {
+      state.current.saved = value || "";
+    }
+  }, [value]);
+  const flush = () => {
+    clearTimeout(timer.current);
+    if (state.current.val !== state.current.saved) {
+      state.current.saved = state.current.val;
+      onSaveRef.current(state.current.val);
+    }
+  };
+  useEffect(() => () => flush(), []); // venster gesloten → laatste wijziging alsnog opslaan
   if (disabled) {
     return value ? (
       type === "url" ? (
@@ -496,8 +518,17 @@ function TextField({ value, onSave, disabled, placeholder, type = "text" }) {
         style={{ ...ui.input, padding: "7px 10px" }}
         value={val}
         placeholder={placeholder || "—"}
-        onChange={(e) => setVal(e.target.value)}
-        onBlur={() => val !== (value || "") && onSave(val)}
+        onChange={(e) => {
+          setVal(e.target.value);
+          state.current.val = e.target.value;
+          clearTimeout(timer.current);
+          timer.current = setTimeout(flush, 1200);
+        }}
+        onFocus={() => (focused.current = true)}
+        onBlur={() => {
+          focused.current = false;
+          flush();
+        }}
         onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
       />
       {type === "url" && value && (
