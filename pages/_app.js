@@ -28,7 +28,6 @@ const CATEGORIES = [
     perm: "finance",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "📊" },
-      { href: "/growth-model", label: "Growth Model", icon: "📈" },
       { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
       { href: "/product-economics", label: "Product Economics", icon: "📦" },
     ],
