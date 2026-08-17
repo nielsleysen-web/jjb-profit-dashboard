@@ -104,6 +104,8 @@ export default async function handler(req, res) {
 
     // Sourcing-automation: nieuwe winnaars (3+ sales) detecteren → sheet + Slack
     await kickSourcingScan(req.headers.host);
+    // Attributie: orders koppelen aan ads (+ CAPI zodra ingeschakeld)
+    await kickAttributionScan(req.headers.host);
 
     return res.status(200).json({
       success: true,
@@ -325,6 +327,18 @@ async function kickSourcingScan(host) {
   const key = crypto.createHmac("sha256", SESSION_SECRET).update("sourcing:scan").digest("base64url");
   try {
     await axios.post(`https://${host}/api/sourcing`, { action: "scan", key }, { timeout: 2000 }).catch(() => {});
+  } catch {}
+}
+
+// Attributie-scan: recente orders → ad-koppeling (+ Meta CAPI zodra ingeschakeld).
+// Max 1 kick per 5 min per warme instance; de scan zelf throttlet op 4 min.
+let lastAttributionKick = 0;
+async function kickAttributionScan(host) {
+  if (Date.now() - lastAttributionKick < 5 * 60 * 1000) return;
+  lastAttributionKick = Date.now();
+  const key = crypto.createHmac("sha256", SESSION_SECRET).update("attribution:scan").digest("base64url");
+  try {
+    await axios.post(`https://${host}/api/attribution`, { action: "scan", key }, { timeout: 2000 }).catch(() => {});
   } catch {}
 }
 
