@@ -157,8 +157,9 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers, host) {
   if (newStatus === "Ready To Work" && task.assigneeEmail && task.assigneeEmail !== session.email) {
     notifications.push({ email: task.assigneeEmail, text: `"${productName}" is Ready To Work — you can start designing` });
   }
-  if (newStatus === "Ready To Work" && host) {
+  if (newStatus === "Ready To Work" && host && task.batchType === "First Creative Batch") {
     // Trigger: automatisch de Creative Copy headlines genereren (geen "Ready for AI"-gate).
+    // ALLEEN voor First Creative Batch — Net New en Iteration hebben geen headlines nodig.
     // Fire-and-forget met korte timeout — creative-copy.js draait zelf verder en slaat
     // dubbele starts over (al gegenereerd of al bezig = skip).
     try {
