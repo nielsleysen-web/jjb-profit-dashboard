@@ -23,6 +23,9 @@ import crypto from "crypto";
 export const config = { maxDuration: 300 };
 
 const MODEL = "claude-fable-5";
+// De VERTAALSTAP draait op Opus 4.6 (zelfde afspraak als de salescopy-pipeline);
+// het schrijven van de headlines blijft op Fable 5.
+const TRANSLATE_MODEL = "claude-opus-4-6";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 const STALE_MS = 6 * 60 * 1000; // run zonder update > 6 min = gestrand → auto-retry
@@ -143,13 +146,13 @@ async function pushNotifications(items) {
 }
 
 /* ---------------- Claude ---------------- */
-async function callClaude({ prompt, maxTokens = 3000, timeoutMs = 90000 }) {
+async function callClaude({ prompt, maxTokens = 3000, timeoutMs = 90000, model = null }) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set in Vercel");
   let response;
   try {
     response = await axios.post(
       "https://api.anthropic.com/v1/messages",
-      { model: MODEL, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] },
+      { model: model || MODEL, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] },
       {
         headers: { "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
         timeout: timeoutMs,
@@ -463,8 +466,8 @@ async function runGenerate(task, store) {
   // 2. Headlines (Engels) — Fable 5
   const en = flatten(parseJson(await callClaude({ prompt: headlinePrompt(json, marketCountry, year), maxTokens: 2500 })));
 
-  // 3. Vertaling naar de markttaal
-  const tr = flatten(parseJson(await callClaude({ prompt: translatePrompt(langName, marketCountry, unflatten(en)), maxTokens: 2500 })));
+  // 3. Vertaling naar de markttaal — op Opus 4.6
+  const tr = flatten(parseJson(await callClaude({ prompt: translatePrompt(langName, marketCountry, unflatten(en)), maxTokens: 2500, model: TRANSLATE_MODEL })));
 
   store.en = en;
   store.tr = tr;
@@ -520,6 +523,10 @@ export default async function handler(req, res) {
     /* ---- generate (interne trigger of Regenerate-knop) ---- */
     if (action === "generate") {
       if (!isInternal && !canEdit) return res.status(403).json({ success: false, error: "Only admin and Creative Strategists can (re)generate" });
+      // Headlines zijn alleen van toepassing op First Creative Batch taken
+      if (task.batchType !== "First Creative Batch") {
+        return res.status(200).json({ success: true, skipped: "not a First Creative Batch task" });
+      }
       let store = (await readData(`creative-copy-${taskId}`)) || { status: "", attempts: 0 };
       const stale = store.updatedAt && Date.now() - new Date(store.updatedAt).getTime() > STALE_MS;
       // Eén keer genereren: klaar = klaar, bezig = niet dubbel starten (tenzij gestrand + force)
