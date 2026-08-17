@@ -17,6 +17,9 @@
     },
     "pages/api/sourcing.js": {
       "maxDuration": 120
+    },
+    "pages/api/attribution.js": {
+      "maxDuration": 120
     }
   }
 }
