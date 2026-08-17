@@ -73,7 +73,11 @@ export async function getServerSideProps({ params, res }) {
       res.end();
       return { props: {} };
     }
-    const html = await readLarge(`advertorial-${entry.id}-fin`);
+    let html = await readLarge(`advertorial-${entry.id}-fin`);
+    // JJB Track automatisch injecteren: ad-parameters (fbclid, ad_id, ...) worden
+    // vastgehouden en doorgegeven richting salespage + checkout (attributie)
+    const tracker = '<script src="/jjb-track.js" async></script>';
+    if (html) html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${tracker}</body>`) : html + tracker;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     // 60s edge-cache: snel voor bezoekers, edits zijn binnen een minuut zichtbaar
     res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
