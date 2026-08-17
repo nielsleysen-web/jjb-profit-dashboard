@@ -1855,7 +1855,9 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                   ))}
                 </>
               )}
-              <CreativeCopySection taskId={t.id} canEdit={canEdit} />
+              {/* Creative Copy headlines: alleen voor First Creative Batch — bij
+                  Net New / Iteration is dit niet van toepassing en blijft het weg */}
+              {t.batchType === "First Creative Batch" && <CreativeCopySection taskId={t.id} canEdit={canEdit} />}
               {t.creativeCopy ? (
                 <div style={{ padding: "6px 0 2px 0" }}>
                   <div style={{ ...ui.label, marginBottom: "6px" }}>Creative Copy (manual notes)</div>
