@@ -611,8 +611,30 @@ function Field({ label, children, last }) {
 }
 
 function TextField({ value, onSave, disabled, placeholder, type = "text" }) {
+  // AUTOSAVE: slaat vanzelf op 1,2s na de laatste toetsaanslag, bij het verlaten
+  // van het veld én bij het sluiten van het taakvenster — nooit meer werk kwijt.
   const [val, setVal] = useState(value || "");
-  useEffect(() => setVal(value || ""), [value]);
+  const focused = useRef(false);
+  const timer = useRef(null);
+  const state = useRef({ val: value || "", saved: value || "" });
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  useEffect(() => {
+    if (!focused.current) {
+      setVal(value || "");
+      state.current = { val: value || "", saved: value || "" };
+    } else {
+      state.current.saved = value || "";
+    }
+  }, [value]);
+  const flush = () => {
+    clearTimeout(timer.current);
+    if (state.current.val !== state.current.saved) {
+      state.current.saved = state.current.val;
+      onSaveRef.current(state.current.val);
+    }
+  };
+  useEffect(() => () => flush(), []); // venster gesloten → laatste wijziging alsnog opslaan
   if (disabled) {
     return value ? (
       type === "url" ? (
@@ -630,8 +652,17 @@ function TextField({ value, onSave, disabled, placeholder, type = "text" }) {
         style={{ ...ui.input, padding: "7px 10px" }}
         value={val}
         placeholder={placeholder || "—"}
-        onChange={(e) => setVal(e.target.value)}
-        onBlur={() => val !== (value || "") && onSave(val)}
+        onChange={(e) => {
+          setVal(e.target.value);
+          state.current.val = e.target.value;
+          clearTimeout(timer.current);
+          timer.current = setTimeout(flush, 1200);
+        }}
+        onFocus={() => (focused.current = true)}
+        onBlur={() => {
+          focused.current = false;
+          flush();
+        }}
         onKeyDown={(e) => e.key === "Enter" && e.target.blur()}
       />
       {type === "url" && value && (
@@ -652,9 +683,30 @@ function SelectField({ value, options, onSave, disabled, placeholder }) {
 }
 
 function TextAreaField({ value, onSave, disabled, placeholder }) {
+  // AUTOSAVE: 1,2s na de laatste toetsaanslag + bij het sluiten van het venster
   const [val, setVal] = useState(value || "");
   const ref = useRef(null);
-  useEffect(() => setVal(value || ""), [value]);
+  const focused = useRef(false);
+  const timer = useRef(null);
+  const state = useRef({ val: value || "", saved: value || "" });
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  useEffect(() => {
+    if (!focused.current) {
+      setVal(value || "");
+      state.current = { val: value || "", saved: value || "" };
+    } else {
+      state.current.saved = value || "";
+    }
+  }, [value]);
+  const flush = () => {
+    clearTimeout(timer.current);
+    if (state.current.val !== state.current.saved) {
+      state.current.saved = state.current.val;
+      onSaveRef.current(state.current.val);
+    }
+  };
+  useEffect(() => () => flush(), []);
   // Automatisch meegroeien met de tekst zodat er nooit in het veld zelf gescrold hoeft te worden
   const autoGrow = () => {
     const el = ref.current;
@@ -676,8 +728,17 @@ function TextAreaField({ value, onSave, disabled, placeholder }) {
       style={{ ...ui.input, minHeight: "72px", resize: "none", overflow: "hidden" }}
       value={val}
       placeholder={placeholder || "—"}
-      onChange={(e) => setVal(e.target.value)}
-      onBlur={() => val !== (value || "") && onSave(val)}
+      onChange={(e) => {
+        setVal(e.target.value);
+        state.current.val = e.target.value;
+        clearTimeout(timer.current);
+        timer.current = setTimeout(flush, 1200);
+      }}
+      onFocus={() => (focused.current = true)}
+      onBlur={() => {
+        focused.current = false;
+        flush();
+      }}
     />
   );
 }
@@ -703,6 +764,25 @@ function RichTextField({ value, onSave, disabled, placeholder }) {
   const ref = useRef(null);
   const focusedRef = useRef(false);
   const html = sanitizeHtml(legacyToHtml(value));
+  // AUTOSAVE: 1,2s na de laatste wijziging + bij het sluiten van het venster
+  const timer = useRef(null);
+  const savedRef = useRef(String(value || ""));
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  useEffect(() => {
+    savedRef.current = String(value || "");
+  }, [value]);
+  const flush = () => {
+    clearTimeout(timer.current);
+    if (!ref.current) return;
+    const clean = sanitizeHtml(ref.current.innerHTML || "");
+    const out = htmlIsEmpty(clean) ? "" : clean;
+    if (out !== savedRef.current && out !== sanitizeHtml(legacyToHtml(savedRef.current))) {
+      savedRef.current = out;
+      onSaveRef.current(out);
+    }
+  };
+  useEffect(() => () => flush(), []);
 
   useEffect(() => {
     if (ref.current && !focusedRef.current && ref.current.innerHTML !== html) ref.current.innerHTML = html;
@@ -753,11 +833,13 @@ function RichTextField({ value, onSave, disabled, placeholder }) {
         suppressContentEditableWarning
         data-placeholder={placeholder || "—"}
         onFocus={() => { focusedRef.current = true; }}
+        onInput={() => {
+          clearTimeout(timer.current);
+          timer.current = setTimeout(flush, 1200);
+        }}
         onBlur={() => {
           focusedRef.current = false;
-          const clean = sanitizeHtml(ref.current?.innerHTML || "");
-          const out = htmlIsEmpty(clean) ? "" : clean;
-          if (out !== String(value || "")) onSave(out);
+          flush();
         }}
         style={{ ...ui.input, minHeight: "72px", height: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word", overflow: "hidden", cursor: "text" }}
       />
