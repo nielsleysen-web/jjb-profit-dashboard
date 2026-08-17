@@ -146,6 +146,94 @@ async function sendCapiPurchase(order, attrib) {
   return r.data;
 }
 
+/* ---------------- Meta ad-level insights (voor het dashboard) ---------------- */
+// Spend per AD (niet per campagne) zodat we per exacte ad ROAS/CPA kunnen tonen.
+const localDateStr = (d) => d.toLocaleDateString("sv-SE", { timeZone: "Europe/Brussels" });
+let adInsightsCache = { key: "", at: 0, data: null };
+
+async function fetchAdInsights(since, until) {
+  const cacheKey = `${since}:${until}`;
+  if (adInsightsCache.data && adInsightsCache.key === cacheKey && Date.now() - adInsightsCache.at < 120000) {
+    return adInsightsCache.data;
+  }
+  const token = process.env.META_ACCESS_TOKEN;
+  const accountIds = (process.env.META_AD_ACCOUNT_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const byAd = {};
+  if (!token || !accountIds.length) return byAd;
+
+  await Promise.all(
+    accountIds.map(async (accountId) => {
+      try {
+        let url = `https://graph.facebook.com/v21.0/act_${accountId}/insights`;
+        let params = {
+          access_token: token,
+          level: "ad",
+          fields: "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,unique_outbound_clicks,actions",
+          time_range: JSON.stringify({ since, until }),
+          limit: 500,
+        };
+        for (let p = 0; p < 3 && url; p++) {
+          const r = await axios.get(url, { params, timeout: 15000 });
+          for (const row of r.data?.data || []) {
+            const id = row.ad_id;
+            if (!id) continue;
+            if (!byAd[id]) {
+              byAd[id] = { adName: row.ad_name || "", adsetId: row.adset_id || "", adsetName: row.adset_name || "", campaignId: row.campaign_id || "", campaignName: row.campaign_name || "", spend: 0, impressions: 0, outboundClicks: 0, checkouts: 0 };
+            }
+            byAd[id].spend += parseFloat(row.spend || 0);
+            byAd[id].impressions += parseFloat(row.impressions || 0);
+            byAd[id].outboundClicks += (row.unique_outbound_clicks || []).reduce((s, a) => s + parseFloat(a.value || 0), 0);
+            const acts = row.actions || [];
+            const ic = acts.find((a) => a.action_type === "initiate_checkout") || acts.find((a) => a.action_type === "omni_initiated_checkout");
+            byAd[id].checkouts += ic ? parseFloat(ic.value || 0) : 0;
+          }
+          url = r.data?.paging?.next || null;
+          params = undefined; // de next-URL bevat alle parameters al
+        }
+      } catch (e) {
+        console.warn(`Ad insights error (act ${accountId}):`, e.response?.data?.error?.message || e.message);
+      }
+    })
+  );
+
+  adInsightsCache = { key: cacheKey, at: Date.now(), data: byAd };
+  return byAd;
+}
+
+// Budgetten van campagnes en adsets (voor de Budget-kolom); 10 min cache
+let budgetsCache = { at: 0, data: null };
+async function fetchBudgets() {
+  if (budgetsCache.data && Date.now() - budgetsCache.at < 600000) return budgetsCache.data;
+  const token = process.env.META_ACCESS_TOKEN;
+  const accountIds = (process.env.META_AD_ACCOUNT_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const out = { campaigns: {}, adsets: {} };
+  if (!token || !accountIds.length) return out;
+  const label = (row) => {
+    if (row.daily_budget) return `€${(parseFloat(row.daily_budget) / 100).toFixed(2)}/day`;
+    if (row.lifetime_budget) return `€${(parseFloat(row.lifetime_budget) / 100).toFixed(2)} lifetime`;
+    return "";
+  };
+  await Promise.all(
+    accountIds.map(async (accountId) => {
+      try {
+        const [c, s] = await Promise.all([
+          axios.get(`https://graph.facebook.com/v21.0/act_${accountId}/campaigns`, { params: { access_token: token, fields: "id,daily_budget,lifetime_budget", limit: 500 }, timeout: 15000 }),
+          axios.get(`https://graph.facebook.com/v21.0/act_${accountId}/adsets`, { params: { access_token: token, fields: "id,daily_budget,lifetime_budget", limit: 500 }, timeout: 15000 }),
+        ]);
+        for (const row of c.data?.data || []) out.campaigns[row.id] = label(row);
+        for (const row of s.data?.data || []) out.adsets[row.id] = label(row);
+      } catch (e) {
+        console.warn(`Budgets error (act ${accountId}):`, e.response?.data?.error?.message || e.message);
+      }
+    })
+  );
+  budgetsCache = { at: Date.now(), data: out };
+  return out;
+}
+
 /* ---------------- de scan ---------------- */
 async function runScan(force) {
   const store = (await readData("attribution")) || { orders: {}, capi: {}, lastScanAt: null };
@@ -247,16 +335,28 @@ export default async function handler(req, res) {
 
     if (req.method === "GET") {
       if (!session || !(session.finance || session.admin)) return res.status(401).json({ success: false, error: "No access" });
+      const days = Math.min(90, Math.max(1, parseInt(req.query.days || "7", 10) || 7));
       const store = (await readData("attribution")) || { orders: {}, capi: {}, lastScanAt: null };
-      // Meest recente eerst, klaar voor het latere attributie-dashboard
+
+      const sinceMs = Date.now() - days * 24 * 3600 * 1000;
       const orders = Object.entries(store.orders)
         .map(([name, o]) => ({ name, ...o }))
+        .filter((o) => o.at && new Date(o.at).getTime() >= sinceMs)
         .sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+
+      // Ad-level spend + budgetten voor dezelfde periode
+      const until = localDateStr(new Date());
+      const since = localDateStr(new Date(Date.now() - (days - 1) * 24 * 3600 * 1000));
+      const [ads, budgets] = await Promise.all([fetchAdInsights(since, until), fetchBudgets()]);
+
       return res.status(200).json({
         success: true,
         lastScanAt: store.lastScanAt,
         capiEnabled: process.env.CAPI_ENABLED === "1",
-        orders: orders.slice(0, 200),
+        days,
+        orders: orders.slice(0, 600),
+        ads,
+        budgets,
       });
     }
 
