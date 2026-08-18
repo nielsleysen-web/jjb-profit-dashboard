@@ -81,6 +81,8 @@ export default function AdvertorialBuilder() {
   const [device, setDevice] = useState("mobile");
   const [openCat, setOpenCat] = useState("");
   const [publishedUrl, setPublishedUrl] = useState("");
+  const [scrub, setScrub] = useState(null);           // wat er van de bronpagina gewist is
+  const [rehostSkipped, setRehostSkipped] = useState([]);
   const [copied, setCopied] = useState(false);
   const [copiedHtml, setCopiedHtml] = useState(false);
   const [search, setSearch] = useState("");
@@ -309,6 +311,8 @@ export default function AdvertorialBuilder() {
     try {
       const r = await api({ action: "publish", id: build.id, force: force === true });
       setPublishedUrl(r.url);
+      setScrub(r.scrub || null);
+      setRehostSkipped(r.rehostSkipped || []);
       await loadLibrary();
     } catch (e) {
       setError(e.message);
@@ -911,6 +915,31 @@ export default function AdvertorialBuilder() {
           <p style={{ fontSize: "11.5px", color: "#64748b", marginBottom: "16px" }}>
             Paste this link in Funnelish. <b>Edits made later update this same link automatically.</b>
           </p>
+
+          {scrub && (
+            <div style={{ textAlign: "left", background: "#f6fdf9", border: "1px solid #d6f0e2", borderRadius: "12px", padding: "13px 15px", marginBottom: "14px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, color: "#0f766e", marginBottom: "7px" }}>
+                🧽 Source page wiped clean
+              </div>
+              <ul style={{ margin: 0, paddingLeft: "17px", fontSize: "11.5px", color: "#475569", lineHeight: 1.75 }}>
+                <li>Page identity is yours — canonical &amp; og:url now point at this link, not at the source</li>
+                {scrub.headTags > 0 && <li>{scrub.headTags} leftover head tag(s) removed (their favicon, share image, builder scripts, analytics)</li>}
+                {scrub.comments > 0 && <li>{scrub.comments} HTML comment(s) removed — those named their brand and their pixels</li>}
+                {scrub.links?.length > 0 && <li>{scrub.links.length} link(s) to <b>{scrub.brand}</b> redirected to your next step instead of to them</li>}
+                {scrub.embeds?.length > 0 && <li>{scrub.embeds.length} video embed(s) from the source removed — add your own if you want one there</li>}
+              </ul>
+              {(scrub.leftovers?.length > 0 || scrub.brandMentions > 0 || rehostSkipped.length > 0) && (
+                <div style={{ marginTop: "9px", paddingTop: "9px", borderTop: "1px solid #d6f0e2", fontSize: "11.5px", color: "#92400e" }}>
+                  <b>Still worth a look:</b>
+                  <ul style={{ margin: "5px 0 0 0", paddingLeft: "17px", lineHeight: 1.75 }}>
+                    {rehostSkipped.length > 0 && <li>{rehostSkipped.length} image(s) could not be re-hosted and still load from their server — replace those manually</li>}
+                    {scrub.leftovers?.length > 0 && <li>{scrub.leftovers.length} file(s) still on <b>{scrub.brand}</b>: {scrub.leftovers.slice(0, 3).join(", ")}{scrub.leftovers.length > 3 ? " …" : ""}</li>}
+                    {scrub.brandMentions > 0 && <li>The name “{scrub.brand}” still appears {scrub.brandMentions}× in the page text — check and rename</li>}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <div style={{ display: "flex", gap: "8px", justifyContent: "center", borderTop: "1px solid #f1f5f9", paddingTop: "14px", flexWrap: "wrap" }}>
             <a href={publishedUrl} target="_blank" rel="noreferrer" style={{ ...ui.btn, textDecoration: "none", display: "inline-block" }}>👁 Preview page</a>
             <button style={ui.btn} onClick={copyHtml}>{copiedHtml ? "✓ Copied" : "⧉ Copy HTML"}</button>
