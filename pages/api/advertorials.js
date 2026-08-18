@@ -431,7 +431,56 @@ function fitOne(inner){
     inner.style.height=total;if(block)block.style.height=total;if(section)section.style.height=total;
   }
 }
-function run(){fitAll();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitAll).catch(function(){});}
+// Sticky CTA-balk. Pagina-bouwers bouwen die balk NIET in de HTML: hun eigen
+// JavaScript plakt hem er bij het laden aan vast. Dat JavaScript verwijderen we
+// (competitor-pixels, hun checkout), dus bleef de balk gewoon onderaan de pagina
+// staan in plaats van mee te scrollen. Hier zetten we hem zelf terug: op mobiel
+// en desktop, met een klik die naar #next-step gaat.
+function stickyInit(){
+  var secs=document.querySelectorAll(".section");
+  if(secs.length<3)return;
+  var bar=secs[secs.length-1];
+  if(bar.getAttribute("data-jjb-sticky"))return;
+  if(bar.offsetHeight>240)return;                                  // te hoog = footer, geen balk
+  if(!bar.querySelector("a[href*='#next-step'],button,.btn"))return; // geen call-to-action erin
+  var base="",active="";
+  try{
+    var sh=document.styleSheets;
+    for(var i=0;i<sh.length&&!base;i++){
+      var rules=null; try{rules=sh[i].cssRules;}catch(e){continue;}
+      if(!rules)continue;
+      for(var j=0;j<rules.length;j++){
+        var r=rules[j];
+        if(!r.selectorText||!r.style||!/position:\\s*fixed/i.test(r.style.cssText))continue;
+        var m=r.selectorText.match(/\\.([a-z0-9_-]*sticky[a-z0-9_-]*)\\.([a-z0-9_-]+)/i);
+        if(m){base=m[1];active=m[2];break;}
+      }
+    }
+  }catch(e){}
+  if(!base){                                                       // bron had geen eigen stijl: eigen balk
+    base="jjb-sticky-cta";active="jjb-stick";
+    var st2=document.createElement("style");
+    st2.textContent=".jjb-sticky-cta{position:absolute;left:0;bottom:0;width:100%;opacity:0;pointer-events:none;transition:.25s all;z-index:1000000}"+
+      ".jjb-sticky-cta.jjb-stick{position:fixed;left:0;right:0;bottom:0;opacity:1;pointer-events:auto;box-shadow:0 -2px 14px rgba(15,23,42,.16)}";
+    (document.head||document.documentElement).appendChild(st2);
+  }
+  bar.setAttribute("data-jjb-sticky","1");
+  bar.className+=" "+base;
+  var on=null;
+  function upd(){
+    var y=window.pageYOffset||document.documentElement.scrollTop||0;
+    var vh=window.innerHeight||600,docH=document.documentElement.scrollHeight;
+    var want=y>vh*0.6&&(y+vh)<docH-80;                              // niet tonen bovenaan en niet op de laatste schermhoogte
+    if(want===on)return;
+    on=want;
+    if(want)bar.className+=" "+active;
+    else bar.className=bar.className.replace(new RegExp("\\\\s*"+active+"\\\\b","g"),"");
+  }
+  window.addEventListener("scroll",upd);
+  window.addEventListener("resize",upd);
+  upd();
+}
+function run(){fitAll();try{stickyInit();}catch(e){}if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitAll).catch(function(){});}
 if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",run);else run();
 window.addEventListener("load",fitAll);
 var t;window.addEventListener("resize",function(){clearTimeout(t);t=setTimeout(fitAll,150);});
