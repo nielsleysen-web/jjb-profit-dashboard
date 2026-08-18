@@ -5,6 +5,7 @@
 // Geen login vereist: dit is een publieke advertorial-pagina.
 
 import axios from "axios";
+import zlib from "zlib";
 
 const SHOPIFY_API_VERSION = "2025-01";
 const CHUNKED = true;
@@ -55,10 +56,20 @@ async function readLarge(base) {
   if (!first) return "";
   let out = first.data || "";
   for (let i = 1; i < (first.total || 1); i++) {
-    const part = await readData(`${base}-${i}`);
-    out += part?.data || "";
+    let part = await readData(`${base}-${i}`);
+    // Eén hapering mag nooit stilletjes de halve pagina afkappen: één keer opnieuw
+    if (!part || typeof part.data !== "string") {
+      await new Promise((r) => setTimeout(r, 400));
+      part = await readData(`${base}-${i}`);
+    }
+    if (!part || typeof part.data !== "string") throw new Error(`Storage incomplete: part ${i + 1} of ${first.total} missing`);
+    out += part.data;
   }
-  return out;
+  if (typeof first.len === "number" && out.length !== first.len) {
+    throw new Error(`Storage incomplete: expected ${first.len} characters, got ${out.length}`);
+  }
+  // Nieuwe builds staan gecomprimeerd opgeslagen; oudere blijven gewoon werken
+  return first.enc === "gzip" ? zlib.gunzipSync(Buffer.from(out, "base64")).toString("utf8") : out;
 }
 
 export async function getServerSideProps({ params, res }) {
