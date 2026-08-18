@@ -309,7 +309,141 @@ function recoverLazyImages(html) {
     return tag.replace(/^<([a-z][a-z0-9]*)/i, `<$1 style="background-image:url('${url}')"`);
   });
 
+  // 6. Lazy-attributen op NIET-<img>-elementen → inline background-image.
+  //    Funnelish zet zijn foto's als <div class="img-lazy box figure" data-src="…">
+  //    en laat JavaScript die later invullen. Dat JavaScript hebben we (terecht)
+  //    verwijderd, dus zonder deze stap blijft elke foto een grijs vlak staan.
+  //    Alleen background-image zetten: formaat/uitsnede komen uit de eigen CSS
+  //    van de pagina, zodat de opmaak exact hetzelfde blijft.
+  out = out.replace(
+    /<(?!img\b|source\b|script\b|iframe\b)[a-z][a-z0-9]*\b[^>]*\bdata-(?:src|lazy-src|original|image)\s*=\s*["'][^"']+["'][^>]*>/gi,
+    (tag) => {
+      const bm = tag.match(/\bdata-(?:src|lazy-src|original|image)\s*=\s*["']([^"']+)["']/i);
+      const url = bm ? bm[1].trim() : "";
+      if (!url || url.startsWith("data:") || /background-image\s*:/i.test(tag)) return tag;
+      if (!/^(?:https?:)?\/\//i.test(url) && !url.startsWith("/")) return tag;
+      const styleM = tag.match(/\bstyle\s*=\s*"([^"]*)"/i);
+      if (styleM) return tag.replace(styleM[0], `style="${styleM[1]};background-image:url('${url}')"`);
+      return tag.replace(/^<([a-z][a-z0-9]*)/i, `<$1 style="background-image:url('${url}')"`);
+    }
+  );
+
   return out;
+}
+
+// Pagina-bouwers (Funnelish, ClickFunnels, …) zetten elk blok ABSOLUUT op een canvas
+// met een vaste hoogte per sectie. Een vertaling is bijna altijd langer dan de bron:
+// de tekst loopt dan buiten zijn vaste kader en valt over het volgende blok —
+// koppen over foto's, reviewdatums over de review, witruimte die verdwijnt.
+//
+// Dit scriptje meet in de browser hoeveel elk tekstblok werkelijk nodig heeft en
+// schuift alles wat eronder staat precies zoveel naar beneden. Blokken die in het
+// ORIGINEEL al bewust over elkaar liggen (badge op een foto, tekst op een kaartje)
+// blijven als groep bij elkaar, dus de opmaak blijft exact behouden — er komt alleen
+// ruimte bij waar de vertaling langer is.
+const FIT_SCRIPT = `<script>(function(){
+var H=document.documentElement,shown=false;
+function show(){if(shown)return;shown=true;H.className=H.className.replace(/\\s*jjb-fitting/g,"");}
+try{
+  H.className+=" jjb-fitting";
+  var st=document.createElement("style");
+  st.textContent=".jjb-fitting body{visibility:hidden}";
+  (document.head||document.documentElement).appendChild(st);
+}catch(e){}
+setTimeout(show,2000);
+var TEXT={headline:1,paragraph:1,text:1,list:1,"bullet-list":1};
+function isText(w){
+  var d=w.getAttribute("data-at")||"";
+  if(TEXT[d])return true;
+  return /(^|\\s)(headline|paragraph|text)(\\s|$)/.test(w.className);
+}
+function fitAll(){
+  var inners=document.querySelectorAll(".section-inner"),n;
+  for(n=0;n<inners.length;n++){try{fitOne(inners[n]);}catch(e){}}
+  show();
+}
+function fitOne(inner){
+  var block=inner.parentElement,section=block?block.parentElement:null,i,j,w;
+  var kids=[];
+  for(i=0;i<inner.children.length;i++){w=inner.children[i];if(/(^|\\s)widget(\\s|$)/.test(w.className))kids.push(w);}
+  if(!kids.length)return;
+  // eerdere ingrepen wissen zodat we altijd de echte CSS-waarden meten
+  inner.style.height="";if(block)block.style.height="";if(section)section.style.height="";
+  for(i=0;i<kids.length;i++){kids[i].style.top="";kids[i].style.height="";}
+  var baseH=inner.offsetHeight,items=[];
+  for(i=0;i<kids.length;i++){
+    w=kids[i];
+    var cs=window.getComputedStyle(w);
+    if(cs.display==="none"||cs.position!=="absolute")continue;
+    var top=parseFloat(cs.top)||0,h=w.offsetHeight,need=h;
+    if(isText(w)){w.style.height="auto";need=Math.ceil(w.offsetHeight);w.style.height="";}
+    items.push({el:w,top:top,h:h,need:need>h?need:h,l:w.offsetLeft,r:w.offsetLeft+w.offsetWidth,text:isText(w),g:i});
+  }
+  if(!items.length)return;
+  // 1) hoeveel elk blok groeit (vertaling langer dan het origineel)
+  for(i=0;i<items.length;i++){items[i].grow=items[i].need-items[i].h;items[i].shift=0;}
+  function hOv(a,b){return Math.min(a.r,b.r)-Math.max(a.l,b.l);}
+  // 2) doorrekenen: alles wat ONDER een gegroeid blok staat schuift precies zoveel mee.
+  //    Blokken die er in het origineel bewust naast/over liggen (badge op foto,
+  //    kaartjes naast elkaar) raken elkaar niet, want er moet horizontale overlap zijn.
+  items.sort(function(a,b){return a.top-b.top||a.l-b.l;});
+  for(var pass=0;pass<4;pass++){
+    for(i=0;i<items.length;i++){
+      var b=items[i],sh=0;
+      for(j=0;j<items.length;j++){
+        if(j===i)continue;
+        var a=items[j];
+        if(a.top+a.h>b.top+3)continue;        // a staat niet volledig boven b
+        if(hOv(a,b)<=4)continue;              // andere kolom -> niet duwen
+        var v=a.shift+a.grow;
+        if(v>sh)sh=v;
+      }
+      b.shift=sh;
+    }
+    // 3) kaders/achtergronden groeien mee met wat ze omsluiten (onderrand blijft gelijk)
+    for(i=0;i<items.length;i++){
+      var c=items[i];
+      if(c.text)continue;
+      var want=0;
+      for(j=0;j<items.length;j++){
+        if(j===i)continue;
+        var e=items[j];
+        if(e.top<c.top-3||e.top+e.h>c.top+c.h+3||hOv(c,e)<=4)continue;
+        var bottom=e.top+e.shift+e.h+e.grow+((c.top+c.h)-(e.top+e.h));
+        var g=bottom-(c.top+c.shift+c.h);
+        if(g>want)want=g;
+      }
+      if(want>c.grow)c.grow=Math.ceil(want);
+    }
+  }
+  // 4) toepassen
+  var extra=0;
+  for(i=0;i<items.length;i++){
+    var m=items[i];
+    if(m.shift>0)m.el.style.top=(m.top+m.shift)+"px";
+    if(m.grow>0)m.el.style.height=(m.h+m.grow)+"px";
+    var e2=m.shift+m.grow;
+    if(e2>extra)extra=e2;
+  }
+  var offset=Math.ceil(extra);
+  if(offset>0){
+    var total=baseH+offset+"px";
+    inner.style.height=total;if(block)block.style.height=total;if(section)section.style.height=total;
+  }
+}
+function run(){fitAll();if(document.fonts&&document.fonts.ready)document.fonts.ready.then(fitAll).catch(function(){});}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",run);else run();
+window.addEventListener("load",fitAll);
+var t;window.addEventListener("resize",function(){clearTimeout(t);t=setTimeout(fitAll,150);});
+})();<\/script>`;
+
+// Het fit-script reist mee IN de HTML (niet als los bestand), zodat het ook werkt
+// wanneer de funnelbuilder de HTML kopieert en in Funnelish plakt.
+function injectFitScript(html) {
+  const s = String(html || "");
+  if (!s || s.indexOf("jjb-fitting") !== -1) return s;
+  if (!/class="[^"]*item-absolute/i.test(s)) return s; // geen absoluut canvas → niet nodig
+  return /<\/body>/i.test(s) ? s.replace(/<\/body>/i, `${FIT_SCRIPT}</body>`) : s + FIT_SCRIPT;
 }
 
 function collectLinks(html) {
@@ -393,6 +527,11 @@ function wrapButtonsInNextStep(html) {
 const WS_ENTITY = "\\s|&nbsp;|&#160;|&#xa0;|&emsp;|&ensp;|&thinsp;|&#8194;|&#8195;|&#8201;";
 const ENTITY_ANY = /&(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);/gi;
 
+// Genummerde bronvermelding: "1. https://…", "[3] www.…", "(12) https://…"
+const CITATION_URL = /^\s*(?:\[\s*\d{1,3}\s*\]|\(?\d{1,3}\)?\s*[.)])\s*(?:https?:\/\/|www\.)\S+\s*$/i;
+// Wetenschappelijke/naslagbronnen — die links horen letterlijk te blijven staan
+const RESEARCH_HOST = /(pubmed|ncbi\.nlm\.nih\.gov|pmc\.ncbi|nih\.gov|doi\.org|link\.springer|sciencedirect|onlinelibrary\.wiley|nature\.com|thelancet|bmj\.com|jamanetwork|cochrane|researchgate|semanticscholar|scholar\.google|mdpi\.com|frontiersin|\.edu(?:\/|$)|merriam-webster|who\.int|mayoclinic|clinicaltrials\.gov)/i;
+
 function extractSegments(html, ownName) {
   const guards = [];
   let masked = String(html).replace(/<style\b[\s\S]*?<\/style\s*>/gi, (m) => {
@@ -425,6 +564,10 @@ function extractSegments(html, ownName) {
     const tail = (rest.match(new RegExp(`(?:${WS_ENTITY})*$`, "i")) || [""])[0];
     const core = tail ? rest.slice(0, rest.length - tail.length) : rest;
     if (!core) return m; // alleen witruimte/entiteiten -> nooit naar het model
+    // Wetenschappelijke bronvermeldingen ("1. https://pubmed.ncbi.nlm.nih.gov/…")
+    // blijven ONGEWIJZIGD: niet vertalen én niet vervangen door de productnaam.
+    // Anders werd de volledige referentielijst onderaan de advertorial vernield.
+    if (CITATION_URL.test(core) || (/^(https?:\/\/|www\.)\S+$/i.test(core.trim()) && RESEARCH_HOST.test(core))) return m;
     // Zichtbare URL-tekst: NOOIT naar het model — direct vervangen door de eigen
     // productnaam als #next-step-link (of alleen de naam als hij al in een link staat)
     if (/^(https?:\/\/|www\.)\S+$/i.test(core.trim())) {
@@ -439,6 +582,15 @@ function extractSegments(html, ownName) {
   // Zichtbare attributen
   masked = masked.replace(/(alt|title|placeholder)\s*=\s*"([^"]+)"/gi, (m, attr, val) =>
     /[A-Za-zÀ-ÿ\u0590-\u05FF]/.test(val) ? `${attr}="${grab(val)}"` : m
+  );
+  // SEO-tekst in de <head> (tabtitel-preview, deelkaartjes) mee vertalen.
+  // Bewust alleen deze meta-namen: viewport/charset/robots mogen nooit vertaald worden.
+  masked = masked.replace(
+    /<meta\b([^>]*\b(?:name|property)\s*=\s*"(?:description|og:title|og:description|twitter:title|twitter:description)"[^>]*)>/gi,
+    (m, attrs) =>
+      `<meta${attrs.replace(/\bcontent\s*=\s*"([^"]+)"/i, (m2, val) =>
+        /[A-Za-z\u00C0-\u00FF\u0590-\u05FF]/.test(val) ? `content="${grab(val)}"` : m2
+      )}>`
   );
   const template = masked.replace(/\u27EA(\d+)\u27EB/g, (m, i) => guards[+i]);
   return { template, segments, urlSwaps };
@@ -1143,6 +1295,7 @@ export default async function handler(req, res) {
         if (finalUrl) html = html.split(img.url).join(finalUrl);
       }
 
+      html = injectFitScript(html);
       await writeLarge(`advertorial-${build.id}-fin`, html);
       build.status = "live";
       build.publishedAt = new Date().toISOString();
