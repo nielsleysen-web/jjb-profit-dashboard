@@ -36,7 +36,11 @@ const PARALLEL_IMAGES = 4;        // vision-analyses tegelijk per serverbeurt
 const MAX_ATTEMPTS = 3;
 const MAX_QUEUE_RUNS = 150;
 const MAX_IMAGES = 40;            // vision-analyse cap
-const IMG_MAX_BYTES = 4.5 * 1024 * 1024;
+// Twee aparte limieten: de vision-analyse zit vast aan de limiet van de AI-API,
+// het re-hosten op de Shopify CDN kan veel grotere bestanden aan. Zo blokkeert een
+// zware foto nooit meer het publiceren — de funnel builder hoeft niets opnieuw te doen.
+const VISION_MAX_BYTES = 3.5 * 1024 * 1024;   // analyse (AI-limiet)
+const REHOST_MAX_BYTES = 20 * 1024 * 1024;    // re-hosten op Shopify Files
 
 const MARKETS = {
   Italy: { language: "Italian", currency: "EUR" },
@@ -126,7 +130,8 @@ async function writeLarge(base, str) {
   const total = Math.max(1, Math.ceil(s.length / CHUNK_STORE_SIZE));
   const jobs = [];
   for (let i = 0; i < total; i++) {
-    jobs.push(writeData(`${base}-${i}`, { i, total, data: s.slice(i * CHUNK_STORE_SIZE, (i + 1) * CHUNK_STORE_SIZE) }));
+    // len = totale lengte, zodat bij het lezen meteen blijkt of er een stuk ontbreekt
+    jobs.push(writeData(`${base}-${i}`, { i, total, len: s.length, data: s.slice(i * CHUNK_STORE_SIZE, (i + 1) * CHUNK_STORE_SIZE) }));
   }
   await Promise.all(jobs); // parallel: start is seconden sneller
 }
@@ -135,8 +140,20 @@ async function readLarge(base) {
   if (!first) return "";
   let out = first.data || "";
   for (let i = 1; i < (first.total || 1); i++) {
-    const part = await readData(`${base}-${i}`);
-    out += part?.data || "";
+    let part = await readData(`${base}-${i}`);
+    if (!part || typeof part.data !== "string") {
+      // Eén hapering bij het lezen mag nooit stilletjes de halve pagina wegsnijden
+      await new Promise((r) => setTimeout(r, 400));
+      part = await readData(`${base}-${i}`);
+    }
+    if (!part || typeof part.data !== "string") {
+      throw new Error(`Storage incomplete: part ${i + 1} of ${first.total} is missing — press Resume to rebuild`);
+    }
+    out += part.data;
+  }
+  // Lengtecontrole: liever een duidelijke fout dan een pagina die halverwege stopt
+  if (typeof first.len === "number" && out.length !== first.len) {
+    throw new Error(`Storage incomplete: expected ${first.len} characters, got ${out.length} — press Resume to rebuild`);
   }
   return out;
 }
@@ -367,6 +384,10 @@ function wrapButtonsInNextStep(html) {
 
 // Tekstsegmenten uit de HTML halen en vervangen door placeholders.
 // Het model vertaalt ALLEEN de segmenten — de HTML-structuur blijft onaantastbaar.
+// Spatie-entiteiten tellen als witruimte; alle entiteiten samen voor de inhoudstest
+const WS_ENTITY = "\\s|&nbsp;|&#160;|&#xa0;|&emsp;|&ensp;|&thinsp;|&#8194;|&#8195;|&#8201;";
+const ENTITY_ANY = /&(?:[a-z][a-z0-9]*|#\d+|#x[0-9a-f]+);/gi;
+
 function extractSegments(html, ownName) {
   const guards = [];
   let masked = String(html).replace(/<style\b[\s\S]*?<\/style\s*>/gi, (m) => {
@@ -387,21 +408,28 @@ function extractSegments(html, ownName) {
   while ((am = aRe.exec(masked))) anchorRanges.push([am.index, am.index + am[0].length]);
   const inAnchor = (idx) => anchorRanges.some(([a, b]) => idx >= a && idx < b);
 
-  // Tekstnodes (tussen > en <) met letters, cijfers of valuta erin
+  // Tekstnodes (tussen > en <) met letters, cijfers of valuta erin.
+  // BELANGRIJK: spatie-entiteiten (&nbsp; en varianten) tellen als WITRUIMTE, niet als
+  // tekst. Anders werd "&nbsp;" als los segment naar het model gestuurd, kwam het leeg
+  // terug en plakten woorden/zinnen aan elkaar of verdween de regelafstand.
   masked = masked.replace(/>([^<>]+)</g, (m, t, offset) => {
     if (!t.trim()) return m;
     if (/[\u27EA\u27EB]/.test(t)) return m; // gemaskeerd stijlblok: nooit als tekst grijpen
-    const lead = t.match(/^\s*/)[0];
-    const tail = t.match(/\s*$/)[0];
+    const lead = (t.match(new RegExp(`^(?:${WS_ENTITY})*`, "i")) || [""])[0];
+    const rest = t.slice(lead.length);
+    const tail = (rest.match(new RegExp(`(?:${WS_ENTITY})*$`, "i")) || [""])[0];
+    const core = tail ? rest.slice(0, rest.length - tail.length) : rest;
+    if (!core) return m; // alleen witruimte/entiteiten -> nooit naar het model
     // Zichtbare URL-tekst: NOOIT naar het model — direct vervangen door de eigen
     // productnaam als #next-step-link (of alleen de naam als hij al in een link staat)
-    if (/^(https?:\/\/|www\.)\S+$/i.test(t.trim())) {
+    if (/^(https?:\/\/|www\.)\S+$/i.test(core.trim())) {
       const rep = inAnchor(offset) ? ownName : `<a href="#next-step">${ownName}</a>`;
-      urlSwaps.push({ before: t.trim(), after: `${ownName} → #next-step` });
+      urlSwaps.push({ before: core.trim(), after: `${ownName} → #next-step` });
       return `>${lead}${rep}${tail}<`;
     }
-    if (!/[A-Za-zÀ-ÿ\u0590-\u05FF\d€$£₪]/.test(t)) return m;
-    return `>${lead}${grab(t.trim())}${tail}<`;
+    // Betekenisvolle inhoud? Entiteiten eerst wegdenken (&nbsp; is geen "tekst")
+    if (!/[A-Za-zÀ-ÿ\u0590-\u05FF\d€$£₪]/.test(core.replace(ENTITY_ANY, " "))) return m;
+    return `>${lead}${grab(core)}${tail}<`;
   });
   // Zichtbare attributen
   masked = masked.replace(/(alt|title|placeholder)\s*=\s*"([^"]+)"/gi, (m, attr, val) =>
@@ -431,6 +459,8 @@ LOCALISE while translating:
 HARD RULES
 - NEVER output a URL, domain or link. If a segment contains a URL, replace that URL with "${build.ownProductName}". Never invent domains.
 - Return the SAME number of segments with the SAME "i" values. Never merge, split, drop or reorder segments.
+- Keep HTML entities exactly as they appear (&nbsp;, &amp;, &#8217; …). Never remove them,
+  never turn &nbsp; into a normal space, never add or drop spaces at the start or end.
 - A segment that is only a number, symbol or code: return it unchanged.
 - Keep leading/trailing punctuation of each segment.
 
@@ -551,14 +581,30 @@ function resolveRelativeUrls(html, base) {
 }
 
 /* ================= image helpers ================= */
-async function fetchImage(url) {
+async function fetchImage(url, maxBytes = REHOST_MAX_BYTES) {
   if (!/^https?:\/\//i.test(String(url))) throw new Error("relative URL — upload a replacement");
   const r = await axios.get(url, { responseType: "arraybuffer", timeout: 25000, maxRedirects: 5 });
   const buf = Buffer.from(r.data);
-  if (buf.length > IMG_MAX_BYTES) throw new Error("Image larger than 4.5 MB");
+  if (buf.length > maxBytes) throw new Error(`Image larger than ${Math.round(maxBytes / 1048576)} MB`);
   const ct = String(r.headers["content-type"] || "").split(";")[0].trim();
   const media = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(ct) ? ct : "image/jpeg";
   return { buf, media };
+}
+
+// Te zware foto voor de analyse? Dan halen we alleen VOOR DE ANALYSE een verkleinde
+// kopie op via een publieke resize-service. Het origineel blijft ongemoeid — wat op
+// de Shopify CDN belandt is altijd het volledige bestand in originele kwaliteit.
+async function fetchImageForVision(url) {
+  try {
+    return await fetchImage(url, VISION_MAX_BYTES);
+  } catch (e) {
+    if (!/larger than/i.test(String(e.message))) throw e;
+    const proxied = `https://images.weserv.nl/?url=${encodeURIComponent(String(url).replace(/^https?:\/\//i, ""))}&w=1200&output=jpg&q=80`;
+    const r = await axios.get(proxied, { responseType: "arraybuffer", timeout: 25000, maxRedirects: 5 });
+    const buf = Buffer.from(r.data);
+    if (buf.length > VISION_MAX_BYTES) throw new Error("too large to analyse");
+    return { buf, media: "image/jpeg" };
+  }
 }
 
 // Bestand naar Shopify Files (staged upload) → CDN-URL. Zelfde flow als api/upload.js.
@@ -705,7 +751,7 @@ async function runOneStep(req, build) {
     await Promise.all(
       batch.map(async (img) => {
         try {
-          const { buf, media } = await fetchImage(img.url);
+          const { buf, media } = await fetchImageForVision(img.url);
           const text = await callClaude({
             prompt: VISION_PROMPT,
             image: { media_type: media, data: buf.toString("base64") },
@@ -717,7 +763,10 @@ async function runOneStep(req, build) {
           img.isProduct = !!obj.is_product_packshot;
           img.description = String(obj.description || "").slice(0, 80);
         } catch (e) {
-          img.description = `analysis failed: ${e.message}`.slice(0, 80);
+          // Analyse mislukt = alleen de beschrijving ontbreekt. De afbeelding zelf
+          // blijft gewoon bruikbaar: Keep re-host hem nog steeds op de eigen CDN.
+          img.description = "not analysed — check this one yourself";
+          img.analysisError = String(e.message || "").slice(0, 120);
           img.containsText = null;
         }
       })
@@ -1058,17 +1107,22 @@ export default async function handler(req, res) {
         }
       }
 
-      // Afbeeldingen: replace = uploadlink, keep = re-hosten op Shopify CDN
+      // Afbeeldingen: replace = uploadlink, keep = re-hosten op Shopify CDN.
+      // Lukt het re-hosten niet (te groot, hotlink-beveiliging, tijdelijke fout), dan
+      // blijft de originele URL staan en gaat het publiceren gewoon door — de pagina
+      // werkt, en we melden achteraf welke afbeeldingen nog aandacht nodig hebben.
+      const rehostSkipped = [];
       for (const img of build.images) {
         let finalUrl = img.newUrl;
         if (img.decision === "keep") {
           if (!img.rehostedUrl) {
             try {
-              const { buf, media } = await fetchImage(img.url);
+              const { buf, media } = await fetchImage(img.url, REHOST_MAX_BYTES);
               const ext = media === "image/png" ? "png" : media === "image/webp" ? "webp" : media === "image/gif" ? "gif" : "jpg";
               img.rehostedUrl = await uploadToShopifyCdn(buf, `adv-${build.slug}-${uid().slice(0, 6)}.${ext}`, media);
             } catch (e) {
-              return res.status(500).json({ success: false, error: `Could not re-host image (${img.url.slice(0, 60)}…): ${e.message}` });
+              img.rehostError = String(e.message || "").slice(0, 120);
+              rehostSkipped.push({ url: img.url, error: img.rehostError });
             }
           }
           finalUrl = img.rehostedUrl;
@@ -1082,7 +1136,11 @@ export default async function handler(req, res) {
       await writeData(`advertorial-${build.id}`, build);
       await saveIndexEntry(build);
       const host = req.headers.host;
-      return res.status(200).json({ success: true, url: `https://${host}/a/${build.slug}` });
+      return res.status(200).json({
+        success: true,
+        url: `https://${host}/a/${build.slug}`,
+        rehostSkipped, // afbeeldingen die op de competitor-URL bleven staan
+      });
     }
 
     /* ---------- beheer ---------- */
