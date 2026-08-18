@@ -29,6 +29,7 @@ const ui = {
 
 const STATUS_STYLE = {
   pending: { text: "Awaiting approval", color: "#b45309", bg: "#fef3c7" },
+  invited: { text: "Invited — not yet activated", color: "#4f46e5", bg: "#eef2ff" },
   active: { text: "Active", color: "#166534", bg: "#dcfce7" },
   disabled: { text: "Blocked", color: "#991b1b", bg: "#fee2e2" },
 };
@@ -62,8 +63,10 @@ export default function Accounts() {
       }).then((r) => r.json());
       if (!res.success) throw new Error(res.error);
       setUsers(res.users);
+      return res;
     } catch (err) {
       alert("Failed: " + err.message);
+      return null;
     } finally {
       setBusy(null);
     }
@@ -87,12 +90,14 @@ export default function Accounts() {
 
   return (
     <div style={ui.page}>
-      <div style={{ marginBottom: "24px" }}>
+      <div style={{ marginBottom: "20px" }}>
         <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700, letterSpacing: "-0.5px" }}>👥 Account Management</h1>
         <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Approve new accounts and assign roles — every role has access to the Marketing assets
+          Invite people with their access already assigned — they only choose a password and they're in
         </p>
       </div>
+
+      <InvitePanel onInvited={(res) => setUsers(res.users)} />
 
       {pending.length > 0 && (
         <>
@@ -122,12 +127,127 @@ export default function Accounts() {
   );
 }
 
+/* ---------- Iemand uitnodigen: account + rollen vooraf klaarzetten ---------- */
+function InvitePanel({ onInvited }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [roles, setRoles] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null); // { inviteUrl, emailed, emailError, email }
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const send = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "invite", email, name, roles }),
+      }).then((r) => r.json());
+      if (!res.success) throw new Error(res.error);
+      onInvited(res);
+      setResult({ ...res, email });
+      setEmail("");
+      setName("");
+      setRoles([]);
+    } catch (e) {
+      setError(e.message);
+    }
+    setBusy(false);
+  };
+
+  const input = { padding: "10px 12px", border: "1px solid #e2e6ec", borderRadius: "10px", fontSize: "13px", fontFamily: "inherit", outline: "none" };
+
+  if (!open)
+    return (
+      <button
+        onClick={() => { setOpen(true); setResult(null); }}
+        style={{ padding: "11px 20px", background: "#0f172a", color: "#fff", border: "none", borderRadius: "11px", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginBottom: "22px" }}
+      >
+        + Invite person
+      </button>
+    );
+
+  return (
+    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "24px", maxWidth: "760px" }}>
+      <div style={{ fontSize: "13.5px", fontWeight: 700, marginBottom: "14px" }}>Invite someone to the Operations Centre</div>
+
+      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "12px" }}>
+        <input style={{ ...input, flex: 1, minWidth: "220px" }} placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input style={{ ...input, flex: 1, minWidth: "160px" }} placeholder="Name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+
+      <div style={{ ...ui.label, marginBottom: "7px" }}>Give access as</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "7px", marginBottom: "16px" }}>
+        {ROLES.map((r) => {
+          const on = roles.includes(r);
+          return (
+            <button
+              key={r}
+              onClick={() => setRoles((p) => (on ? p.filter((x) => x !== r) : [...p, r]))}
+              style={{ padding: "7px 13px", borderRadius: "999px", border: on ? "1px solid #2563eb" : "1px solid #e2e6ec", background: on ? "#eff6ff" : "#fff", color: on ? "#1d4ed8" : "#475569", fontSize: "12.5px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              {on ? "✓ " : ""}{r}
+            </button>
+          );
+        })}
+      </div>
+
+      {error && <p style={{ margin: "0 0 12px 0", fontSize: "12.5px", color: "#dc2626" }}>{error}</p>}
+
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button
+          onClick={send}
+          disabled={busy || !email.trim()}
+          style={{ padding: "11px 20px", background: "#0f172a", color: "#fff", border: "none", borderRadius: "10px", fontSize: "13px", fontWeight: 700, cursor: busy || !email.trim() ? "default" : "pointer", opacity: busy || !email.trim() ? 0.5 : 1, fontFamily: "inherit" }}
+        >
+          {busy ? "Sending…" : "✉ Send invitation"}
+        </button>
+        <button onClick={() => { setOpen(false); setResult(null); setError(""); }} style={{ padding: "11px 18px", background: "#fff", color: "#334155", border: "1px solid #e2e6ec", borderRadius: "10px", fontSize: "13px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+          Close
+        </button>
+      </div>
+
+      {result && (
+        <div style={{ marginTop: "16px", padding: "14px 16px", background: result.emailed ? "#f0fdf4" : "#fffbeb", border: `1px solid ${result.emailed ? "#bbf7d0" : "#fde68a"}`, borderRadius: "11px" }}>
+          <div style={{ fontSize: "12.5px", fontWeight: 700, color: result.emailed ? "#166534" : "#92400e", marginBottom: "6px" }}>
+            {result.emailed ? `✓ Invitation emailed to ${result.email}` : "⚠ Email not sent — share this link yourself"}
+          </div>
+          {!result.emailed && result.emailError && (
+            <div style={{ fontSize: "11.5px", color: "#92400e", marginBottom: "8px" }}>{result.emailError}</div>
+          )}
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <input
+              readOnly
+              value={result.inviteUrl}
+              onFocus={(e) => e.target.select()}
+              style={{ flex: 1, padding: "9px 12px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12px", fontFamily: "ui-monospace, monospace", color: "#1d4ed8", background: "#fff" }}
+            />
+            <button
+              onClick={() => { navigator.clipboard?.writeText(result.inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
+              style={{ padding: "9px 16px", background: "#0f172a", color: "#fff", border: "none", borderRadius: "9px", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+            >
+              {copied ? "✓ Copied" : "📋 Copy link"}
+            </button>
+          </div>
+          <p style={{ margin: "8px 0 0 0", fontSize: "11.5px", color: "#64748b" }}>
+            The link is valid for 14 days. They choose a password and are in straight away — with the access you selected.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SlackIdField({ user, update }) {
   const [val, setVal] = useState(user.slackId || "");
   useEffect(() => setVal(user.slackId || ""), [user.slackId]);
   const saveIt = () => {
     const clean = val.replace(/[<@>\s]/g, "");
-    if (clean !== (user.slackId || "")) update({ updates: { slackId: clean } });
+    if (clean !== (user.slackId || "")) update(user.id, { updates: { slackId: clean } });
   };
   return (
     <input
@@ -285,6 +405,21 @@ function UserCard({ user, update, busy }) {
       {/* Acties */}
       {!isAdmin && (
         <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+          {user.status === "invited" && (
+            <button
+              onClick={async () => {
+                const res = await update(user.id, { action: "resendInvite" });
+                if (res?.inviteUrl) {
+                  navigator.clipboard?.writeText(res.inviteUrl);
+                  alert(res.emailed ? `Invitation resent to ${user.email} — link also copied to your clipboard.` : `Email could not be sent (${res.emailError || "no email service"}). The invitation link is copied to your clipboard:\n\n${res.inviteUrl}`);
+                }
+              }}
+              disabled={busy}
+              style={{ padding: "7px 12px", background: "#eef2ff", color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: "9px", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              ↻ Resend invite
+            </button>
+          )}
           {user.status === "pending" && btn("✓ Approve", { updates: { status: "active" } }, { background: "#16a34a", color: "#fff", border: "none" })}
           {user.status === "active" && btn("Block", { updates: { status: "disabled" } }, { color: "#b45309", borderColor: "#fde68a" })}
           {user.status === "disabled" && btn("Reactivate", { updates: { status: "active" } }, { color: "#166534", borderColor: "#bbf7d0" })}
