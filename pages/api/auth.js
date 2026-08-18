@@ -95,6 +95,22 @@ function verifySession(token) {
   }
 }
 
+/* ---------------- uitnodigingen (zie pages/api/accounts.js) ---------------- */
+function verifyInvite(token) {
+  if (!token) return null;
+  const [body, sig] = String(token).split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(`invite.${body}`).digest("base64url");
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 function getSessionFromReq(req) {
   const match = (req.headers.cookie || "").match(/(?:^|;\s*)jjb_session=([^;]+)/);
   return verifySession(match ? match[1] : null);
@@ -118,6 +134,17 @@ export default async function handler(req, res) {
       const session = getSessionFromReq(req);
       if (!session) return res.status(401).json({ success: false });
       return res.status(200).json({ success: true, user: session });
+    }
+
+    /* --- uitnodiging bekijken (publiek, alleen met geldige token) --- */
+    if (req.method === "GET" && action === "invite") {
+      const payload = verifyInvite(req.query.token);
+      if (!payload) return res.status(400).json({ success: false, error: "This invitation link is invalid or has expired. Ask the administrator for a new one." });
+      const accounts = await readAccounts();
+      const user = accounts.users.find((u) => u.id === payload.uid && u.email === payload.email);
+      if (!user) return res.status(404).json({ success: false, error: "This invitation no longer exists." });
+      if (user.status !== "invited") return res.status(400).json({ success: false, error: "This account has already been activated — you can simply log in.", alreadyActive: true });
+      return res.status(200).json({ success: true, email: user.email, name: user.name || "", roles: user.roles || [] });
     }
 
     /* --- uitloggen --- */
@@ -170,6 +197,42 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, user: { email, name: user.name, admin: true, roles: [], finance: true, strategy: true, marketing: true } });
       }
       return res.status(200).json({ success: true, pending: true });
+    }
+
+    /* --- uitnodiging accepteren: wachtwoord kiezen → meteen ingelogd --- */
+    if (action === "acceptInvite") {
+      const payload = verifyInvite(req.body?.token);
+      if (!payload) return res.status(400).json({ success: false, error: "This invitation link is invalid or has expired. Ask the administrator for a new one." });
+      if (!password || password.length < 8) {
+        return res.status(400).json({ success: false, error: "Choose a password of at least 8 characters." });
+      }
+      const accounts = await readAccounts();
+      const user = accounts.users.find((u) => u.id === payload.uid && u.email === payload.email);
+      if (!user) return res.status(404).json({ success: false, error: "This invitation no longer exists." });
+      if (user.status !== "invited") return res.status(400).json({ success: false, error: "This account has already been activated — you can simply log in." });
+
+      const salt = crypto.randomBytes(16).toString("hex");
+      user.salt = salt;
+      user.passwordHash = hashPassword(password, salt);
+      if ((name || "").trim()) user.name = name.trim();
+      user.status = "active";
+      user.activatedAt = new Date().toISOString();
+      await writeAccounts(accounts);
+
+      const isAdmin = user.email === ADMIN_EMAIL;
+      const roles = Array.isArray(user.roles) ? user.roles : [];
+      const sessionPayload = {
+        email: user.email,
+        name: user.name,
+        admin: isAdmin,
+        roles,
+        finance: isAdmin,
+        strategy: isAdmin,
+        marketing: isAdmin || roles.length > 0,
+        exp: Date.now() + SESSION_HOURS * 3600000,
+      };
+      setSessionCookie(res, signSession(sessionPayload));
+      return res.status(200).json({ success: true, user: sessionPayload });
     }
 
     /* --- inloggen --- */
