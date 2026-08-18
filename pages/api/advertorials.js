@@ -44,10 +44,10 @@ const VISION_MAX_BYTES = 3.5 * 1024 * 1024;   // analyse (AI-limiet)
 const REHOST_MAX_BYTES = 20 * 1024 * 1024;    // re-hosten op Shopify Files
 
 const MARKETS = {
-  Italy: { language: "Italian", currency: "EUR" },
-  France: { language: "French", currency: "EUR" },
-  Israel: { language: "Hebrew", currency: "ILS (₪)" },
-  Sweden: { language: "Swedish", currency: "SEK (kr)" },
+  Italy: { language: "Italian", currency: "EUR", locale: "it_IT", lang: "it" },
+  France: { language: "French", currency: "EUR", locale: "fr_FR", lang: "fr" },
+  Israel: { language: "Hebrew", currency: "ILS (₪)", locale: "he_IL", lang: "he" },
+  Sweden: { language: "Swedish", currency: "SEK (kr)", locale: "sv_SE", lang: "sv" },
 };
 
 /* ================= session ================= */
@@ -295,7 +295,7 @@ function recoverLazyImages(html) {
       else if (!srcM) t = t.replace(/<img\b/i, `<img src="${lazyUrl}"`);
     }
     // srcset/sizes/lazy-attrs strippen zodat de browser altijd onze src gebruikt
-    t = t.replace(/\s(?:srcset|sizes|data-(?:src|lazy-src|original|lazy|image|echo|srcset|lazy-srcset|sizes))\s*=\s*["'][^"']*["']/gi, "");
+    t = t.replace(/\s(?:srcset|sizes|data-(?:src|lazy-src|original|lazy|image|echo|srcset|lazy-srcset|sizes|retina-src|retina-image|retina-size-modificator))\s*=\s*["'][^"']*["']/gi, "");
     return t;
   });
 
@@ -323,8 +323,11 @@ function recoverLazyImages(html) {
       if (!url || url.startsWith("data:") || /background-image\s*:/i.test(tag)) return tag;
       if (!/^(?:https?:)?\/\//i.test(url) && !url.startsWith("/")) return tag;
       const styleM = tag.match(/\bstyle\s*=\s*"([^"]*)"/i);
-      if (styleM) return tag.replace(styleM[0], `style="${styleM[1]};background-image:url('${url}')"`);
-      return tag.replace(/^<([a-z][a-z0-9]*)/i, `<$1 style="background-image:url('${url}')"`);
+      const withBg = styleM
+        ? tag.replace(styleM[0], `style="${styleM[1]};background-image:url('${url}')"`)
+        : tag.replace(/^<([a-z][a-z0-9]*)/i, `<$1 style="background-image:url('${url}')"`);
+      // het lazy-attribuut zelf mag weg: het wijst nog naar de server van de bron
+      return withBg.replace(/\s(?:data-(?:src|lazy-src|original|image|retina-src|retina-image))\s*=\s*["'][^"']*["']/gi, "");
     }
   );
 
@@ -485,6 +488,132 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 window.addEventListener("load",fitAll);
 var t;window.addEventListener("resize",function(){clearTimeout(t);t=setTimeout(fitAll,150);});
 })();<\/script>`;
+
+/* ============ sporen van de bronpagina wissen ============
+   Een geswipete pagina draagt de identiteit van de concurrent mee: canonical en
+   og:url wijzen naar HUN domein (dat is wat de crawler van Meta uitleest als
+   "dit is de pagina"), comments verraden hun merk en hun pixels, en er blijven
+   links naar hun shop in staan waar wij betaald verkeer naartoe sturen.
+   Dit draait vlak voor het publiceren, als laatste stap. */
+function registrableHost(u) {
+  try {
+    const h = new URL(String(u)).hostname.toLowerCase().replace(/^www\./, "");
+    const parts = h.split(".");
+    // co.uk / com.au e.d.: één label extra meenemen
+    const twoLevel = /^(co|com|net|org|gov|ac)\.[a-z]{2}$/i.test(parts.slice(-2).join("."));
+    return parts.length > (twoLevel ? 3 : 2) ? parts.slice(twoLevel ? -3 : -2).join(".") : h;
+  } catch {
+    return "";
+  }
+}
+
+function scrubSource(html, { sourceUrl, publicUrl, market }) {
+  let out = String(html || "");
+  const report = { comments: 0, headTags: 0, links: [], embeds: [], leftovers: [], brandMentions: 0, brand: "" };
+  const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // 1. HTML-comments weg — daar zitten merknamen, pixelnamen en buildstempels in.
+  //    Stijlblokken worden even afgeschermd (daar staat legacy <!-- --> soms in) en
+  //    conditionele IE-comments blijven met rust, die kunnen echte inhoud bevatten.
+  const styles = [];
+  out = out.replace(/<style\b[\s\S]*?<\/style\s*>/gi, (m) => `␀${styles.push(m) - 1}␀`);
+  out = out.replace(/<!--([\s\S]*?)-->/g, (m, inner) => {
+    if (/\[if\b|<!\[endif\]/i.test(inner)) return m;
+    report.comments++;
+    return "";
+  });
+  out = out.replace(/␀(\d+)␀/g, (m, i) => styles[+i]);
+
+  // 2. Identiteit van de pagina: canonical en og:url worden ONZE eigen live-URL,
+  //    al het andere dat naar de bron verwijst (favicon, og:image, generator, …) weg.
+  out = out.replace(/<link\b[^>]*\brel\s*=\s*["']([^"']+)["'][^>]*>/gi, (tag, rel) => {
+    if (/\b(canonical|alternate|shortlink|amphtml|manifest|icon|apple-touch-icon|mask-icon|author|publisher)\b/i.test(rel)) {
+      report.headTags++;
+      if (/\bcanonical\b/i.test(rel) && publicUrl) return `<link rel="canonical" href="${publicUrl}">`;
+      return "";
+    }
+    return tag;
+  });
+  out = out.replace(/<meta\b[^>]*\b(?:property|name)\s*=\s*["']([^"']+)["'][^>]*>/gi, (tag, key) => {
+    const k = key.toLowerCase();
+    if (k === "og:url") { report.headTags++; return publicUrl ? `<meta property="og:url" content="${publicUrl}">` : ""; }
+    if (k === "og:locale") { report.headTags++; return market && market.locale ? `<meta property="og:locale" content="${market.locale}">` : ""; }
+    if (/^(og:(site_name|image.*)|twitter:(url|image.*|site|creator|domain)|generator|author|application-name|apple-mobile-web-app-title|msapplication-.*|p:domain_verify|google-site-verification|facebook-domain-verification)$/.test(k)) {
+      report.headTags++;
+      return "";
+    }
+    return tag;
+  });
+  out = out.replace(/<base\b[^>]*>/gi, () => { report.headTags++; return ""; });
+  out = out.replace(/<meta\b[^>]*http-equiv\s*=\s*["']last-modified["'][^>]*>/gi, () => { report.headTags++; return ""; });
+
+  // Video-embeds van de bron. Lazy iframes (alleen data-src) laadden toch nooit —
+  // hun script is weg — dus die halen we eruit. Een iframe dat wél live staat, laten
+  // we staan maar melden we: dat is content uit het account van de concurrent.
+  out = out.replace(/<iframe\b([^>]*)>([\s\S]*?)<\/iframe\s*>|<iframe\b([^>]*)\/?>/gi, (tag, a1, inner, a2) => {
+    const attrs = a1 || a2 || "";
+    const live = /(?<![-\w])src\s*=\s*["'](?!\s*["'])[^"']+["']/i.test(attrs);
+    const lazy = /\bdata-(?:src|lazy-src)\s*=\s*["'][^"']+["']/i.test(attrs);
+    const urlM = attrs.match(/(?:(?<![-\w])src|data-(?:src|lazy-src))\s*=\s*["']([^"']+)["']/i);
+    if (live) { report.embeds.push({ url: urlM ? urlM[1] : "", removed: false }); return tag; }
+    if (lazy) { report.embeds.push({ url: urlM ? urlM[1] : "", removed: true }); return ""; }
+    return tag;
+  });
+
+  // Preloads/preconnects naar de scripts en analytics van de bron: die scripts hebben
+  // we verwijderd, dus dit zijn alleen nog nutteloze verzoeken naar hun servers.
+  // Lettertypen en stylesheets blijven staan — die heeft de pagina echt nodig.
+  out = out.replace(/<link\b[^>]*\brel\s*=\s*["'][^"']*\b(?:preload|prefetch|modulepreload|preconnect|dns-prefetch)\b[^"']*["'][^>]*>/gi, (tag) => {
+    if (/\bas\s*=\s*["'](?:style|font)["']/i.test(tag)) return tag;
+    if (/fonts\.(?:googleapis|gstatic)\.com|\.(?:css|woff2?|ttf|otf)\b/i.test(tag)) return tag;
+    report.headTags++;
+    return "";
+  });
+
+  // Lege deelkaartjes vullen met onze eigen titel/omschrijving in plaats van niets
+  const titleM = out.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const descM = out.match(/<meta\b[^>]*name\s*=\s*["']description["'][^>]*content\s*=\s*["']([^"']*)["'][^>]*>/i);
+  const attrSafe = (s) => String(s).replace(/[<>"]/g, "");
+  const fill = (key, value) => {
+    if (!value) return;
+    // alleen LEGE tags invullen — een bestaande waarde blijft ongemoeid
+    out = out.replace(
+      new RegExp(`(<meta\\b[^>]*(?:property|name)\\s*=\\s*["']${esc(key)}["'][^>]*\\bcontent\\s*=\\s*)(["'])\\2`, "i"),
+      (m, pre, q) => `${pre}${q}${value}${q}`
+    );
+  };
+  const titleTxt = attrSafe(titleM ? titleM[1].replace(/<[^>]+>/g, "").trim().slice(0, 120) : "");
+  const descTxt = attrSafe(descM ? descM[1].trim().slice(0, 200) : "");
+  if (titleTxt) { fill("og:title", titleTxt); fill("twitter:title", titleTxt); }
+  if (descTxt) { fill("og:description", descTxt); fill("twitter:description", descTxt); }
+
+  if (market && market.lang) out = out.replace(/<html\b([^>]*)>/i, (m, attrs) => `<html${attrs.replace(/\slang\s*=\s*["'][^"']*["']/gi, "")} lang="${market.lang}">`);
+
+  // 3. Alles wat nog naar het domein van de bron wijst
+  const domain = registrableHost(sourceUrl);
+  if (domain) {
+    report.brand = domain.split(".")[0];
+    const urlRe = new RegExp(`https?://[a-z0-9.-]*${esc(domain)}(?:/[^"'\\s>)]*)?`, "gi");
+    // links → onze eigen volgende stap (nooit betaald verkeer naar de concurrent)
+    out = out.replace(/(<a\b[^>]*\bhref\s*=\s*)(["'])([^"']*)\2/gi, (m, pre, q, href) => {
+      urlRe.lastIndex = 0;
+      if (!urlRe.test(href)) return m;
+      report.links.push(href);
+      return `${pre}${q}#next-step${q}`;
+    });
+    // wat er dan nog overblijft (afbeeldingen die niet te re-hosten waren) melden we
+    urlRe.lastIndex = 0;
+    let m2;
+    const seen = new Set();
+    while ((m2 = urlRe.exec(out))) if (!seen.has(m2[0])) seen.add(m2[0]);
+    report.leftovers = [...seen].slice(0, 25);
+    // merknaam die na de vertaling nog ergens in de tekst staat
+    report.brandMentions = (out.match(new RegExp(esc(report.brand), "gi")) || []).length - seen.size;
+    if (report.brandMentions < 0) report.brandMentions = 0;
+  }
+
+  return { html: out, report };
+}
 
 // Het fit-script reist mee IN de HTML (niet als los bestand), zodat het ook werkt
 // wanneer de funnelbuilder de HTML kopieert en in Funnelish plakt.
@@ -1344,10 +1473,19 @@ export default async function handler(req, res) {
         if (finalUrl) html = html.split(img.url).join(finalUrl);
       }
 
-      html = injectFitScript(html);
+      // Laatste stap: elk spoor van de bronpagina wissen. Dit gebeurt ná het
+      // re-hosten, zodat het rapport klopt met wat er écht op de pagina staat.
+      const publicUrl = `https://${req.headers.host}/a/${build.slug}`;
+      const scrub = scrubSource(html, {
+        sourceUrl: build.sourceUrl,
+        publicUrl,
+        market: MARKETS[build.targetMarket],
+      });
+      html = injectFitScript(scrub.html);
       await writeLarge(`advertorial-${build.id}-fin`, html);
       build.status = "live";
       build.publishedAt = new Date().toISOString();
+      build.scrub = scrub.report;
       await writeData(`advertorial-${build.id}`, build);
       await saveIndexEntry(build);
       const host = req.headers.host;
@@ -1355,6 +1493,7 @@ export default async function handler(req, res) {
         success: true,
         url: `https://${host}/a/${build.slug}`,
         rehostSkipped, // afbeeldingen die op de competitor-URL bleven staan
+        scrub: scrub.report, // wat er van de bronpagina gewist is + wat er nog staat
       });
     }
 
