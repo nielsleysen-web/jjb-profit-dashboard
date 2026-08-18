@@ -36,6 +36,20 @@ const STATUS_STYLE = {
 
 const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor", "Media Buyer"];
 
+// Uitnodiging versturen vanuit je eigen mailprogramma (Gmail/Outlook/Mail).
+// Geen mailservice nodig: dit opent een klaargeschreven mail, jij klikt Verzenden.
+function mailtoFor(email, name, url, roles) {
+  const subject = "Your access to the Just Jenny Operations Centre";
+  const roleLine = roles && roles.length ? ` as ${roles.join(", ")}` : "";
+  const body =
+    `Hi ${name || "there"},\n\n` +
+    `You've been given access to the Just Jenny Operations Centre${roleLine}.\n\n` +
+    `Click the link below to choose a password — after that you're straight in, ` +
+    `with the right access already set up:\n\n${url}\n\n` +
+    `This link is valid for 14 days.\n\nSee you inside,\nNiels`;
+  return `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 export default function Accounts() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +163,7 @@ function InvitePanel({ onInvited }) {
       }).then((r) => r.json());
       if (!res.success) throw new Error(res.error);
       onInvited(res);
-      setResult({ ...res, email });
+      setResult({ ...res, email, name, roles });
       setEmail("");
       setName("");
       setRoles([]);
@@ -212,29 +226,37 @@ function InvitePanel({ onInvited }) {
       </div>
 
       {result && (
-        <div style={{ marginTop: "16px", padding: "14px 16px", background: result.emailed ? "#f0fdf4" : "#fffbeb", border: `1px solid ${result.emailed ? "#bbf7d0" : "#fde68a"}`, borderRadius: "11px" }}>
-          <div style={{ fontSize: "12.5px", fontWeight: 700, color: result.emailed ? "#166534" : "#92400e", marginBottom: "6px" }}>
-            {result.emailed ? `✓ Invitation emailed to ${result.email}` : "⚠ Email not sent — share this link yourself"}
+        <div style={{ marginTop: "16px", padding: "14px 16px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "11px" }}>
+          <div style={{ fontSize: "12.5px", fontWeight: 700, color: "#075985", marginBottom: "10px" }}>
+            ✓ Account created for {result.email} — now send them the link
           </div>
-          {!result.emailed && result.emailError && (
-            <div style={{ fontSize: "11.5px", color: "#92400e", marginBottom: "8px" }}>{result.emailError}</div>
-          )}
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <input
-              readOnly
-              value={result.inviteUrl}
-              onFocus={(e) => e.target.select()}
-              style={{ flex: 1, padding: "9px 12px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12px", fontFamily: "ui-monospace, monospace", color: "#1d4ed8", background: "#fff" }}
-            />
+
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+            <a
+              href={mailtoFor(result.email, result.name, result.inviteUrl, result.roles)}
+              style={{ padding: "10px 18px", background: "#0f172a", color: "#fff", borderRadius: "9px", fontSize: "12.5px", fontWeight: 700, textDecoration: "none", display: "inline-block" }}
+            >
+              ✉ Open in my email app
+            </a>
             <button
               onClick={() => { navigator.clipboard?.writeText(result.inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
-              style={{ padding: "9px 16px", background: "#0f172a", color: "#fff", border: "none", borderRadius: "9px", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+              style={{ padding: "10px 18px", background: "#fff", color: "#334155", border: "1px solid #cbd5e1", borderRadius: "9px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
             >
               {copied ? "✓ Copied" : "📋 Copy link"}
             </button>
+            {result.emailed && (
+              <span style={{ fontSize: "12px", color: "#166534", fontWeight: 700, alignSelf: "center" }}>· email already sent automatically</span>
+            )}
           </div>
+
+          <input
+            readOnly
+            value={result.inviteUrl}
+            onFocus={(e) => e.target.select()}
+            style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12px", fontFamily: "ui-monospace, monospace", color: "#1d4ed8", background: "#fff" }}
+          />
           <p style={{ margin: "8px 0 0 0", fontSize: "11.5px", color: "#64748b" }}>
-            The link is valid for 14 days. They choose a password and are in straight away — with the access you selected.
+            Send it however you like — email, WhatsApp, Slack. The link is valid for 14 days; they choose a password and are in straight away with the access you selected.
           </p>
         </div>
       )}
@@ -351,6 +373,8 @@ function RolesDropdown({ user, update }) {
 function UserCard({ user, update, busy }) {
   const isAdmin = user.email === "nielsleysen@gmail.com";
   const status = STATUS_STYLE[user.status] || STATUS_STYLE.active;
+  const [invite, setInvite] = useState(null); // { inviteUrl, emailed }
+  const [copied, setCopied] = useState(false);
 
   const btn = (label, payload, style = {}) => (
     <button
@@ -409,21 +433,46 @@ function UserCard({ user, update, busy }) {
             <button
               onClick={async () => {
                 const res = await update(user.id, { action: "resendInvite" });
-                if (res?.inviteUrl) {
-                  navigator.clipboard?.writeText(res.inviteUrl);
-                  alert(res.emailed ? `Invitation resent to ${user.email} — link also copied to your clipboard.` : `Email could not be sent (${res.emailError || "no email service"}). The invitation link is copied to your clipboard:\n\n${res.inviteUrl}`);
-                }
+                if (res?.inviteUrl) setInvite(res);
               }}
               disabled={busy}
               style={{ padding: "7px 12px", background: "#eef2ff", color: "#4f46e5", border: "1px solid #c7d2fe", borderRadius: "9px", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
             >
-              ↻ Resend invite
+              ✉ Get invite link
             </button>
           )}
           {user.status === "pending" && btn("✓ Approve", { updates: { status: "active" } }, { background: "#16a34a", color: "#fff", border: "none" })}
           {user.status === "active" && btn("Block", { updates: { status: "disabled" } }, { color: "#b45309", borderColor: "#fde68a" })}
           {user.status === "disabled" && btn("Reactivate", { updates: { status: "active" } }, { color: "#166534", borderColor: "#bbf7d0" })}
           {btn("Delete", { remove: true }, { color: "#dc2626", borderColor: "#fecaca" })}
+        </div>
+      )}
+
+      {/* Uitnodigingslink na "Get invite link" */}
+      {invite && (
+        <div style={{ width: "100%", padding: "12px 14px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "11px" }}>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px", alignItems: "center" }}>
+            <a
+              href={mailtoFor(user.email, user.name, invite.inviteUrl, user.roles)}
+              style={{ padding: "9px 16px", background: "#0f172a", color: "#fff", borderRadius: "9px", fontSize: "12.5px", fontWeight: 700, textDecoration: "none" }}
+            >
+              ✉ Open in my email app
+            </a>
+            <button
+              onClick={() => { navigator.clipboard?.writeText(invite.inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
+              style={{ padding: "9px 16px", background: "#fff", color: "#334155", border: "1px solid #cbd5e1", borderRadius: "9px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            >
+              {copied ? "✓ Copied" : "📋 Copy link"}
+            </button>
+            {invite.emailed && <span style={{ fontSize: "12px", color: "#166534", fontWeight: 700 }}>· email also sent automatically</span>}
+            <button onClick={() => setInvite(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#64748b", fontSize: "16px", cursor: "pointer", fontFamily: "inherit" }}>✕</button>
+          </div>
+          <input
+            readOnly
+            value={invite.inviteUrl}
+            onFocus={(e) => e.target.select()}
+            style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12px", fontFamily: "ui-monospace, monospace", color: "#1d4ed8", background: "#fff" }}
+          />
         </div>
       )}
     </div>
