@@ -19,6 +19,7 @@
 
 import axios from "axios";
 import crypto from "crypto";
+import zlib from "zlib";
 
 export const config = { maxDuration: 300, api: { bodyParser: { sizeLimit: "8mb" } } };
 
@@ -124,14 +125,17 @@ async function writeData(handle, value) {
   if (errs.length) throw new Error(errs.map((e) => e.message).join(", "));
 }
 
-// Grote strings (HTML) in chunks opslaan — metaobject-velden hebben een tekenlimiet
+// Grote strings (HTML) GECOMPRIMEERD in chunks opslaan. HTML comprimeert ~6x, dus een
+// pagina van 870 kB gaat van 15 stukken naar 4. Minder opslag-operaties = minder kans
+// dat er onderweg één sneuvelt (dat kapte vroeger het einde van de advertorial af),
+// en de live pagina laadt een stuk sneller.
 async function writeLarge(base, str) {
-  const s = String(str || "");
+  const s = zlib.gzipSync(Buffer.from(String(str || ""), "utf8")).toString("base64");
   const total = Math.max(1, Math.ceil(s.length / CHUNK_STORE_SIZE));
   const jobs = [];
   for (let i = 0; i < total; i++) {
     // len = totale lengte, zodat bij het lezen meteen blijkt of er een stuk ontbreekt
-    jobs.push(writeData(`${base}-${i}`, { i, total, len: s.length, data: s.slice(i * CHUNK_STORE_SIZE, (i + 1) * CHUNK_STORE_SIZE) }));
+    jobs.push(writeData(`${base}-${i}`, { i, total, len: s.length, enc: "gzip", data: s.slice(i * CHUNK_STORE_SIZE, (i + 1) * CHUNK_STORE_SIZE) }));
   }
   await Promise.all(jobs); // parallel: start is seconden sneller
 }
@@ -155,7 +159,8 @@ async function readLarge(base) {
   if (typeof first.len === "number" && out.length !== first.len) {
     throw new Error(`Storage incomplete: expected ${first.len} characters, got ${out.length} — press Resume to rebuild`);
   }
-  return out;
+  // Oudere builds staan nog ongecomprimeerd opgeslagen; die blijven gewoon werken
+  return first.enc === "gzip" ? zlib.gunzipSync(Buffer.from(out, "base64")).toString("utf8") : out;
 }
 
 /* ================= Anthropic ================= */
@@ -445,6 +450,14 @@ function segmentPrompt(build, items) {
   return `You are localising text segments from a direct-response advertorial page for the ${build.targetMarket} market; ${source}.
 
 Translate every segment to ${market.language} — natural and native, never literal. Preserve the persuasive tone, claims, numbers and urgency exactly. The segments are fragments of ONE page (headlines, paragraphs, buttons, image alt texts) in page order.
+
+LENGTH DISCIPLINE — the layout is fixed and cannot grow:
+- Keep every segment at most ~10% longer than the source segment.
+- For SHORT segments (headlines, subheads, buttons, labels — under 200 characters) this is
+  a HARD limit: the translation may NEVER be longer than the original. Italian and French
+  run longer by default, so tighten: drop filler words, pick the shorter synonym, cut
+  redundant articles and pronouns. Keep every claim, number, name and promise intact —
+  shorten the wording, never the message.
 
 LOCALISE while translating:
 - "${build.competitorName}" (all inflections, possessive forms, ™/® variants) → "${build.ownProductName}", everywhere.
