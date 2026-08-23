@@ -437,23 +437,43 @@ Give me only the output I ask for, no explanation or clarification with it.`,
     key: "3",
     label: "Subheadline",
     multi: null,
-    prompt: `Because our customers are in a solution-aware stage, we want to break down the alternatives they currently use.
+    prompt: `Because our customers are in a solution-aware stage, we want to break down the alternatives they currently use. This subheadline sits directly under the headline and is purely SUBTRACTIVE: same promise as the headline, without the price they are already paying. It introduces no new promise of its own. This structure is our proven A/B test winner ("Zonder pijnlijke cortisoninjecties of tijdelijke therapieën!") — follow it precisely.
+
 Use the JSON from the extractor and work through this reasoning silently (do not output it):
-1. What are the alternatives they use most at this moment? Give me the top 2 most used
-2. Tell me what they hate most about these alternatives, what frustrates them the hardest about them?
-3. Then give me 3 adjectives that you can only use that tie in with their frustration around this alternative and with nothing, absolutely nothing else. It can only be used specifically for this alternative and by this target audience.
-Then choose the adjective that:
-- Provokes the most frustration
-- The word must describe what the alternative ACTIVELY does at the moment of use, not what happens in the long term. Choose an acute, direct effect over a slow process. It must be tangible, not just visible.
-- The word must name the loss that the alternative causes — loss of control over your own body or face. Not the most severe medical complication, but the most fundamental deprivation.
-The adjective must be one single word — never a subordinate clause or a description.
-When in doubt: choose the word she would say herself to a friend at the kitchen table, not the most correct word.
-Also make sure the adjective is something they know in their vocabulary, and not something they barely hear or say themselves.
 
-Once you have done this, I want you to give me a sentence in which you break down the top 2 alternatives by starting with 'Without' and then stating the 2 alternatives, but with the specific adjectives before you state the alternative specifically.
+1. TWO ALTERNATIVES, from DIFFERENT categories. Pick the top 2 most-used alternatives from objections.alternative_1/alternative_2 and objections.currently_still_using — ideally one from the medical/invasive route (injections, prescription pills, procedures, clinic treatments) and one from the daily/over-the-counter route (creams, drops, lozenges, painkillers, gels). Two alternatives from the same shelf feel like an attack on one choice; two from different routes feel like "everything you have already tried".
 
-Example:
-No retinol creams that make your skin flake, or useless collagen creams!
+2. NAME BOTH at kitchen-table concreteness — the word the avatar says to a friend, the thing she has literally sat in the chair for or holds in her hand ("cortisone injections", "antacids", "lubricants", "collagen creams"). Never a container word like "treatments", "products", "solutions", "therapies" when a concrete word exists.
+
+3. ONE adjective (or short felt-clause, see rule 6) per alternative, and each names THAT alternative's OWN dominant frustration. Do not force a fixed pattern — different alternatives have different frustrations. Choose per alternative from this palette which frustration the research actually supports:
+   - felt in the body at the moment of use — and WITHIN this type there is a ranking: sensations linked to PAIN (burning, stinging, painful) always beat neutral sensations (taste, sweetness, texture). "Burning menthol lozenges" works because they literally feel that sting; "sickly-sweet lozenges" is merely a taste, not negative enough on its own.
+   - SHAME — the strongest emotion of all when the research shows embarrassment (intimate products, prostate, incontinence, hair loss): written as the hiding or concealing ACTION the avatar performs ("pills you have to hide", "tucked away at the back of the drawer") — never as a word.
+   - FEAR — stronger than pain when the research supports it (surgery, addiction, hormones): evoked through a hard property of the alternative (invasive, painful, addictive), never through the fear itself.
+   CRITICAL: fear and shame are ALWAYS evoked, NEVER named. "Feared", "scary", "dreaded", "shameful", "embarrassing" are forbidden — they name the reader's feeling and break rule 5. "Invasive procedures" makes him afraid; "the feared operation" just tells him he is.
+   - the repeated forced ACTION at its exact hated moment — when the frustration is repetition or futility, write it as the action she is forced to perform again and again ("that you have to keep reapplying", "the endless applying of"), NEVER as a passive state ("already worn off halfway" is a state, not a moment — states describe, moments hurt)
+   - seen in the situation around use (the stained sheets, the pack she carries everywhere)
+   - futility — it never worked (useless — only when the advertorial itself teaches this alternative misses the real cause; may combine with the forced-action clause: "endlessly applying useless hormone creams")
+   - endlessness/dependence (daily, lifelong)
+   - money (overpriced)
+   - long-term harm (only if the research names a SPECIFIC harm)
+   The two must express two DIFFERENT frustration types — never the same type twice.
+
+   SENSORY FIRST — this hierarchy is mandatory: felt-in-the-body beats seen-situation beats concept. At least ONE of the two slots MUST be sensory or situational (something she can feel, taste, smell or picture in the moment). Concept words (lifelong, temporary, useless, overpriced, risky) are allowed in AT MOST one slot, and only when the research or advertorial explicitly supports that frustration. A word can pass the exclusivity test and still be dead on the page because it lives in the head instead of the body — "risky" tells her something ABOUT the alternative; "sticky" makes her feel it. When a taught concept has a felt version, always write the felt version: not "lubricants that evaporate" but "lubricant that has already worn off halfway".
+
+4. THE EXCLUSIVITY TEST (the most important rule): each adjective must fit almost ONLY its own alternative and this audience's feelings about it, and barely any other alternative. "Painful" passes for injections (the needle), fails for creams. Generic intensifiers ALWAYS fail this test: terrible, horrible, awful, bad, annoying are forbidden.
+
+5. PROPERTY, NEVER EMOTION. Name the attribute that triggers the feeling, never the feeling itself: "painful" (triggers fear) passes, "frustrating" fails — frustration belongs to the reader, not to the alternative.
+
+6. Assemble: start with "Without", then [adjective 1] [alternative 1] or [adjective 2] [alternative 2], exclamation mark. MAXIMUM 10 words total. When a single adjective cannot carry the felt frustration, a short felt-clause of at most 4 words may replace it ("that has already worn off halfway", "the endless smearing with") — but never for both alternatives, and never past the 10-word cap. A short tail after the second alternative is allowed ONLY if it is as specific as the rest and passes the exclusivity test — when in doubt, leave it out; never end the sentence on a generic word.
+
+Examples (the winning pattern):
+Without painful cortisone injections or temporary therapies!
+Without sticky lubricants or endlessly applying useless hormone creams!
+Without lifelong antacids or burning menthol lozenges!
+Without lubricant you have to keep reapplying or greasy creams!
+Without prostate pills you have to hide or invasive procedures!
+Without the daily struggle with compression stockings or dehydrating water pills!
+Without numbing nerve pills or useless thick skin creams!
 
 Give me only the final sentence as output, no explanation or clarification with it.`,
   },
