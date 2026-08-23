@@ -1450,7 +1450,7 @@ async function runStep(store, step, taskId) {
     const prompt = PROMPT_1.replace("[ADVERTORIAL]", adv);
     // Webresearch staat voorlopig uit: alle velden voor de JSON komen uit de advertorial zelf,
     // en zonder zoekopdrachten past de stap gegarandeerd binnen de functietijd.
-    store.researchDoc = await callClaude({ prompt, webSearch: false, maxTokens: 12000, timeoutMs: 280000 });
+    store.researchDoc = await callClaude({ prompt, webSearch: false, maxTokens: 20000, timeoutMs: 280000 });
     store.researchJson = null; // nieuw onderzoek maakt oude JSON ongeldig
     return;
   }
@@ -1485,7 +1485,7 @@ async function runStep(store, step, taskId) {
       store.stepStatus["1"] = "done";
     }
     const prompt = PROMPT_1B.replace("[RESEARCH DOCUMENT]", store.researchDoc);
-    const text = await callClaude({ prompt, maxTokens: 8000, timeoutMs: 180000 });
+    const text = await callClaude({ prompt, maxTokens: 12000, timeoutMs: 180000 });
     store.researchJson = parseJsonLoose(text);
     // Vision-resultaat (1C) van een eerdere run opnieuw inmengen — de packshot wint altijd van de advertorial
     if (store.visionJson && !store.visionJson.skipped) {
