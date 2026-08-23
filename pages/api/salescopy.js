@@ -494,36 +494,42 @@ Before you write a single word, determine the following for yourself. This does 
 - The deeper desire: avatar.deeper_desire
 - The root-cause ingredient: product.ingredient_root_cause
 - The most hated aspect of the pain point: avatar.most_hated_aspect
+- The mechanism type and pain type: classification.mechanism_type and classification.pain_type
+- The symptom moment and avoided activities: avatar.symptom_moment and avatar.avoided_activities
+- The named killer substance: mechanism.root_cause_substance (the advertorial's coined term)
+- The headline timeframe: product.results_amount and product.results_unit
 
 GENERAL RULES
 - No benefit contains more than 8 words.
 - Never add a word to reach a word count. If a benefit can be shorter, it is shorter.
 - No verb appears twice in the block. Two verbs that resemble each other or sound the same (restore and restart, dilate and dissolve) count as the same verb.
 
-BENEFIT 1 — THE STRONGEST DESIRE
-The most common benefit our product delivers through its mechanism — their strongest desire first. Take avatar.ranked_benefits[0], the benefit the advertorial mentions most often. If ranked_benefits is empty (older research), use avatar.deeper_desire instead.
-Never state it as an abstract claim. Express it as ONE concrete everyday moment the avatar gets back — a situation so specific that it only fits THIS pain point and no other. THE EXCLUSIVITY TEST: if the line could appear on the sales page of a different product for a different condition, it is too vague — sharpen it until it cannot. "Fall asleep without music again" beats "peaceful silence"; "Climb the stairs without stopping" beats "more energy"; "Wear a bikini without covering up" beats "smoother skin".
-Build the moment from the avatar's daily life in the JSON: their first symptoms, what they currently do to cope, what they avoid, their deeper desire.
-THE ANGLE FOLLOWS classification.external_or_internal:
-- FOR EXTERNAL (the pain point is visible and they hide it): the moment is about being SEEN again — showing, wearing, no longer hiding. "Show off your legs again during summer" / "Wear a bikini without covering up". Never a comfort or symptom moment here; for a visible problem, being seen beats feeling better.
-- FOR INTERNAL (only they feel, hear or notice it): the moment is the symptom or coping behaviour that finally disappears. "Fall asleep without music again" / "Sleep through the night without bathroom trips". The coping behaviour they can finally DROP is often the sharpest angle.
-Never a mechanism, never an ingredient. Maximum 8 words.
-Examples: Fall asleep without music again / Wear a bikini without covering up / Climb the stairs without stopping
+BENEFIT 1 — THE DOCTOR'S LINE (the structure, rebuilt)
+This line is the other half of the ATF headline: headline and benefit 1 together must cover BOTH halves of the mechanism — villain gone AND structure repaired. The verb category is the COMPLEMENT of what the headline took, derived from classification.mechanism_type:
+- removal headline → benefit 1 REBUILDS: restores, rebuilds, strengthens
+- supply headline → benefit 1 restores the structure/function that was starved: restores, reactivates
+- repair headline → benefit 1 takes the villain side instead: neutralises/renders harmless the villain substance
+Never the same verb as the headline. Always a constructive third-person verb.
+Then the tissue ONE anatomical level deeper than the headline's location (the headline said "around the knee joint" → benefit 1 says "the cartilage of the knee joint"), named in the word their DOCTOR would use to them — the test: has their doctor ever said this word to them in the consultation room? Cartilage passes; chondrocytes fails. Never two levels deep (cells, enzymes).
+Then the headline's location itself.
+5-8 words, full stop, deliberately clinical and dry: NO product name, NO timeframe, NO emotion, NO "so you can…". After the emotional headline this bare medical claim reads like the doctor's note that proves it — the dryness is the feature.
+Examples: Restores the cartilage of the knee joint. / Renders the leftover pepsin in the throat tissue harmless. / Reactivates the nerve endings of the clitoris.
 
-BENEFIT 2 — THE MECHANISM, STEP 1 (THE CURRENT PROBLEM)
-Always start with an action word: restores, strengthens, stimulates, activates, supports.
-Name the cell or structure that the ingredient activates. This is a medical or technical jargon word that they have heard before but do not use in their daily vocabulary. Too technical is just as wrong as too general. Fibroblasts works; matrikine and procollagen fragment go too far; skin cells goes too far back.
-If mechanism.cell_word is empty, or is not an actual cell but a structure, use mechanism.structure_word instead. Never invent a cell word that does not appear in the advertorial.
-Maximum 8 words.
-FOR EXTERNAL: name the cell plus the substance that cell produces. Leave out the article before the cell name. Example: Stimulates fibroblasts to produce collagen
-FOR INTERNAL: name the structure plus the function that structure performs. The article stays. Examples: Strengthens the eardrum to dampen sound waves / Restores blood flow to the smallest blood vessels
-Overlap in mechanism between benefit 2 and 3 is allowed as long as the perspective differs: 2 works at cell level, 3 at cause level.
+BENEFIT 2 — THE REVENGE LINE (the named killer, destroyed)
+The mirror of benefit 1: construction there, destruction here. This is the ONLY line on the whole page where maximum verb violence is allowed — because it is aimed at the enemy: destroys, kills off, breaks down, flushes out. The verb's violence must stay mechanically credible for the villain type: substances are broken down/flushed out, bacteria are killed off, blockages are broken through, fluid is drained, clogs are uncloged.
+The object is the advertorial's COINED named killer — the deeper mechanism villain the advertorial itself baptised (zombie cells, latent pepsin), one level deeper than the surface villain the headline used. Use the EXACT coined term, 2-3 words maximum: it is a memory trigger — reading it replays the whole advertorial story in a flash. A synonym, even a more correct one, throws that away. Never invent a villain the advertorial did not teach.
+SUPPLY-type products often have no killable villain (there is a shortage, not a substance): then aim the destruction at what BLOCKS the supply or at the loss process itself — "breaks through the blocked blood flow", "stops the collagen breakdown". Still destructive in form, mechanically honest.
+End with the timeframe: "in X days" — X is ALWAYS 3 or less AND always SMALLER than the number in the ATF headline. The timelines must stack: the villain dies on day 3, the full outcome completes by day 5 — a villain that dies after the headline's deadline makes the page contradict itself.
+Third person with correct conjugation. Maximum 8 words.
+Examples: Destroys zombie cells in 3 days. / Breaks down latent pepsin in 3 days. / Stops the collagen breakdown in 3 days. / Drains the built-up fluid in 2 days.
 
-BENEFIT 3 — THE INGREDIENT THAT FIXES THE CAUSE
-Structure: [INGREDIENT] restores [ROOT CAUSE MECHANISM]. Always short, MAXIMUM 7 WORDS — count before you answer.
-The ingredient is product.ingredient_root_cause, named exactly as it stands. The root cause mechanism comes from mechanism.step_2_root_cause, in the avatar's most recognisable words (hair cells, not ciliated hair cells; the skin, not the dermis).
-The default verb is restores. Only when the root cause is a buildup that must disappear (fluid, calcium, plaque, toxins) use the fitting clearing verb instead: dissolves, flushes out, breaks down.
-Examples: Milk thistle restores liver cell function / Saw palmetto restores healthy blood flow / Magnesium dissolves calcium buildup
+BENEFIT 3 — THE NEVER-AGAIN LINE (their own thought)
+Elliptical form, NO subject, NO "you will": start directly with "Never again" followed by EXACTLY the same moment or activity the ATF headline's closing clause used (from avatar.symptom_moment or avatar.avoided_activities, per classification.pain_type) — the same nail, hammered a second time in a different form. Never a different moment: repetition builds the promise, variety dilutes it.
+Because there is no subject, the line reads as a thought inside their own head instead of a promise from outside — that is the mechanism of this line. Informal address (je/jou/jouw in Dutch-style markets) when a pronoun is needed at all.
+No condition ("if you use it") — a condition turns the verdict back into a deal. No adjectives, no melodrama: the moment carries the emotion.
+ALWAYS the never-again form, also for desire products — find their hated moment instead of flipping positive ("Never again faking it." beats any positive prediction).
+Maximum 8 words, full stop.
+Examples: Never again waking up in pain. / Never again avoiding conversations because of your voice. / Never again hiding your arms under long sleeves. / Never again faking it.
 
 BENEFIT 4 — PROVEN INGREDIENTS AGAINST WHAT THEY HATE MOST
 Always start with "Proven ingredients that", followed by a verb and avatar.most_hated_aspect — the thing they hate most about the pain point.
