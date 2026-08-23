@@ -293,7 +293,31 @@ export default function Launched() {
         const heading = kind === "funnel" ? `🚀 ${task.productName || "Funnel task"}` : kind === "creative" ? `🎬 ${task.product?.title || "Creative task"}` : `🎨 ${task.product?.title || "Design task"}`;
         const sourceLabel = kind === "funnel" ? "Product Pipeline task" : kind === "creative" ? "Video Editor task" : "Graphic Designer task";
         const activity = (task.activity || []).filter((a) => (a.type === "log" || a.type === "chat") && !a.deleted);
+        // Deze velden staan bij ELKE taak in het detail — leeg = "—", nooit verborgen.
+        // GD-/VE-taken hebben Funnelish/Alibaba/Campaign zelf niet: die komen dan van
+        // de gekoppelde pipeline-taak (via sourceLaunchTaskId, anders productnaam+markt).
+        const KEY_FIELDS = [
+          { key: "advertorialLink", label: "Advertorial", type: "url" },
+          { key: "funnelishLink", label: "Funnelish", type: "url" },
+          { key: "alibabaLink", label: "Alibaba", type: "url" },
+          { key: "finalCampaignLink", label: "Final Campaign", type: "url" },
+          { key: "launchedDate", label: "Launched date", type: "date" },
+        ];
+        const sourceFunnel =
+          kind === "funnel"
+            ? task
+            : funnels.find((f) => f.id === task.sourceLaunchTaskId) ||
+              funnels.find((f) => f.productName && f.productName === task.product?.title && (!task.countryCode || !f.countryCode || f.countryCode === task.countryCode)) ||
+              null;
+        const keyRows = KEY_FIELDS.map((d) => {
+          const own = task[d.key];
+          const fromFunnel = sourceFunnel ? sourceFunnel[d.key] : null;
+          const value = own != null && String(own).trim() !== "" ? own : fromFunnel;
+          return { ...d, value: value != null && String(value).trim() !== "" ? value : null };
+        });
+        const keySet = new Set(KEY_FIELDS.map((d) => d.key));
         const rows = defs
+          .filter((d) => !keySet.has(d.key))
           .map((d) => ({ ...d, value: d.get ? d.get(task) : task[d.key] }))
           .filter((d) => d.value != null && String(d.value).trim() !== "");
         // Funnel uit de pipeline: de gekoppelde Graphic Designer-taak toont mee in
@@ -320,7 +344,9 @@ export default function Launched() {
                 const renderField = (d) => (
                   <div key={d.key} style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: "12px", padding: "8px 0", borderBottom: "1px solid #f4f5f7", fontSize: "12.5px" }}>
                     <span style={{ fontWeight: 600, color: "#64748b" }}>{d.label}</span>
-                    {d.type === "url" ? (
+                    {d.value == null ? (
+                      <span style={{ color: "#c3cad5" }}>—</span>
+                    ) : d.type === "url" ? (
                       <a href={d.value} target="_blank" rel="noreferrer" style={{ color: "#2563eb", fontWeight: 600, overflowWrap: "anywhere" }}>Open ↗ <span style={{ color: "#a4adbd", fontWeight: 400 }}>({String(d.value).slice(0, 60)}{String(d.value).length > 60 ? "…" : ""})</span></a>
                     ) : d.type === "date" ? (
                       <span>{fmtDate(d.value)}</span>
@@ -335,7 +361,10 @@ export default function Launched() {
                 );
                 return (
                   <>
-                    <div style={{ marginTop: "14px" }}>{rows.map(renderField)}</div>
+                    <div style={{ marginTop: "14px", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "4px 14px", marginBottom: "6px" }}>
+                      {keyRows.map(renderField)}
+                    </div>
+                    <div>{rows.map(renderField)}</div>
                     {designRows.length > 0 && (
                       <div style={{ marginTop: "18px" }}>
                         <div style={{ fontSize: "11px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "4px" }}>
