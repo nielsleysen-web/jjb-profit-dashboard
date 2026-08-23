@@ -147,8 +147,18 @@ export default function Launched() {
 
   const launchedFunnels = funnels.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
   const launchedCreatives = creatives.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
-  const launchedDesigns = designs.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
-  const total = launchedFunnels.length + launchedCreatives.length + launchedDesigns.length;
+  // Categorisatie op HERKOMST: een GD-taak die automatisch uit de Product Pipeline is
+  // ontstaan (sourceLaunchTaskId) hoort bij "Funnels" — zijn info zit in het detail van
+  // de funnel-rij. Alleen taken die rechtstreeks in de Graphic Designer-tab zijn
+  // aangemaakt staan onder "Graphic Designer".
+  const allLaunchedDesigns = designs.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
+  const launchedDesigns = allLaunchedDesigns.filter((t) => !t.sourceLaunchTaskId);
+  // Randgeval: pipeline-GD-taak is gelanceerd maar de funnel-taak zelf (nog) niet —
+  // dan tonen we hem tóch onder Funnels (zijn herkomst), zodat hij nergens verdwijnt.
+  const funnelIds = new Set(launchedFunnels.map((t) => t.id));
+  const orphanPipelineDesigns = allLaunchedDesigns.filter((t) => t.sourceLaunchTaskId && !funnelIds.has(t.sourceLaunchTaskId));
+  const linkedDesignFor = (funnelTask) => designs.find((d) => d.sourceLaunchTaskId === funnelTask.id || d.id === funnelTask.designTaskId) || null;
+  const total = launchedFunnels.length + orphanPipelineDesigns.length + launchedCreatives.length + launchedDesigns.length;
 
   const Row = ({ title, image, sub, by, date, links, onClick }) => (
     <div
@@ -205,9 +215,9 @@ export default function Launched() {
         </div>
       )}
 
-      {launchedFunnels.length > 0 && (
+      {(launchedFunnels.length > 0 || orphanPipelineDesigns.length > 0) && (
         <>
-          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🚀 Funnels ({launchedFunnels.length})</h2>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🚀 Funnels ({launchedFunnels.length + orphanPipelineDesigns.length})</h2>
           <div style={{ display: "grid", gap: "10px", marginBottom: "26px" }}>
             {launchedFunnels.map((t) => (
               <Row
@@ -221,6 +231,17 @@ export default function Launched() {
                   { label: "📣 Campaign", url: t.finalCampaignLink },
                 ]}
                 onClick={() => { setCampEdit(t.finalCampaignLink || ""); setCampMsg(""); setDetail({ kind: "funnel", task: t }); }}
+              />
+            ))}
+            {orphanPipelineDesigns.map((t) => (
+              <Row
+                key={t.id}
+                title={`${t.product?.title || "Design"}${t.countryCode ? ` · ${t.countryCode}` : ""}`}
+                image={t.product?.image}
+                sub={t.angle ? `🎯 ${t.angle}` : ""}
+                by={t.assigneeName}
+                date={t.launchedDate}
+                onClick={() => setDetail({ kind: "design", task: t })}
               />
             ))}
           </div>
@@ -248,7 +269,7 @@ export default function Launched() {
 
       {launchedDesigns.length > 0 && (
         <>
-          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🎨 Designs ({launchedDesigns.length})</h2>
+          <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>🎨 Graphic Designer ({launchedDesigns.length})</h2>
           <div style={{ display: "grid", gap: "10px" }}>
             {launchedDesigns.map((t) => (
               <Row
@@ -275,6 +296,12 @@ export default function Launched() {
         const rows = defs
           .map((d) => ({ ...d, value: d.get ? d.get(task) : task[d.key] }))
           .filter((d) => d.value != null && String(d.value).trim() !== "");
+        // Funnel uit de pipeline: de gekoppelde Graphic Designer-taak toont mee in
+        // hetzelfde venster — die staat niet meer als aparte rij in het overzicht.
+        const linkedDesign = kind === "funnel" ? linkedDesignFor(task) : null;
+        const designRows = linkedDesign
+          ? DESIGN_FIELDS.map((d) => ({ ...d, value: d.get ? d.get(linkedDesign) : linkedDesign[d.key] })).filter((d) => d.value != null && String(d.value).trim() !== "")
+          : [];
         return (
           <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }} onClick={() => setDetail(null)}>
             <div style={{ ...ui.card, width: "100%", maxWidth: "680px", maxHeight: "88vh", overflowY: "auto", padding: "24px 26px" }} onClick={(e) => e.stopPropagation()}>
@@ -289,8 +316,8 @@ export default function Launched() {
                 <button onClick={() => setDetail(null)} style={{ border: "1px solid #d7dce3", background: "#fff", borderRadius: "9px", padding: "6px 12px", fontSize: "12px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "#334155" }}>✕ Close</button>
               </div>
 
-              <div style={{ marginTop: "14px" }}>
-                {rows.map((d) => (
+              {(() => {
+                const renderField = (d) => (
                   <div key={d.key} style={{ display: "grid", gridTemplateColumns: "170px 1fr", gap: "12px", padding: "8px 0", borderBottom: "1px solid #f4f5f7", fontSize: "12.5px" }}>
                     <span style={{ fontWeight: 600, color: "#64748b" }}>{d.label}</span>
                     {d.type === "url" ? (
@@ -305,8 +332,21 @@ export default function Launched() {
                       <span style={{ overflowWrap: "anywhere" }}>{String(d.value)}</span>
                     )}
                   </div>
-                ))}
-              </div>
+                );
+                return (
+                  <>
+                    <div style={{ marginTop: "14px" }}>{rows.map(renderField)}</div>
+                    {designRows.length > 0 && (
+                      <div style={{ marginTop: "18px" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "4px" }}>
+                          🎨 Graphic Designer task{linkedDesign?.status ? ` · ${linkedDesign.status}` : ""}
+                        </div>
+                        {designRows.map(renderField)}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {kind === "funnel" && (
                 <div style={{ marginTop: "14px", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px 14px" }}>
