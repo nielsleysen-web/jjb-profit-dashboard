@@ -26,6 +26,7 @@ const FUNNEL_FIELDS = [
   { key: "funnelWorkspaceLink", label: "Funnel Workspace", type: "url" },
   { key: "funnelishLink", label: "Funnelish", type: "url" },
   { key: "alibabaLink", label: "Alibaba", type: "url" },
+  { key: "finalCampaignLink", label: "Final Campaign", type: "url" },
   { key: "launchedDate", label: "Launched", type: "date" },
 ];
 
@@ -101,6 +102,31 @@ export default function Launched() {
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState(null); // { kind: "funnel"|"creative"|"design", task }
+  const [campEdit, setCampEdit] = useState("");   // invulveld Final Campaign Link
+  const [campBusy, setCampBusy] = useState(false);
+  const [campMsg, setCampMsg] = useState("");
+
+  // Final Campaign Link is het enige veld dat je HIER nog invult (de pipeline-kaart is
+  // op dit punt al van het board verdwenen) — de rest blijft read-only.
+  const saveCampaignLink = async (task) => {
+    setCampBusy(true);
+    setCampMsg("");
+    try {
+      const r = await fetch("/api/launch-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update", taskId: task.id, task: { finalCampaignLink: campEdit.trim() } }),
+      }).then((x) => x.json());
+      if (!r.success) throw new Error(r.error || "Could not save");
+      const updated = { ...task, finalCampaignLink: campEdit.trim() };
+      setFunnels((list) => list.map((t) => (t.id === task.id ? updated : t)));
+      setDetail((d) => (d && d.task.id === task.id ? { ...d, task: updated } : d));
+      setCampMsg("✓ Saved");
+    } catch (e) {
+      setCampMsg(e.message);
+    }
+    setCampBusy(false);
+  };
 
   useEffect(() => {
     Promise.all([
@@ -124,7 +150,7 @@ export default function Launched() {
   const launchedDesigns = designs.filter((t) => t.status === "Launched").sort((a, b) => (b.launchedDate || "").localeCompare(a.launchedDate || ""));
   const total = launchedFunnels.length + launchedCreatives.length + launchedDesigns.length;
 
-  const Row = ({ title, image, sub, by, date, onClick }) => (
+  const Row = ({ title, image, sub, by, date, links, onClick }) => (
     <div
       onClick={onClick}
       style={{ ...ui.card, padding: "16px 20px", display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap", cursor: "pointer", transition: "box-shadow 0.15s" }}
@@ -137,6 +163,18 @@ export default function Launched() {
         <div style={{ fontSize: "14px", fontWeight: 700 }}>{title}</div>
         {sub && <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "2px" }}>{sub}</div>}
       </div>
+      {(links || []).filter((l) => l.url).map((l) => (
+        <a
+          key={l.label}
+          href={l.url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{ fontSize: "11px", fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", padding: "4px 11px", borderRadius: "999px", textDecoration: "none" }}
+        >
+          {l.label} ↗
+        </a>
+      ))}
       {by && <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>👤 {by}</span>}
       {date && (
         <span style={{ fontSize: "12px", color: "#166534", fontWeight: 700 }}>
@@ -175,10 +213,14 @@ export default function Launched() {
               <Row
                 key={t.id}
                 title={`${t.productName}${t.countryCode ? ` · ${t.countryCode}` : ""}`}
-                sub={t.funnelAngle}
+                sub={t.funnelAngle ? `🎯 ${t.funnelAngle}` : ""}
                 by={t.assigneeName}
                 date={t.launchedDate}
-                onClick={() => setDetail({ kind: "funnel", task: t })}
+                links={[
+                  { label: "🔗 Alibaba", url: t.alibabaLink },
+                  { label: "📣 Campaign", url: t.finalCampaignLink },
+                ]}
+                onClick={() => { setCampEdit(t.finalCampaignLink || ""); setCampMsg(""); setDetail({ kind: "funnel", task: t }); }}
               />
             ))}
           </div>
@@ -265,6 +307,28 @@ export default function Launched() {
                   </div>
                 ))}
               </div>
+
+              {kind === "funnel" && (
+                <div style={{ marginTop: "14px", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px 14px" }}>
+                  <div style={{ fontSize: "11px", fontWeight: 700, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px", marginBottom: "6px" }}>📣 Final Campaign Link</div>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <input
+                      value={campEdit}
+                      onChange={(e) => setCampEdit(e.target.value)}
+                      placeholder="https://… (link to the live campaign)"
+                      style={{ flex: 1, minWidth: "220px", padding: "9px 12px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12.5px", fontFamily: "inherit", outline: "none" }}
+                    />
+                    <button
+                      onClick={() => saveCampaignLink(task)}
+                      disabled={campBusy}
+                      style={{ padding: "9px 16px", background: "#0f172a", color: "#fff", border: "none", borderRadius: "9px", fontSize: "12px", fontWeight: 700, cursor: campBusy ? "default" : "pointer", opacity: campBusy ? 0.6 : 1, fontFamily: "inherit" }}
+                    >
+                      {campBusy ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                  {campMsg && <div style={{ marginTop: "6px", fontSize: "11.5px", fontWeight: 600, color: campMsg.startsWith("✓") ? "#166534" : "#dc2626" }}>{campMsg}</div>}
+                </div>
+              )}
 
               {activity.length > 0 && (
                 <div style={{ marginTop: "18px" }}>
