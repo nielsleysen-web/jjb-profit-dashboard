@@ -16,6 +16,9 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLower
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 // Vast model: dit proces draait ALTIJD op Fable 5, nooit op een ander model.
 const MODEL = "claude-fable-5";
+// Uitzondering: de VERTAALSTAP draait op Opus 4.6 (keuze Niels, aug 2026).
+// Alle schrijfstappen blijven op Fable 5.
+const TRANSLATE_MODEL = "claude-opus-4-6";
 
 // Market Country → doeltaal voor de vertaalkolom in de CSV
 const LANGUAGES = { Italy: "Italian", France: "French", Israel: "Hebrew" };
@@ -97,14 +100,14 @@ async function writeData(handle, value) {
 }
 
 /* ---------------- Anthropic ---------------- */
-async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeoutMs = 55000, image = null }) {
+async function callClaude({ prompt, webSearch = false, maxTokens = 4000, timeoutMs = 55000, image = null, model = null }) {
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set in Vercel");
   // Met afbeelding (stap 1C): content wordt een array van [image, text]
   const content = image
     ? [{ type: "image", source: { type: "base64", media_type: image.media_type, data: image.data } }, { type: "text", text: prompt }]
     : prompt;
   const body = {
-    model: MODEL,
+    model: model || MODEL,
     max_tokens: maxTokens,
     messages: [{ role: "user", content }],
   };
@@ -306,6 +309,11 @@ First I want you to analyze this advertorial and I want you to get all the answe
 - How large is the product compared to a familiar everyday object — a coin, a credit card, a plaster, a teabag? Use the comparison the advertorial itself makes; if it makes none but states dimensions, give the closest natural comparison. If neither appears, leave empty.
 - How would the pain point be symbolised in an image ad? Decide the symbol type: "glow" if the problem sits in or on the body and can be marked with a soft red glow on that exact body area; "object" if the problem is invisible on the body but a physical object communicates it instantly (reading glasses, a walking cane, pharmacy pills, a hearing aid); "none" if neither works. List the 2-4 strongest candidate symbols (body areas for glow, objects for object).
 - Determine the visual symbol for the problem side of the split image. Follow the branch rule strictly (none / glow / object) and return exactly one symbol, never a list. Within the branch, pick the option most readable in half a second without text; if two are equal, choose the more common everyday object or the simpler lighting effect.
+- Which activities does the avatar now AVOID, skip, cancel or make excuses to get out of BECAUSE of the pain point (conversations, phone calls, dinners, invitations, stairs, walks, intimacy, certain clothing, photos)? Only what the advertorial actually supports — quote or paraphrase the evidence. If none appear, say so.
+- What is the single most-hated RECURRING SYMPTOM MOMENT — the concrete, daily or weekly moment when the pain point hits hardest (waking up with pain, climbing the stairs, mid-meal, mid-intimacy)? A moment, not a feeling.
+- Classify the pain point into exactly one of three types. FELT-PAIN: the suffering is a physical sensation (pain, burning, stinging, stiffness, cramping) felt regardless of who is around. SHAME-SOCIAL: the symptom is audible or visible to others or disrupts social life — the research shows hiding, embarrassment or avoided situations. DESIRE: nothing hurts — something they want is missing (pleasure, energy, looks). When signals conflict, the answer to "what do they hate most" decides.
+- Classify the mechanism into exactly one of three types. REMOVAL: the product removes, flushes or dissolves an accumulated substance (toxins, deposits, plaque). SUPPLY: the product delivers or replenishes something that is lacking (blood flow, moisture, collagen, a nutrient). REPAIR: the product protects and rebuilds damaged tissue (a barrier plus recovery).
+- In which UNIT does the advertorial promise its first noticeable result — minutes, days or weeks — and what is the smallest amount it credibly promises in that unit? Take the promise the advertorial itself makes; never convert to a different unit.
 ${LANGUAGE_NOTE}
 
 FORMAT: write the research document in compact bullet points. Be complete on content but economical with words — no decorative tables, no repeated section summaries. The document MUST answer EVERY question above, all the way to the last one about the sensory confirmation. Never stop early; the later questions (alternatives, authority figure, usage details) are the most important ones for the next step.
@@ -313,7 +321,7 @@ FORMAT: write the research document in compact bullet points. Be complete on con
 THE ADVERTORIAL:
 [ADVERTORIAL]`;
 
-const JSON_SCHEMA = `{ "product": { "name": "", "name_with_tm": "", "type": "", "delivery_form": "singular | plural", "product_noun": "", "ingredient_root_cause": "", "ingredient_instant": "", "results_days": "", "visual_description": "", "size_reference": "" }, "classification": { "external_or_internal": "external | internal", "visual_or_non_visual": "visual | non-visual", "step3_headline_verb": "See | Hear | Feel | Discover" }, "avatar": { "age_range": "", "gender": "", "awareness_stage": "", "pain_point_own_word": "", "pain_point_formal": "", "pain_point_number": "singular | plural", "buzzwords_known": [], "buzzwords_unknown": [], "first_symptom_sentence": "", "first_symptoms": [], "greatest_fear": "", "most_hated_aspect": "", "consequence_to_restore": "", "deeper_desire": "", "ranked_benefits": [], "desired_outcome_adjective": "", "main_purchase_objection": "", "problem_symbol_type": "none | glow | object", "problem_symbol_options": [], "problem_symbol": "" }, "mechanism": { "entry_route": "", "root_cause_structure": "", "root_cause_verb": "", "step_1_current_problem": "", "step_2_root_cause": "", "second_body_part": "", "cell_word": "", "structure_word": "", "recognisable_anatomical_word": "", "mechanism_verb": "", "root_cause_substance": "", "root_cause_percentage": "" }, "objections": { "alternative_1": "", "alternative_1_hated_adjective": "", "alternative_2": "", "alternative_2_hated_adjective": "", "currently_still_using": "", "substances_they_refuse": [], "exception_objection": "", "thing_to_avoid": "" }, "usage": { "application_place": "", "cleaning_agent": "", "application_moment": "", "dosage": "", "proof_point": "" }, "authority": { "name": "", "title_singular": "", "title_plural": "", "institution": "", "practice_type": "", "institutional_backer": "" } }`;
+const JSON_SCHEMA = `{ "product": { "name": "", "name_with_tm": "", "type": "", "delivery_form": "singular | plural", "product_noun": "", "ingredient_root_cause": "", "ingredient_instant": "", "results_days": "", "results_amount": "", "results_unit": "minutes | days | weeks", "visual_description": "", "size_reference": "" }, "classification": { "external_or_internal": "external | internal", "visual_or_non_visual": "visual | non-visual", "step3_headline_verb": "See | Hear | Feel | Discover", "pain_type": "felt-pain | shame-social | desire", "mechanism_type": "removal | supply | repair" }, "avatar": { "age_range": "", "gender": "", "awareness_stage": "", "pain_point_own_word": "", "pain_point_formal": "", "pain_point_number": "singular | plural", "buzzwords_known": [], "buzzwords_unknown": [], "first_symptom_sentence": "", "first_symptoms": [], "greatest_fear": "", "most_hated_aspect": "", "avoided_activities": [], "symptom_moment": "", "consequence_to_restore": "", "deeper_desire": "", "ranked_benefits": [], "desired_outcome_adjective": "", "main_purchase_objection": "", "problem_symbol_type": "none | glow | object", "problem_symbol_options": [], "problem_symbol": "" }, "mechanism": { "entry_route": "", "root_cause_structure": "", "root_cause_verb": "", "step_1_current_problem": "", "step_2_root_cause": "", "second_body_part": "", "cell_word": "", "structure_word": "", "recognisable_anatomical_word": "", "mechanism_verb": "", "root_cause_substance": "", "root_cause_percentage": "" }, "objections": { "alternative_1": "", "alternative_1_hated_adjective": "", "alternative_2": "", "alternative_2_hated_adjective": "", "currently_still_using": "", "substances_they_refuse": [], "exception_objection": "", "thing_to_avoid": "" }, "usage": { "application_place": "", "cleaning_agent": "", "application_moment": "", "dosage": "", "proof_point": "" }, "authority": { "name": "", "title_singular": "", "title_plural": "", "institution": "", "practice_type": "", "institutional_backer": "" } }`;
 
 const PROMPT_1B = `Below is the complete research document for this product.
 Your only task is to extract the values into the JSON structure below. You do not add anything, you do not interpret, you do not improve. Every value comes literally from the research document.
@@ -393,23 +401,35 @@ const STEPS = [
     key: "2",
     label: "ATF Headline",
     multi: null,
-    prompt: `I want you to create the ATF headline based on the JSON from the extractor. The headline is solution-aware / product-aware and is ONE flowing sentence with exactly this structure, in this order:
+    prompt: `I want you to create the ATF headline based on the JSON from the extractor. The headline is solution-aware / product-aware and is ONE flowing sentence with exactly this structure, in this order. This structure is our proven A/B test winner — follow it precisely.
 
-1. [PRODUCT NAME] — product.name, always first.
+1. [PRODUCT NAME + TM] — product.name_with_tm, always first.
 
-2. [MAIN FUNCTION] — what the product does to the root cause, stated as an active verb plus the root cause object, in the avatar's known jargon at their awareness stage. Build it from mechanism.root_cause_verb and mechanism.root_cause_structure (or mechanism.root_cause_substance when the substance is the more natural object). Example form: "flushes fatty liver", "dissolves calcium deposits". Never a vague verb such as helps, supports or improves.
+2. [MECHANISM VERB + OBJECT] — what the product does, and the verb category follows classification.mechanism_type:
+- removal → a physical removal verb (removes, flushes out, dissolves) + the villain substance as object: mechanism.root_cause_substance in the avatar's surface-level jargon ("toxic inflammatory deposits", "leftover pepsin").
+- supply → a physical delivery verb (sends, pulls, replenishes) + what is delivered and where it was lacking ("sends blood flow straight to the dormant nerve endings", "replenishes the collagen deficit").
+- repair → "restores/rebuilds" + the damaged tissue with the villain as past-tense modifier ("restores the pepsin-damaged lining").
+The verb itself is ALWAYS everyday spoken language the avatar can physically picture — the jargon lives in the object (villain/tissue), never in the verb. Forbidden verbs: helps, supports, improves, deactivates, optimizes, addresses, and anything gradual or clinical. Never claim a mechanism the advertorial does not teach.
 
-3. [TIMEFRAME] — "in X days". X comes from product.results_days. It is ALWAYS between 4 and 6 days: if results_days is empty or above 6, use 6; if it is below 4, use 4. Never more than 6 days, never in hours, seconds or weeks — only days.
+3. [LOCATION] — around/in/under + the EXACT anatomical place where the pain point lives, in a surface-level word the avatar knows and instantly recognises as their spot (around the knee joint, around the vocal cords, in the vaginal tissue, deep in the skin of the upper arms and neck). Use mechanism.recognisable_anatomical_word. Never generic ("in the body", "under the skin" with no body part), never deep jargon. No numbers inside this element.
 
-4. [TOP 2 BENEFITS] — the two MOST-MENTIONED benefits from the research: avatar.ranked_benefits[0] and avatar.ranked_benefits[1], connected naturally, usually as "to [benefit 1] and [benefit 2]". Keep each benefit in the avatar's everyday words, phrased as an outcome they feel or see. If avatar.ranked_benefits is empty or has fewer than 2 entries (older research), derive the two most central outcomes from avatar.first_symptoms (as relief of those symptoms) and avatar.deeper_desire — but never invent a benefit the JSON does not support.
+4. [TIMEFRAME] — "in less than X [unit]". Unit comes from product.results_unit and amount from product.results_amount — the smallest amount the advertorial itself credibly promises, and X is ALWAYS below 5. Never convert to a different unit than the advertorial promises (days stay days, weeks stay weeks, minutes stay minutes); if the fields are empty, default to "in less than 5 days".
+
+5. [CLOSING CLAUSE] — starts with "so you", chosen by classification.pain_type:
+- felt-pain → the most-hated recurring symptom moment, short and concrete, from avatar.symptom_moment: "so you never have to [wake up in pain / groan your way up the stairs] again."
+- shame-social → the avoided activity, from avatar.avoided_activities (pick the most social, most frequent one): "so you never have to avoid [conversations / sleeveless tops] again because of your [pain point as ONE surface noun from avatar.pain_point_own_word]."
+- desire → gain-framing, from avatar.deeper_desire: "so you [what they win, in their own words]."
+The moment or activity carries the emotion — never adjectives, never melodrama, never invented scenes. It must be something the avatar would literally say to a friend.
 
 HARD RULES
-- ONE sentence, maximum 20 words. Count before you answer; if it runs over, shorten the benefits, never drop the timeframe.
-- No colons, no dashes, no exclamation marks, no "without ..." constructions — the sentence flows like spoken language.
-- Use product.name exactly as it stands (respect the ™ if name_with_tm is the convention elsewhere on the page: use product.name here, plain).
+- ONE flowing sentence, maximum 28 words. Count before you answer; if it runs over, tighten elements 2 and 5, never drop the timeframe or the location.
+- No colons, no exclamation marks. Em-dashes only when element 2 needs a short mechanism aside ("— and holds it there —").
+- The headline may only claim what the advertorial already taught: same villain, same mechanism, same or smaller timeframe. If headline and advertorial contradict each other, the reader stops believing both.
 
-Example:
-AlphaCleanse flushes fatty liver in 6 days to reduce bloating and give you all-day energy.
+Examples (this exact winning pattern):
+Magnesium Freeze™ removes toxic inflammatory deposits around the knee joint in less than 5 days, so you never have to wake up in pain again.
+EsoraDrops™ restores the pepsin-damaged lining around the vocal cords in less than 5 days, so you never have to avoid conversations again because of your voice loss.
+LubriSense™ sends blood flow straight to the dormant nerve endings of the clitoris in less than 5 minutes, so you finally enjoy intimacy as intensely as he does.
 
 Give me only the output I ask for, no explanation or clarification with it.`,
   },
@@ -1325,7 +1345,7 @@ async function runStep(store, step, taskId) {
     const langName = LANGUAGES[task?.marketCountry || ""];
     if (!langName) throw new Error(`Set Market Country on the task first (${Object.keys(LANGUAGES).join(", ")}) — needed for the translation`);
     const prompt = translatePrompt(langName, task.marketCountry, flatCells(store));
-    const text = await callClaude({ prompt, maxTokens: 12000, timeoutMs: 280000 });
+    const text = await callClaude({ prompt, maxTokens: 12000, timeoutMs: 280000, model: TRANSLATE_MODEL });
     const obj = parseJsonLoose(text);
     const clean = {};
     for (const row of SHEET_ROWS) {
