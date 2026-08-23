@@ -304,7 +304,7 @@ export default async function handler(req, res) {
     const graphicDesigners = activeUsers.filter((u) => (u.roles || []).includes("Graphic Designer")).map((u) => ({ name: u.name, email: u.email }));
     const adminUser = activeUsers.find((u) => (u.email || "").toLowerCase() === ADMIN_EMAIL) || { name: "Niels Leysen", email: ADMIN_EMAIL };
 
-    const FIELDS = ["productName", "product", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "gender", "ageRange", "alibabaLink", "funnelishLink", "firstCreativeBatch", "readyForAI", "aiCopy", "productPackshot", "source"];
+    const FIELDS = ["productName", "product", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "gender", "ageRange", "alibabaLink", "funnelishLink", "finalCampaignLink", "firstCreativeBatch", "readyForAI", "aiCopy", "productPackshot", "source"];
 
     /* --- create --- */
     if (action === "create") {
@@ -326,6 +326,7 @@ export default async function handler(req, res) {
         gender: "",
         ageRange: "",
         alibabaLink: "",
+        finalCampaignLink: "",
         funnelishLink: "",
         firstCreativeBatch: "",
         readyForAI: "NO",
