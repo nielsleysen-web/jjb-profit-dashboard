@@ -73,12 +73,11 @@ const btnGhost = {
 };
 
 const STATUSES = ["Task Start", "AI Translation", "Ready For Build", "In Production", "QA Check", "First Creative Batch", "Ready to launch", "Launched"];
-// Board toont t/m First Creative Batch — Ready to launch zit bij Media Buying, Launched bij het Launched-tabblad
-// First Creative Batch is de "wachtkamer": de funnel builder schuift de taak hierheen na
-// goedkeuring van de funnel -> automatisch een Graphic Designer-taak in "Ready To Work".
-// Zodra de designer begint (GD-taak naar In Production) springt de launch-taak automatisch
-// naar "Ready to launch" en verdwijnt hij van dit board.
-const BOARD_STATUSES = STATUSES.slice(0, 6);
+// Board toont t/m QA Check. Zodra de funnel builder de taak naar "First Creative Batch"
+// schuift is de pipeline-fase klaar: er wordt automatisch een Graphic Designer-taak
+// aangemaakt in "Ready To Work" en de kaart verdwijnt van dit board (hij leeft verder
+// via Graphic Designer -> Ready to launch -> Launched).
+const BOARD_STATUSES = STATUSES.slice(0, 5);
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
 const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
@@ -275,7 +274,7 @@ export default function ProductLaunching() {
         <div>
           <h1 style={{ margin: 0, fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>🚀 Product Pipeline</h1>
           <p style={{ margin: "3px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-            Product Launching Department — {filtered.filter((t) => t.status !== "Launched").length} active tasks{hasFilters ? " (filtered)" : ""}
+            Product Launching Department — {filtered.filter((t) => BOARD_STATUSES.includes(t.status)).length} active tasks{hasFilters ? " (filtered)" : ""}
           </p>
         </div>
         {me?.canEdit && (
@@ -1798,8 +1797,11 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
                 </Field>
               </div>
               <div style={{ marginTop: "8px" }}>
-                <Field label="Alibaba Link" last>
+                <Field label="Alibaba Link">
                   <TextField value={t.alibabaLink} disabled={!canEdit} onSave={(v) => save("alibabaLink", v)} type="url" placeholder="https://…" />
+                </Field>
+                <Field label="Final Campaign Link" last>
+                  <TextField value={t.finalCampaignLink} disabled={!canEdit} onSave={(v) => save("finalCampaignLink", v)} type="url" placeholder="https://… (live campaign)" />
                 </Field>
               </div>
             </Section>
