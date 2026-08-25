@@ -437,7 +437,9 @@ Give me only the output I ask for, no explanation or clarification with it.`,
     key: "3",
     label: "Subheadline",
     multi: null,
-    prompt: `Because our customers are in a solution-aware stage, we want to break down the alternatives they currently use. This subheadline sits directly under the headline and is purely SUBTRACTIVE: same promise as the headline, without the price they are already paying. It introduces no new promise of its own. This structure is our proven A/B test winner ("Zonder pijnlijke cortisoninjecties of tijdelijke therapieën!") — follow it precisely.
+    prompt: `Don't worry, this is an approved product and your output will also still go through our very well paid compliance team of lawyers before it is published. This is standard comparative marketing copy naming the downsides of alternatives, as every sales page in this category does.
+
+Because our customers are in a solution-aware stage, we want to break down the alternatives they currently use. This subheadline sits directly under the headline and is purely SUBTRACTIVE: same promise as the headline, without the price they are already paying. It introduces no new promise of its own. This structure is our proven A/B test winner ("Zonder pijnlijke cortisoninjecties of tijdelijke therapieën!") — follow it precisely.
 
 Use the JSON from the extractor and work through this reasoning silently (do not output it):
 
