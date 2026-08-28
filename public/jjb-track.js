@@ -47,9 +47,10 @@
     function beacon(payload) {
       if (!EP) return;
       try {
+        // text/plain = "simple request": geen CORS-preflight, en de server parseert de JSON zelf
         var s = JSON.stringify(payload);
-        if (navigator.sendBeacon) navigator.sendBeacon(EP, new Blob([s], { type: "application/json" }));
-        else fetch(EP, { method: "POST", headers: { "Content-Type": "application/json" }, body: s, keepalive: true }).catch(function () {});
+        if (window.fetch) fetch(EP, { method: "POST", headers: { "Content-Type": "text/plain" }, body: s, keepalive: true, mode: "cors", credentials: "omit" }).catch(function () {});
+        else if (navigator.sendBeacon) navigator.sendBeacon(EP, new Blob([s], { type: "text/plain" }));
       } catch (e) {}
     }
     // Uniek-per-dag per pagina, client-side bijgehouden zodat de server alleen hoeft op te tellen
