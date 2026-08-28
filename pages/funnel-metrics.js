@@ -46,6 +46,48 @@ const PRESETS = [
   { key: "custom", label: "Custom period" },
 ];
 
+/* Trendgrafiek in de stijl van het P&L-dashboard: uniques (blauw, vlak eronder)
+   en omzet (groen, gestippeld, eigen schaal rechts) per dag over de gekozen periode */
+function TrendChart({ series }) {
+  if (!series || series.length === 0) return null;
+  const W = 720, H = 170, P = { l: 40, r: 48, t: 14, b: 24 };
+  const maxU = Math.max(1, ...series.map((s) => s.u));
+  const maxR = Math.max(1, ...series.map((s) => s.r));
+  const x = (i) => (series.length === 1 ? W / 2 : P.l + (i * (W - P.l - P.r)) / (series.length - 1));
+  const yU = (v) => H - P.b - (v / maxU) * (H - P.t - P.b);
+  const yR = (v) => H - P.b - (v / maxR) * (H - P.t - P.b);
+  const path = (fn, k) => series.map((s, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${fn(s[k]).toFixed(1)}`).join(" ");
+  const area = `${path(yU, "u")} L${x(series.length - 1).toFixed(1)},${H - P.b} L${x(0).toFixed(1)},${H - P.b} Z`;
+  const mid = Math.floor(series.length / 2);
+  const short = (d) => d.slice(5); // MM-DD
+  return (
+    <div style={{ marginBottom: "18px" }}>
+      <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "6px", fontSize: "11.5px", color: "#64748b", fontWeight: 600 }}>
+        <span><span style={{ display: "inline-block", width: "18px", height: "3px", background: "#2563eb", borderRadius: "2px", verticalAlign: "middle", marginRight: "6px" }} />Unique visitors</span>
+        <span><span style={{ display: "inline-block", width: "18px", height: "0", borderTop: "3px dashed #16a34a", verticalAlign: "middle", marginRight: "6px" }} />Revenue</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {[0.25, 0.5, 0.75, 1].map((f) => (
+          <line key={f} x1={P.l} x2={W - P.r} y1={H - P.b - f * (H - P.t - P.b)} y2={H - P.b - f * (H - P.t - P.b)} stroke="#eef0f3" strokeWidth="1" />
+        ))}
+        <line x1={P.l} x2={W - P.r} y1={H - P.b} y2={H - P.b} stroke="#e2e6ec" strokeWidth="1" />
+        <path d={area} fill="rgba(37,99,235,0.07)" />
+        <path d={path(yU, "u")} fill="none" stroke="#2563eb" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={path(yR, "r")} fill="none" stroke="#16a34a" strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" />
+        {series.map((s, i) => (
+          <circle key={i} cx={x(i)} cy={yU(s.u)} r={series.length > 40 ? 1.6 : 2.6} fill="#2563eb" />
+        ))}
+        <text x={P.l - 6} y={P.t + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{maxU.toLocaleString()}</text>
+        <text x={P.l - 6} y={H - P.b} textAnchor="end" fontSize="10" fill="#94a3b8">0</text>
+        <text x={W - P.r + 6} y={P.t + 4} textAnchor="start" fontSize="10" fill="#16a34a">€{Math.round(maxR)}</text>
+        <text x={x(0)} y={H - 8} textAnchor="start" fontSize="10" fill="#94a3b8">{short(series[0].d)}</text>
+        {series.length > 2 && <text x={x(mid)} y={H - 8} textAnchor="middle" fontSize="10" fill="#94a3b8">{short(series[mid].d)}</text>}
+        {series.length > 1 && <text x={x(series.length - 1)} y={H - 8} textAnchor="end" fontSize="10" fill="#94a3b8">{short(series[series.length - 1].d)}</text>}
+      </svg>
+    </div>
+  );
+}
+
 function Kpi({ label, value, accent }) {
   return (
     <div style={{ flex: "1 1 130px", minWidth: "130px", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "12px", padding: "14px 16px" }}>
@@ -97,7 +139,7 @@ export default function FunnelMetrics() {
   const [range, setRange] = useState(presetRange("7d"));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null); // host van de open funnel
+  const [selected, setSelected] = useState(null); // key van de open funnel (host/segment)
 
   useEffect(() => {
     if (preset !== "custom") setRange(presetRange(preset));
@@ -115,7 +157,7 @@ export default function FunnelMetrics() {
   }, [range.from, range.to]);
 
   const funnels = data?.funnels || [];
-  const current = selected ? funnels.find((f) => f.host === selected) : null;
+  const current = selected ? funnels.find((f) => f.key === selected) : null;
 
   const dateInput = { padding: "7px 10px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12.5px", fontFamily: "inherit", color: "#334155", background: "#fff" };
 
@@ -165,7 +207,8 @@ export default function FunnelMetrics() {
           <button onClick={() => setSelected(null)} style={{ border: "1px solid #e2e6ec", background: "#fff", borderRadius: "9px", padding: "7px 14px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "#334155", marginBottom: "14px" }}>
             ← All funnels
           </button>
-          <h2 style={{ margin: "0 0 14px 0", fontSize: "17px", fontWeight: 800 }}>{current.host}</h2>
+          <h2 style={{ margin: "0 0 14px 0", fontSize: "17px", fontWeight: 800 }}>{current.key}</h2>
+          <TrendChart series={current.series} />
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "18px" }}>
             <Kpi label="Revenue" value={fmtEur(current.revenue)} accent="#166534" />
             <Kpi label="Orders" value={current.orders.toLocaleString()} />
@@ -199,11 +242,11 @@ export default function FunnelMetrics() {
               </thead>
               <tbody>
                 {funnels.map((f) => (
-                  <tr key={f.host} onClick={() => setSelected(f.host)} style={{ cursor: "pointer" }}
+                  <tr key={f.key} onClick={() => setSelected(f.key)} style={{ cursor: "pointer" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "")}
                   >
-                    <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", fontWeight: 700 }}>{f.host}</td>
+                    <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", fontWeight: 700 }}>{f.key}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontWeight: 700 }}>{f.totalUniques.toLocaleString()}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", textAlign: "right", color: "#64748b" }}>{f.steps.reduce((s, x) => s + x.pv, 0).toLocaleString()}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", textAlign: "right" }}>{f.checkoutClicks.toLocaleString()}</td>
