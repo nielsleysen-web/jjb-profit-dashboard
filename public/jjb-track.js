@@ -33,8 +33,39 @@
     if (fbp) data.fbp = decodeURIComponent(fbp[1]);
     if (!data.vid) data.vid = "jjb." + Date.now().toString(36) + "." + Math.random().toString(36).slice(2, 10);
     if (!data.first_touch) data.first_touch = new Date().toISOString();
+    if (!data.host) data.host = location.host; // first-touch funnel-domein → jjb_host op de order
     data.last_url = location.href.slice(0, 500);
     try { localStorage.setItem(LS, JSON.stringify(data)); } catch (e) {}
+
+    /* ---- Funnel Metrics beacons (pageview + checkout-klik) ----
+       Endpoint wordt afgeleid uit de src van dit script zelf. */
+    var EP = "";
+    try {
+      var cs = document.currentScript && document.currentScript.src;
+      if (cs) EP = new URL(cs).origin + "/api/track";
+    } catch (e) {}
+    function beacon(payload) {
+      if (!EP) return;
+      try {
+        var s = JSON.stringify(payload);
+        if (navigator.sendBeacon) navigator.sendBeacon(EP, new Blob([s], { type: "application/json" }));
+        else fetch(EP, { method: "POST", headers: { "Content-Type": "application/json" }, body: s, keepalive: true }).catch(function () {});
+      } catch (e) {}
+    }
+    // Uniek-per-dag per pagina, client-side bijgehouden zodat de server alleen hoeft op te tellen
+    function firstToday(kind, path) {
+      try {
+        var today = new Date().toISOString().slice(0, 10);
+        var seen = JSON.parse(localStorage.getItem("jjb_seen") || "{}");
+        if (seen.d !== today) seen = { d: today, k: {} };
+        var key = kind + ":" + path;
+        if (seen.k[key]) return 0;
+        seen.k[key] = 1;
+        localStorage.setItem("jjb_seen", JSON.stringify(seen));
+        return 1;
+      } catch (e) { return 0; }
+    }
+    beacon({ t: "pv", h: location.host, p: location.pathname, u: firstToday("pv", location.pathname) });
 
     function decorate(a) {
       var href = a.getAttribute("href");
@@ -44,7 +75,7 @@
       if (!/^https?:$/.test(url.protocol)) return;
       if (/\/cart\//.test(url.pathname) || /\/checkouts?\//.test(url.pathname)) {
         // Shopify cart-permalink → alles als order attributes meesturen
-        var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch"];
+        var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch", "host"];
         attrs.forEach(function (k) {
           if (data[k]) url.searchParams.set("attributes[jjb_" + k + "]", data[k]);
         });
@@ -58,14 +89,18 @@
     }
 
     // Bij klik decoreren (vangt ook links die later door JS zijn toegevoegd)
-    document.addEventListener("click", function (e) {
+    // + checkout-klik beacon voor de Funnel Metrics (waar in de funnel verliezen we mensen)
+    function onTap(e) {
       var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
-      if (a) decorate(a);
-    }, true);
-    document.addEventListener("touchstart", function (e) {
-      var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
-      if (a) decorate(a);
-    }, true);
+      if (!a) return;
+      decorate(a);
+      var href = a.getAttribute("href") || "";
+      if (/\/cart\/|\/checkouts?\//.test(href)) {
+        beacon({ t: "cc", h: location.host, p: location.pathname, u: firstToday("cc", location.pathname) });
+      }
+    }
+    document.addEventListener("click", onTap, true);
+    document.addEventListener("touchstart", onTap, true);
     // En alvast bij het laden
     function all() {
       try { document.querySelectorAll("a[href]").forEach(decorate); } catch (e) {}
