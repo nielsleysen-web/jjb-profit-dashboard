@@ -290,6 +290,7 @@ async function runScan(force) {
         fbp: attrs.fbp || "",
         vid: attrs.vid || "",
         host: (attrs.host || "").toLowerCase(), // first-touch funnel-domein → Funnel Metrics
+        path: (attrs.path || "").toLowerCase(), // first-touch padsegment (funnel op dat domein)
       };
       store.orders[order.name] = entry;
       if (entry.adId || entry.fbclid || entry.fbc) result.attributed++;
