@@ -1876,6 +1876,27 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
               )}
             </Section>
 
+            {/* ===== Sectie: Creatives (alleen voor swipes) — top 5 competitor creatives,
+                 gaan automatisch mee naar de First Creative Batch design-taak ===== */}
+            {t.source === "Swipe" && (
+              <Section title="🎬 Creatives">
+                <p style={{ margin: "0 0 10px 0", fontSize: "12px", color: "#8a92a3" }}>
+                  Top 5 competitor creatives of this swipe — these are handed over automatically to the First Creative Batch design task.
+                </p>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Field key={n} label={`Top competitor creative ${n}`} last={n === 5}>
+                    <TextField
+                      value={t[`topCompetitorCreative${n}`]}
+                      disabled={!canEdit}
+                      onSave={(v) => save(`topCompetitorCreative${n}`, v)}
+                      type="url"
+                      placeholder="Link to the swiped competitor creative — https://…"
+                    />
+                  </Field>
+                ))}
+              </Section>
+            )}
+
             {/* ===== Sectie: Sales Page Copy pipeline ===== */}
             <SalesCopyPanel t={t} canEdit={canEdit} isAdmin={!!me?.admin} save={save} selectStyle={selectStyle} csvName={naming || t.productName || "sales-copy"} post={post} />
 
