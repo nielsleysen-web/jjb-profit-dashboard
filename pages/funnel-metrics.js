@@ -240,7 +240,15 @@ export default function FunnelMetrics() {
             <button onClick={() => setSelected(null)} style={{ border: "1px solid #e2e6ec", background: "#fff", borderRadius: "9px", padding: "7px 14px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "#334155" }}>
               ← All funnels
             </button>
-            <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 800 }}>{current.key}</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+              {current.product?.image && (
+                <img src={current.product.image} alt="" style={{ width: "42px", height: "42px", borderRadius: "10px", objectFit: "cover", border: "1px solid #eceef2" }} />
+              )}
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 800 }}>{current.product?.title || current.key}</h2>
+                {current.product?.title && <div style={{ fontSize: "11.5px", color: "#94a3b8" }}>{current.key}</div>}
+              </div>
+            </div>
           </div>
 
           <div style={{ marginBottom: "14px" }}>
@@ -286,7 +294,19 @@ export default function FunnelMetrics() {
                     onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "")}
                   >
-                    <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", fontWeight: 700 }}>{f.key}</td>
+                    <td style={{ padding: "10px 16px", borderBottom: "1px solid #f4f5f7" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
+                        {f.product?.image ? (
+                          <img src={f.product.image} alt="" style={{ width: "38px", height: "38px", borderRadius: "9px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: "38px", height: "38px", borderRadius: "9px", background: "#f1f5f9", flexShrink: 0 }} />
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.product?.title || f.key}</div>
+                          {f.product?.title && <div style={{ fontSize: "11px", color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.key}</div>}
+                        </div>
+                      </div>
+                    </td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontWeight: 700 }}>{f.totalUniques.toLocaleString()}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", textAlign: "right", color: "#64748b" }}>{f.steps.reduce((s, x) => s + x.pv, 0).toLocaleString()}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid #f4f5f7", textAlign: "right" }}>{f.checkoutClicks.toLocaleString()}</td>
