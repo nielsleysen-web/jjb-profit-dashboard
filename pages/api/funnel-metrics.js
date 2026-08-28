@@ -85,10 +85,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, configured: false, funnels: [], noHostOrders: 0, noHostRevenue: 0 });
     }
 
-    const days = Math.min(90, Math.max(1, parseInt(req.query.days || "7", 10) || 7));
+    // Periode: ?from=YYYY-MM-DD&to=YYYY-MM-DD (vrije range), of ?days=N (laatste N dagen)
+    const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+    const today = new Date().toISOString().slice(0, 10);
+    let from = isDate(req.query.from) ? req.query.from : null;
+    let to = isDate(req.query.to) ? req.query.to : null;
+    if (!from || !to) {
+      const days = Math.min(92, Math.max(1, parseInt(req.query.days || "7", 10) || 7));
+      to = today;
+      from = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+    }
+    if (from > to) { const t = from; from = to; to = t; }
+    if (to > today) to = today;
+    // Range begrenzen op 92 dagen (retentie van de tellers is 90 dagen)
+    const fromMsRaw = Date.parse(`${from}T00:00:00Z`);
+    const toMsRaw = Date.parse(`${to}T00:00:00Z`);
+    if ((toMsRaw - fromMsRaw) / 86400000 > 91) from = new Date(toMsRaw - 91 * 86400000).toISOString().slice(0, 10);
     const dates = [];
-    for (let i = 0; i < days; i++) {
-      dates.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    for (let ms = Date.parse(`${to}T00:00:00Z`); ms >= Date.parse(`${from}T00:00:00Z`); ms -= 86400000) {
+      dates.push(new Date(ms).toISOString().slice(0, 10));
     }
 
     // 1. Hosts per dag
@@ -135,11 +150,14 @@ export default async function handler(req, res) {
 
     // 4. Orders per funnel-host uit de attribution-store (jjb_host op de order)
     const store = (await readData("attribution")) || { orders: {} };
-    const sinceMs = Date.now() - days * 86400000;
+    const sinceMs = Date.parse(`${from}T00:00:00Z`);
+    const untilMs = Date.parse(`${to}T23:59:59.999Z`);
     const ordersByHost = {};
     let noHostOrders = 0, noHostRevenue = 0;
     for (const o of Object.values(store.orders || {})) {
-      if (!o.at || new Date(o.at).getTime() < sinceMs) continue;
+      if (!o.at) continue;
+      const t = new Date(o.at).getTime();
+      if (t < sinceMs || t > untilMs) continue;
       const h = (o.host || "").toLowerCase();
       if (h) {
         ordersByHost[h] = ordersByHost[h] || { orders: 0, revenue: 0 };
@@ -167,7 +185,7 @@ export default async function handler(req, res) {
       };
     }).sort((a, b) => b.totalUniques - a.totalUniques);
 
-    return res.status(200).json({ success: true, configured: true, days, funnels, noHostOrders, noHostRevenue: Math.round(noHostRevenue * 100) / 100 });
+    return res.status(200).json({ success: true, configured: true, from, to, funnels, noHostOrders, noHostRevenue: Math.round(noHostRevenue * 100) / 100 });
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
