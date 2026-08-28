@@ -142,13 +142,21 @@ export default async function handler(req, res) {
       values.push(...(out[0]?.result || []));
     }
 
-    // Sommeren over de datumrange: host → pad → {pv, pvu, cc, ccu}
-    const agg = {};
+    // Groeperen per FUNNEL: host + eerste padsegment (try.getjustjenny.com/lubrisense),
+    // met per funnel ook een dagreeks voor de trendgrafiek
+    const keyOf = (h, p) => { const s = (p.split("/")[1] || "").toLowerCase(); return s ? `${h}/${s}` : h; };
+    const fun = {}; // key → { host, paths: {pad: tellers}, days: {datum: {u, pv, cc}} }
     triples.forEach(([d, h, p], i) => {
-      const bucket = ((agg[h] = agg[h] || {})[p] = agg[h][p] || { pv: 0, pvu: 0, cc: 0, ccu: 0 });
+      const key = keyOf(h, p);
+      const f = (fun[key] = fun[key] || { host: h, paths: {}, days: {} });
+      const bucket = (f.paths[p] = f.paths[p] || { pv: 0, pvu: 0, cc: 0, ccu: 0 });
+      const day = (f.days[d] = f.days[d] || { u: 0, pv: 0, cc: 0 });
       KEYS.forEach((k, j) => {
         const v = parseInt(values[i * 4 + j] || "0", 10) || 0;
         bucket[k] += v;
+        if (k === "pvu") day.u += v;
+        if (k === "pv") day.pv += v;
+        if (k === "ccu") day.cc += v;
       });
     });
 
@@ -156,38 +164,54 @@ export default async function handler(req, res) {
     const store = (await readData("attribution")) || { orders: {} };
     const sinceMs = Date.parse(`${from}T00:00:00Z`);
     const untilMs = Date.parse(`${to}T23:59:59.999Z`);
-    const ordersByHost = {};
+    // Orders per funnel-key (jjb_host + jjb_path op de order); oudere orders zonder
+    // padsegment vallen terug op de host-root-rij van dat domein
+    const ordersBy = {}; // key → { orders, revenue, days: {datum: {o, r}} }
     let noHostOrders = 0, noHostRevenue = 0;
     for (const o of Object.values(store.orders || {})) {
       if (!o.at) continue;
       const t = new Date(o.at).getTime();
       if (t < sinceMs || t > untilMs) continue;
       const h = (o.host || "").toLowerCase();
-      if (h) {
-        ordersByHost[h] = ordersByHost[h] || { orders: 0, revenue: 0 };
-        ordersByHost[h].orders += 1;
-        ordersByHost[h].revenue += o.value || 0;
-      } else {
-        noHostOrders += 1;
-        noHostRevenue += o.value || 0;
-      }
+      if (!h) { noHostOrders += 1; noHostRevenue += o.value || 0; continue; }
+      const key = o.path ? `${h}/${String(o.path).toLowerCase()}` : h;
+      const tgt = (ordersBy[key] = ordersBy[key] || { orders: 0, revenue: 0, days: {} });
+      tgt.orders += 1;
+      tgt.revenue += o.value || 0;
+      const d = (o.at || "").slice(0, 10);
+      const dd = (tgt.days[d] = tgt.days[d] || { o: 0, r: 0 });
+      dd.o += 1;
+      dd.r += o.value || 0;
     }
-    Object.keys(ordersByHost).forEach((h) => allHosts.add(h));
 
-    // 5. Response: per host de stappen gesorteerd op unieke bezoekers (natuurlijke funnelvolgorde)
-    const funnels = [...allHosts].map((h) => {
-      const steps = Object.entries(agg[h] || {})
+    // 5. Response: per funnel de stappen (gesorteerd op uniques) + dagreeks voor de grafiek
+    const datesAsc = [...dates].reverse();
+    const allKeys = new Set([...Object.keys(fun), ...Object.keys(ordersBy)]);
+    const funnels = [...allKeys].map((key) => {
+      const f = fun[key];
+      const ob = ordersBy[key];
+      const steps = Object.entries(f?.paths || {})
         .map(([path, m]) => ({ path, ...m }))
         .sort((a, b) => b.pvu - a.pvu || b.pv - a.pv);
+      const series = datesAsc.map((d) => ({
+        d,
+        u: f?.days?.[d]?.u || 0,
+        pv: f?.days?.[d]?.pv || 0,
+        cc: f?.days?.[d]?.cc || 0,
+        o: ob?.days?.[d]?.o || 0,
+        r: Math.round((ob?.days?.[d]?.r || 0) * 100) / 100,
+      }));
       return {
-        host: h,
+        key,
+        host: f?.host || key.split("/")[0],
         steps,
+        series,
         totalUniques: steps.length ? steps[0].pvu : 0,
         checkoutClicks: steps.reduce((s, x) => s + x.ccu, 0),
-        orders: ordersByHost[h]?.orders || 0,
-        revenue: Math.round((ordersByHost[h]?.revenue || 0) * 100) / 100,
+        orders: ob?.orders || 0,
+        revenue: Math.round((ob?.revenue || 0) * 100) / 100,
       };
-    }).sort((a, b) => b.totalUniques - a.totalUniques);
+    }).sort((a, b) => b.totalUniques - a.totalUniques || b.revenue - a.revenue);
 
     return res.status(200).json({ success: true, configured: true, from, to, funnels, noHostOrders, noHostRevenue: Math.round(noHostRevenue * 100) / 100 });
   } catch (e) {
