@@ -68,6 +68,7 @@ const DESIGN_FIELDS = [
   { key: "assigneeName", label: "Graphic Designer" },
   { key: "deadline", label: "Deadline" },
   { key: "advertorialLink", label: "Advertorial", type: "url" },
+  { key: "funnelWorkspaceLink", label: "Funnel Workspace", type: "url" },
   { key: "referenceAd", label: "Reference Ad", type: "url" },
   { key: "topCompetitorCreative1", label: "Competitor creative 1", type: "url" },
   { key: "topCompetitorCreative2", label: "Competitor creative 2", type: "url" },
@@ -376,6 +377,34 @@ export default function Launched() {
                   </>
                 );
               })()}
+
+              {kind === "design" && (task.sourceLaunchTaskId || task.funnelWorkspaceLink) && (
+                <div style={{ marginTop: "12px" }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const r = await fetch("/api/design-tasks", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "funnelInfo", taskId: task.id }),
+                        });
+                        const d = await r.json();
+                        if (d?.researchJson) {
+                          const blob = new Blob([JSON.stringify(d.researchJson, null, 2)], { type: "application/json" });
+                          const a = document.createElement("a");
+                          a.href = URL.createObjectURL(blob);
+                          a.download = `${task.product?.title || "research"} - research.json`;
+                          a.click();
+                          URL.revokeObjectURL(a.href);
+                        } else alert("No research JSON found for this funnel");
+                      } catch { alert("Could not load the research JSON — try again"); }
+                    }}
+                    style={{ fontSize: "12px", fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "8px 14px", cursor: "pointer", fontFamily: "inherit" }}
+                  >
+                    ⬇ Research JSON
+                  </button>
+                </div>
+              )}
 
               {kind === "funnel" && (
                 <div style={{ marginTop: "14px", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "12px 14px" }}>
