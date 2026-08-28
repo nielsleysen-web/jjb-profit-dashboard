@@ -164,6 +164,28 @@ export default async function handler(req, res) {
     const store = (await readData("attribution")) || { orders: {} };
     const sinceMs = Date.parse(`${from}T00:00:00Z`);
     const untilMs = Date.parse(`${to}T23:59:59.999Z`);
+    // Product (naam + foto) per funnel-key, gematcht via de links op de funnel-taken in het CRM
+    const keyFromUrl = (u) => {
+      try {
+        const url = new URL(u);
+        const s = (url.pathname.split("/")[1] || "").toLowerCase();
+        return s ? `${url.host.toLowerCase()}/${s}` : url.host.toLowerCase();
+      } catch { return null; }
+    };
+    let productByKey = {};
+    try {
+      const launchStore = (await readData("launch-tasks")) || { tasks: [] };
+      for (const t of launchStore.tasks || []) {
+        const prod = { title: t.productName || t.product?.title || "", image: t.product?.image || "" };
+        if (!prod.title && !prod.image) continue;
+        for (const link of [t.advertorialLink, t.funnelishLink, t.finalCampaignLink]) {
+          if (!link) continue;
+          const k = keyFromUrl(link);
+          if (k && !productByKey[k]) productByKey[k] = prod;
+        }
+      }
+    } catch {}
+
     // Orders per funnel-key (jjb_host + jjb_path op de order); oudere orders zonder
     // padsegment vallen terug op de host-root-rij van dat domein
     const ordersBy = {}; // key → { orders, revenue, days: {datum: {o, r}} }
@@ -204,6 +226,7 @@ export default async function handler(req, res) {
       return {
         key,
         host: f?.host || key.split("/")[0],
+        product: productByKey[key] || null,
         steps,
         series,
         totalUniques: steps.length ? steps[0].pvu : 0,
