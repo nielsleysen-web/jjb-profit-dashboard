@@ -1,0 +1,174 @@
+// pages/api/funnel-metrics.js — Funnel Metrics overzicht
+// Leest de tellers uit Upstash Redis (pageviews, unieke bezoekers, checkout-kliks per
+// host+pad per dag) en legt er de Shopify-orders naast (via de attribution-store, waar
+// jjb_host op de order zegt uit welke funnel hij kwam).
+// GET ?days=7 → { funnels: [{ host, steps: [...], orders, revenue }], noHostOrders, noHostRevenue }
+
+import crypto from "crypto";
+import axios from "axios";
+
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
+const R_URL = process.env.UPSTASH_REDIS_REST_URL;
+const R_TOK = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+function getSession(req) {
+  const match = (req.headers.cookie || "").match(/(?:^|;\s*)jjb_session=([^;]+)/);
+  const sessionToken = match ? match[1] : null;
+  if (!sessionToken) return null;
+  const [body, sig] = sessionToken.split(".");
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac("sha256", SESSION_SECRET).update(body).digest("base64url");
+  if (sig !== expected) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!payload.exp || payload.exp < Date.now()) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/* ---- Shopify (voor de attribution-store met orders) ---- */
+let tokenCache = { token: null, expiresAt: 0 };
+async function getShopifyToken(storeUrl) {
+  if (tokenCache.token && Date.now() < tokenCache.expiresAt - 300000) return tokenCache.token;
+  const params = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: process.env.SHOPIFY_CLIENT_ID,
+    client_secret: process.env.SHOPIFY_CLIENT_SECRET,
+  });
+  const response = await axios.post(`https://${storeUrl}/admin/oauth/access_token`, params.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" }, timeout: 15000,
+  });
+  tokenCache = { token: response.data.access_token, expiresAt: Date.now() + (response.data.expires_in || 3600) * 1000 };
+  return tokenCache.token;
+}
+async function shopifyGraphql(query, variables) {
+  const storeUrl = process.env.SHOPIFY_STORE_URL;
+  const token = await getShopifyToken(storeUrl);
+  const response = await axios.post(
+    `https://${storeUrl}/admin/api/2025-01/graphql.json`,
+    { query, variables },
+    { headers: { "X-Shopify-Access-Token": token, "Content-Type": "application/json" }, timeout: 20000 }
+  );
+  if (response.data.errors) throw new Error(JSON.stringify(response.data.errors));
+  return response.data.data;
+}
+async function readData(handle) {
+  const data = await shopifyGraphql(
+    `query Get($handle: String!) { metaobjectByHandle(handle: { type: "jjb_dashboard_data", handle: $handle }) { field(key: "data") { value } } }`,
+    { handle }
+  );
+  const raw = data?.metaobjectByHandle?.field?.value;
+  try { return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+
+/* ---- Redis ---- */
+async function redisPipeline(cmds) {
+  if (!cmds.length) return [];
+  const r = await fetch(`${R_URL}/pipeline`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${R_TOK}`, "Content-Type": "application/json" },
+    body: JSON.stringify(cmds),
+  });
+  if (!r.ok) throw new Error(`Redis ${r.status}`);
+  return r.json(); // [{result: ...}, ...]
+}
+
+export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  try {
+    const session = getSession(req);
+    if (!session || !(session.finance || session.admin)) return res.status(401).json({ success: false, error: "No access" });
+    if (req.method !== "GET") return res.status(405).json({ success: false });
+    if (!R_URL || !R_TOK) {
+      return res.status(200).json({ success: true, configured: false, funnels: [], noHostOrders: 0, noHostRevenue: 0 });
+    }
+
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days || "7", 10) || 7));
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      dates.push(new Date(Date.now() - i * 86400000).toISOString().slice(0, 10));
+    }
+
+    // 1. Hosts per dag
+    const hostSets = await redisPipeline(dates.map((d) => ["SMEMBERS", `fmh:${d}`]));
+    const hostsByDate = {};
+    const allHosts = new Set();
+    dates.forEach((d, i) => {
+      const hs = hostSets[i]?.result || [];
+      hostsByDate[d] = hs;
+      hs.forEach((h) => allHosts.add(h));
+    });
+
+    // 2. Paden per (dag, host)
+    const pathCmds = [];
+    const pathIdx = [];
+    for (const d of dates) for (const h of hostsByDate[d]) { pathCmds.push(["SMEMBERS", `fmp:${d}:${h}`]); pathIdx.push([d, h]); }
+    const pathSets = await redisPipeline(pathCmds);
+    const triples = []; // [date, host, path]
+    pathSets.forEach((r, i) => {
+      const [d, h] = pathIdx[i];
+      for (const p of r?.result || []) triples.push([d, h, p]);
+    });
+
+    // 3. Tellers per (dag, host, pad) — 4 keys per triple, in chunks via MGET
+    const KEYS = ["pv", "pvu", "cc", "ccu"];
+    const flatKeys = [];
+    for (const [d, h, p] of triples) for (const k of KEYS) flatKeys.push(`fm:${d}:${h}:${p}:${k}`);
+    const values = [];
+    for (let i = 0; i < flatKeys.length; i += 400) {
+      const chunk = flatKeys.slice(i, i + 400);
+      const out = await redisPipeline([["MGET", ...chunk]]);
+      values.push(...(out[0]?.result || []));
+    }
+
+    // Sommeren over de datumrange: host → pad → {pv, pvu, cc, ccu}
+    const agg = {};
+    triples.forEach(([d, h, p], i) => {
+      const bucket = ((agg[h] = agg[h] || {})[p] = agg[h][p] || { pv: 0, pvu: 0, cc: 0, ccu: 0 });
+      KEYS.forEach((k, j) => {
+        const v = parseInt(values[i * 4 + j] || "0", 10) || 0;
+        bucket[k] += v;
+      });
+    });
+
+    // 4. Orders per funnel-host uit de attribution-store (jjb_host op de order)
+    const store = (await readData("attribution")) || { orders: {} };
+    const sinceMs = Date.now() - days * 86400000;
+    const ordersByHost = {};
+    let noHostOrders = 0, noHostRevenue = 0;
+    for (const o of Object.values(store.orders || {})) {
+      if (!o.at || new Date(o.at).getTime() < sinceMs) continue;
+      const h = (o.host || "").toLowerCase();
+      if (h) {
+        ordersByHost[h] = ordersByHost[h] || { orders: 0, revenue: 0 };
+        ordersByHost[h].orders += 1;
+        ordersByHost[h].revenue += o.value || 0;
+      } else {
+        noHostOrders += 1;
+        noHostRevenue += o.value || 0;
+      }
+    }
+    Object.keys(ordersByHost).forEach((h) => allHosts.add(h));
+
+    // 5. Response: per host de stappen gesorteerd op unieke bezoekers (natuurlijke funnelvolgorde)
+    const funnels = [...allHosts].map((h) => {
+      const steps = Object.entries(agg[h] || {})
+        .map(([path, m]) => ({ path, ...m }))
+        .sort((a, b) => b.pvu - a.pvu || b.pv - a.pv);
+      return {
+        host: h,
+        steps,
+        totalUniques: steps.length ? steps[0].pvu : 0,
+        checkoutClicks: steps.reduce((s, x) => s + x.ccu, 0),
+        orders: ordersByHost[h]?.orders || 0,
+        revenue: Math.round((ordersByHost[h]?.revenue || 0) * 100) / 100,
+      };
+    }).sort((a, b) => b.totalUniques - a.totalUniques);
+
+    return res.status(200).json({ success: true, configured: true, days, funnels, noHostOrders, noHostRevenue: Math.round(noHostRevenue * 100) / 100 });
+  } catch (e) {
+    return res.status(500).json({ success: false, error: e.message });
+  }
+}
