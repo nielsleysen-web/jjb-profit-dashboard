@@ -228,7 +228,14 @@ export default async function handler(req, res) {
     const canOutput = isAdmin || isCS || isGD;
 
     if (req.method === "GET") {
-      const [store, accounts] = await Promise.all([readData("design-tasks"), readData("accounts")]);
+      const [store, accounts, launchStore] = await Promise.all([readData("design-tasks"), readData("accounts"), readData("launch-tasks")]);
+      // Funnel Workspace Link van de gekoppelde launch-taak reist mee met elke design-taak,
+      // zodat hij op elk board zichtbaar blijft (designer → ready to launch → launched)
+      const ltById = new Map(((launchStore?.tasks) || []).map((x) => [x.id, x]));
+      const withFunnel = (t) => {
+        const lt = t.sourceLaunchTaskId ? ltById.get(t.sourceLaunchTaskId) : null;
+        return lt?.funnelWorkspaceLink && !t.funnelWorkspaceLink ? { ...t, funnelWorkspaceLink: lt.funnelWorkspaceLink } : t;
+      };
       const users = (accounts?.users || []).filter((u) => u.status === "active");
       // Creative strategists: rol CS + de admin zelf
       const creativeStrategists = users
@@ -240,7 +247,7 @@ export default async function handler(req, res) {
       const team = users.map((u) => ({ name: u.name, email: u.email }));
       return res.status(200).json({
         success: true,
-        tasks: viewTasks(store?.tasks || [], isAdmin),
+        tasks: viewTasks(store?.tasks || [], isAdmin).map(withFunnel),
         creativeStrategists,
         graphicDesigners,
         team,
