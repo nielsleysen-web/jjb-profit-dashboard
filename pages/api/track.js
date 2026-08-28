@@ -45,6 +45,8 @@ export default async function handler(req, res) {
     if (!h || !h.includes(".") || !p.startsWith("/")) return res.status(200).json({ ok: false });
     p = p.replace(/\/+$/, "") || "/";
     const u = b?.u ? 1 : 0;
+    const pg = String(b?.pg || "").replace(/[^\w-]/g, "").slice(0, 24); // Funnelish pageid = A/B-variant
+    const upg = b?.upg ? 1 : 0;
 
     const d = new Date().toISOString().slice(0, 10); // UTC-dag
     const base = `fm:${d}:${h}:${p}`;
@@ -59,6 +61,14 @@ export default async function handler(req, res) {
     if (u) {
       cmds.push(["INCR", `${base}:${t}u`]);
       cmds.push(["EXPIRE", `${base}:${t}u`, TTL]);
+    }
+    if (pg) {
+      const vbase = `fmv:${d}:${h}:${p}:${pg}`;
+      cmds.push(["INCR", `${vbase}:${t}`], ["EXPIRE", `${vbase}:${t}`, TTL]);
+      cmds.push(["SADD", `fmvs:${d}:${h}:${p}`, pg], ["EXPIRE", `fmvs:${d}:${h}:${p}`, TTL]);
+      if (upg) {
+        cmds.push(["INCR", `${vbase}:${t}u`], ["EXPIRE", `${vbase}:${t}u`, TTL]);
+      }
     }
     await redisPipeline(cmds);
     return res.status(200).json({ ok: true });
