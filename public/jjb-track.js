@@ -70,7 +70,13 @@
         return 1;
       } catch (e) { return 0; }
     }
-    beacon({ t: "pv", h: location.host, p: location.pathname, u: firstToday("pv", location.pathname) });
+    // Funnelish A/B-varianten: zelfde URL, andere pageid in de meta-tags → per variant tellen
+    var PG = "";
+    try {
+      var mpg = document.querySelector('meta[name="pageid"]');
+      if (mpg && mpg.content) PG = String(mpg.content).replace(/[^\w-]/g, "").slice(0, 24);
+    } catch (e) {}
+    beacon({ t: "pv", h: location.host, p: location.pathname, u: firstToday("pv", location.pathname), pg: PG, upg: PG ? firstToday("pv:" + PG, location.pathname) : 0 });
 
     function decorate(a) {
       var href = a.getAttribute("href");
@@ -101,7 +107,7 @@
       decorate(a);
       var href = a.getAttribute("href") || "";
       if (/\/cart\/|\/checkouts?\//.test(href)) {
-        beacon({ t: "cc", h: location.host, p: location.pathname, u: firstToday("cc", location.pathname) });
+        beacon({ t: "cc", h: location.host, p: location.pathname, u: firstToday("cc", location.pathname), pg: PG, upg: PG ? firstToday("cc:" + PG, location.pathname) : 0 });
       }
     }
     document.addEventListener("click", onTap, true);
