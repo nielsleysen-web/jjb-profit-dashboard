@@ -22,8 +22,12 @@ async function redisPipeline(cmds) {
 }
 
 export default async function handler(req, res) {
-  // CORS: de beacons komen van de funnel-domeinen (Funnelish), niet van het dashboard zelf
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // CORS: de beacons komen van de funnel-domeinen (Funnelish), niet van het dashboard zelf.
+  // Origin terugspiegelen i.p.v. "*": sendBeacon stuurt cookies mee en browsers weigeren
+  // een wildcard bij requests met credentials.
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Cache-Control", "no-store");
