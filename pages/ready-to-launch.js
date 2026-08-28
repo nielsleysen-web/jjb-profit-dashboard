@@ -39,6 +39,46 @@ function LinkChip({ label, url }) {
   );
 }
 
+/* Download-chip voor de research-JSON van de gekoppelde funnel-taak.
+   Haalt de JSON on demand op via de funnelInfo-actie van het design-tasks API. */
+function ResearchJsonChip({ taskId, productTitle }) {
+  const [busy, setBusy] = useState(false);
+  const dl = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/design-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "funnelInfo", taskId }),
+      });
+      const d = await r.json();
+      if (d?.researchJson) {
+        const blob = new Blob([JSON.stringify(d.researchJson, null, 2)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${productTitle || "research"} - research.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } else {
+        alert("No research JSON found for this funnel");
+      }
+    } catch {
+      alert("Could not load the research JSON — try again");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      onClick={dl}
+      disabled={busy}
+      style={{ fontSize: "12px", fontWeight: 700, color: "#3b82f6", background: "#eff6ff", padding: "5px 12px", borderRadius: "999px", border: "none", cursor: busy ? "default" : "pointer", fontFamily: "inherit", opacity: busy ? 0.6 : 1 }}
+    >
+      {busy ? "Loading…" : "⬇ Research JSON"}
+    </button>
+  );
+}
+
 function NamingBar({ naming, copied, onCopy }) {
   return (
     <div style={{ display: "flex", gap: "8px", alignItems: "center", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "10px", padding: "8px 12px", marginTop: "12px" }}>
@@ -187,10 +227,14 @@ export default function ReadyToLaunch() {
                     🚀 Mark as Launched
                   </button>
                 </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px" }}>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginTop: "12px", alignItems: "center" }}>
                   <LinkChip label="Final Output" url={t.finalOutputLink} />
                   <LinkChip label="Frame.io" url={t.frameioLink} />
                   <LinkChip label="Advertorial" url={t.advertorialLink} />
+                  <LinkChip label="Funnel Workspace" url={t.funnelWorkspaceLink} />
+                  {(t.sourceLaunchTaskId || t.funnelWorkspaceLink) && (
+                    <ResearchJsonChip taskId={t.id} productTitle={t.product?.title} />
+                  )}
                 </div>
                 <NamingBar naming={designNaming(t)} copied={copiedId === t.id} onCopy={() => copy(t.id, designNaming(t))} />
               </div>
