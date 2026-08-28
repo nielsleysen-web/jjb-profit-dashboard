@@ -148,8 +148,11 @@ function StepTable({ funnel }) {
           {steps.map((s, i) => {
             const prev = i > 0 ? steps[i - 1] : null;
             const drop = prev && prev.pvu > 0 ? 100 - (s.pvu / prev.pvu) * 100 : null;
-            // Winnaar van een A/B-test: hoogste checkout rate (bij gelijke stand: meeste checkout-kliks)
-            const rates = (s.variants || []).map((v) => (v.pvu > 0 ? v.ccu / v.pvu : 0));
+            // Winnaar van een A/B-test: hoogste order-conversie zodra er orders zijn,
+            // anders (nog) op checkout rate
+            const hasOrders = (s.variants || []).some((v) => v.orders > 0);
+            const score = (v) => (v.pvu > 0 ? (hasOrders ? v.orders / v.pvu : v.ccu / v.pvu) : 0);
+            const rates = (s.variants || []).map(score);
             const best = rates.length ? Math.max(...rates) : 0;
             return [
               <tr key={s.path}>
@@ -169,7 +172,7 @@ function StepTable({ funnel }) {
                 <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right" }}>{s.ccu > 0 ? pct(s.ccu, s.pvu) : "—"}</td>
               </tr>,
               ...(s.variants || []).map((v, vi) => {
-                const rate = v.pvu > 0 ? v.ccu / v.pvu : 0;
+                const rate = score(v);
                 const isBest = best > 0 && rate === best;
                 return (
                   <tr key={`${s.path}::${v.id}`} style={{ background: "#fbfcfe" }}>
@@ -180,9 +183,13 @@ function StepTable({ funnel }) {
                     <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#334155", fontWeight: 600 }}>{v.pvu.toLocaleString()}</td>
                     <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#8a92a3" }}>{v.pv.toLocaleString()}</td>
                     <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#8a92a3" }}>{s.pvu > 0 ? pct(v.pvu, s.pvu) : "—"}</td>
-                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7" }} />
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#334155", fontVariantNumeric: "tabular-nums" }}>
+                      {v.orders > 0 ? <>{v.orders.toLocaleString()} <span style={{ color: "#8a92a3" }}>ord</span> · <b style={{ color: "#166534" }}>{fmtEur(v.revenue)}</b></> : "—"}
+                    </td>
                     <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#334155" }}>{v.ccu > 0 ? v.ccu.toLocaleString() : "—"}</td>
-                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", fontWeight: isBest ? 700 : 400, color: isBest ? "#166534" : "#334155" }}>{v.pvu > 0 ? pct(v.ccu, v.pvu) : "—"}</td>
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", fontWeight: isBest ? 700 : 400, color: isBest ? "#166534" : "#334155" }}>
+                      {v.pvu > 0 ? (v.orders > 0 ? `${((v.orders / v.pvu) * 100).toFixed(1)}% CVR` : pct(v.ccu, v.pvu)) : "—"}
+                    </td>
                   </tr>
                 );
               }),
