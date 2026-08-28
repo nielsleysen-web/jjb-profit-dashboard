@@ -1,10 +1,11 @@
 // pages/funnel-metrics.js — Funnel Metrics
 // Overzicht: verticale tabel van alle funnels met traffic in de gekozen periode.
-// Klik op een funnel → detailscherm met KPI-tegels + de stappentabel (waar valt men af).
-// Periode: presets (Today / Yesterday / 7d / 30d / This month / Last month / 90d) of een
-// vrije van-tot-selectie. Databron: jjb-track beacons (Upstash) + Shopify-orders (jjb_host).
+// Klik op een funnel → detailscherm in Funnelish-stijl: per KPI een eigen vloeiende
+// lijngrafiek (Revenue groot, daaronder een raster met Orders, Conv. rate, AOV,
+// Unique visitors, Page views, Checkout clicks) + de stappentabel met drop-offs.
+// Periode: presets of vrije van-tot-selectie. Bron: jjb-track beacons + Shopify-orders.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const ui = {
   page: { padding: "28px 36px", background: "#f7f8fa", minHeight: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", color: "#0f172a" },
@@ -12,7 +13,9 @@ const ui = {
   label: { fontSize: "11px", fontWeight: 600, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.7px" },
 };
 
+const ACCENT = "#4f6df5"; // lijnkleur (één accent voor alle series, tekst blijft in inkt-kleuren)
 const fmtEur = (v) => `€ ${Number(v || 0).toLocaleString("nl-BE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtInt = (v) => Number(v || 0).toLocaleString();
 const pct = (num, den) => (den > 0 ? `${((num / den) * 100).toFixed(1)}%` : "—");
 const iso = (d) => d.toISOString().slice(0, 10);
 
@@ -46,53 +49,84 @@ const PRESETS = [
   { key: "custom", label: "Custom period" },
 ];
 
-/* Trendgrafiek in de stijl van het P&L-dashboard: uniques (blauw, vlak eronder)
-   en omzet (groen, gestippeld, eigen schaal rechts) per dag over de gekozen periode */
-function TrendChart({ series }) {
-  if (!series || series.length === 0) return null;
-  const W = 720, H = 170, P = { l: 40, r: 48, t: 14, b: 24 };
-  const maxU = Math.max(1, ...series.map((s) => s.u));
-  const maxR = Math.max(1, ...series.map((s) => s.r));
-  const x = (i) => (series.length === 1 ? W / 2 : P.l + (i * (W - P.l - P.r)) / (series.length - 1));
-  const yU = (v) => H - P.b - (v / maxU) * (H - P.t - P.b);
-  const yR = (v) => H - P.b - (v / maxR) * (H - P.t - P.b);
-  const path = (fn, k) => series.map((s, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${fn(s[k]).toFixed(1)}`).join(" ");
-  const area = `${path(yU, "u")} L${x(series.length - 1).toFixed(1)},${H - P.b} L${x(0).toFixed(1)},${H - P.b} Z`;
-  const mid = Math.floor(series.length / 2);
-  const short = (d) => d.slice(5); // MM-DD
-  return (
-    <div style={{ marginBottom: "18px" }}>
-      <div style={{ display: "flex", gap: "16px", alignItems: "center", marginBottom: "6px", fontSize: "11.5px", color: "#64748b", fontWeight: 600 }}>
-        <span><span style={{ display: "inline-block", width: "18px", height: "3px", background: "#2563eb", borderRadius: "2px", verticalAlign: "middle", marginRight: "6px" }} />Unique visitors</span>
-        <span><span style={{ display: "inline-block", width: "18px", height: "0", borderTop: "3px dashed #16a34a", verticalAlign: "middle", marginRight: "6px" }} />Revenue</span>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-        {[0.25, 0.5, 0.75, 1].map((f) => (
-          <line key={f} x1={P.l} x2={W - P.r} y1={H - P.b - f * (H - P.t - P.b)} y2={H - P.b - f * (H - P.t - P.b)} stroke="#eef0f3" strokeWidth="1" />
-        ))}
-        <line x1={P.l} x2={W - P.r} y1={H - P.b} y2={H - P.b} stroke="#e2e6ec" strokeWidth="1" />
-        <path d={area} fill="rgba(37,99,235,0.07)" />
-        <path d={path(yU, "u")} fill="none" stroke="#2563eb" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
-        <path d={path(yR, "r")} fill="none" stroke="#16a34a" strokeWidth="2" strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" />
-        {series.map((s, i) => (
-          <circle key={i} cx={x(i)} cy={yU(s.u)} r={series.length > 40 ? 1.6 : 2.6} fill="#2563eb" />
-        ))}
-        <text x={P.l - 6} y={P.t + 4} textAnchor="end" fontSize="10" fill="#94a3b8">{maxU.toLocaleString()}</text>
-        <text x={P.l - 6} y={H - P.b} textAnchor="end" fontSize="10" fill="#94a3b8">0</text>
-        <text x={W - P.r + 6} y={P.t + 4} textAnchor="start" fontSize="10" fill="#16a34a">€{Math.round(maxR)}</text>
-        <text x={x(0)} y={H - 8} textAnchor="start" fontSize="10" fill="#94a3b8">{short(series[0].d)}</text>
-        {series.length > 2 && <text x={x(mid)} y={H - 8} textAnchor="middle" fontSize="10" fill="#94a3b8">{short(series[mid].d)}</text>}
-        {series.length > 1 && <text x={x(series.length - 1)} y={H - 8} textAnchor="end" fontSize="10" fill="#94a3b8">{short(series[series.length - 1].d)}</text>}
-      </svg>
-    </div>
-  );
+/* Vloeiende curve (Catmull-Rom → bezier), met y-klem zodat de curve nooit onder
+   de basislijn of boven het plotgebied "doorschiet" voorbij de echte data */
+function smoothPath(pts, yTop, yBase) {
+  if (!pts.length) return "";
+  if (pts.length < 3) return pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const cl = (y) => Math.max(yTop, Math.min(yBase, y));
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
+    d += ` C${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)},${cl(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)},${cl(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
 }
 
-function Kpi({ label, value, accent }) {
+/* Eén KPI-kaart met vloeiende lijngrafiek, gradient-vulling, crosshair + tooltip */
+function MetricChart({ label, total, series, getV, format = fmtInt, big = false }) {
+  const [hi, setHi] = useState(null);
+  const boxRef = useRef(null);
+  const gid = useRef(`g${Math.random().toString(36).slice(2, 9)}`).current;
+  const W = 680, H = big ? 216 : 150, P = { l: 10, r: 10, t: 14, b: 20 };
+  const vals = series.map(getV);
+  const maxV = Math.max(1, ...vals);
+  const n = series.length;
+  const x = (i) => (n === 1 ? W / 2 : P.l + (i * (W - P.l - P.r)) / (n - 1));
+  const y = (v) => H - P.b - (v / maxV) * (H - P.t - P.b);
+  const pts = vals.map((v, i) => [x(i), y(v)]);
+  const line = smoothPath(pts, P.t, H - P.b);
+  const area = line ? `${line} L${x(n - 1).toFixed(1)},${(H - P.b).toFixed(1)} L${x(0).toFixed(1)},${(H - P.b).toFixed(1)} Z` : "";
+  const short = (d) => d.slice(5);
+  const mid = Math.floor(n / 2);
+
+  const onMove = (e) => {
+    const box = boxRef.current?.getBoundingClientRect();
+    if (!box || n === 0) return;
+    const px = ((e.clientX - box.left) / box.width) * W;
+    const i = Math.round(((px - P.l) / (W - P.l - P.r)) * (n - 1));
+    setHi(Math.max(0, Math.min(n - 1, isNaN(i) ? 0 : i)));
+  };
+
   return (
-    <div style={{ flex: "1 1 130px", minWidth: "130px", background: "#f8fafc", border: "1px solid #eef0f3", borderRadius: "12px", padding: "14px 16px" }}>
-      <div style={{ ...ui.label, marginBottom: "4px" }}>{label}</div>
-      <div style={{ fontSize: "20px", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: accent || "#0f172a" }}>{value}</div>
+    <div style={{ ...ui.card, padding: "16px 18px", position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "8px" }}>
+        <span style={ui.label}>{label}</span>
+        <span style={{ fontSize: big ? "20px" : "16px", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{total}</span>
+      </div>
+      <div ref={boxRef} style={{ position: "relative" }} onMouseMove={onMove} onMouseLeave={() => setHi(null)}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+          <defs>
+            <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={ACCENT} stopOpacity="0.16" />
+              <stop offset="100%" stopColor={ACCENT} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[1 / 3, 2 / 3, 1].map((f) => (
+            <line key={f} x1={P.l} x2={W - P.r} y1={H - P.b - f * (H - P.t - P.b)} y2={H - P.b - f * (H - P.t - P.b)} stroke="#f1f3f7" strokeWidth="1" />
+          ))}
+          <line x1={P.l} x2={W - P.r} y1={H - P.b} y2={H - P.b} stroke="#e8eaf0" strokeWidth="1" />
+          {area && <path d={area} fill={`url(#${gid})`} />}
+          {line && <path d={line} fill="none" stroke={ACCENT} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+          {n > 0 && <circle cx={x(n - 1)} cy={y(vals[n - 1])} r="3.4" fill="#fff" stroke={ACCENT} strokeWidth="2" />}
+          {hi != null && (
+            <>
+              <line x1={x(hi)} x2={x(hi)} y1={P.t} y2={H - P.b} stroke="#c6ccda" strokeWidth="1" strokeDasharray="3 3" />
+              <circle cx={x(hi)} cy={y(vals[hi])} r="3.6" fill="#fff" stroke={ACCENT} strokeWidth="2" />
+            </>
+          )}
+          <text x={W - P.r} y={P.t - 3} textAnchor="end" fontSize="9.5" fill="#a4adbd" fontVariantNumeric="tabular-nums">{format(maxV)}</text>
+          <text x={x(0)} y={H - 6} textAnchor="start" fontSize="9.5" fill="#a4adbd">{short(series[0]?.d || "")}</text>
+          {n > 2 && <text x={x(mid)} y={H - 6} textAnchor="middle" fontSize="9.5" fill="#a4adbd">{short(series[mid].d)}</text>}
+          {n > 1 && <text x={x(n - 1)} y={H - 6} textAnchor="end" fontSize="9.5" fill="#a4adbd">{short(series[n - 1].d)}</text>}
+        </svg>
+        {hi != null && (
+          <div style={{ position: "absolute", left: `${(x(hi) / W) * 100}%`, top: 0, transform: `translateX(${hi > n / 2 ? "-105%" : "8px"})`, background: "#0f172a", color: "#fff", borderRadius: "8px", padding: "6px 10px", fontSize: "11.5px", whiteSpace: "nowrap", pointerEvents: "none", fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ color: "#94a3b8", fontSize: "10px" }}>{series[hi].d}</div>
+            <b>{format(vals[hi])}</b>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -158,12 +192,10 @@ export default function FunnelMetrics() {
 
   const funnels = data?.funnels || [];
   const current = selected ? funnels.find((f) => f.key === selected) : null;
-
   const dateInput = { padding: "7px 10px", border: "1px solid #e2e6ec", borderRadius: "9px", fontSize: "12.5px", fontFamily: "inherit", color: "#334155", background: "#fff" };
 
   return (
     <div style={ui.page}>
-      {/* Kop + periodekiezer */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", marginBottom: "18px" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "22px", fontWeight: 800 }}>📈 Funnel Metrics</h1>
@@ -202,28 +234,36 @@ export default function FunnelMetrics() {
           </p>
         </div>
       ) : current ? (
-        /* ===== Detail: één funnel ===== */
-        <div style={{ ...ui.card, padding: "22px 26px" }}>
-          <button onClick={() => setSelected(null)} style={{ border: "1px solid #e2e6ec", background: "#fff", borderRadius: "9px", padding: "7px 14px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "#334155", marginBottom: "14px" }}>
-            ← All funnels
-          </button>
-          <h2 style={{ margin: "0 0 14px 0", fontSize: "17px", fontWeight: 800 }}>{current.key}</h2>
-          <TrendChart series={current.series} />
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginBottom: "18px" }}>
-            <Kpi label="Revenue" value={fmtEur(current.revenue)} accent="#166534" />
-            <Kpi label="Orders" value={current.orders.toLocaleString()} />
-            <Kpi label="Conv. rate" value={pct(current.orders, current.totalUniques)} />
-            <Kpi label="AOV" value={current.orders > 0 ? fmtEur(current.revenue / current.orders) : "—"} />
-            <Kpi label="Unique visits" value={current.totalUniques.toLocaleString()} />
-            <Kpi label="Page views" value={current.steps.reduce((s, x) => s + x.pv, 0).toLocaleString()} />
-            <Kpi label="Checkout clicks" value={current.checkoutClicks.toLocaleString()} />
+        /* ===== Detail: één funnel, Funnelish-stijl ===== */
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px", flexWrap: "wrap" }}>
+            <button onClick={() => setSelected(null)} style={{ border: "1px solid #e2e6ec", background: "#fff", borderRadius: "9px", padding: "7px 14px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", color: "#334155" }}>
+              ← All funnels
+            </button>
+            <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 800 }}>{current.key}</h2>
           </div>
-          {current.steps.length > 0 ? (
-            <StepTable funnel={current} />
-          ) : (
-            <p style={{ margin: 0, fontSize: "12.5px", color: "#8a92a3" }}>Orders attributed to this funnel, but no pageview data in this period.</p>
-          )}
-        </div>
+
+          <div style={{ marginBottom: "14px" }}>
+            <MetricChart big label="Revenue" total={fmtEur(current.revenue)} series={current.series} getV={(s) => s.r} format={(v) => fmtEur(v)} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "14px", marginBottom: "14px" }}>
+            <MetricChart label="Orders" total={fmtInt(current.orders)} series={current.series} getV={(s) => s.o} />
+            <MetricChart label="Conv. rate" total={pct(current.orders, current.totalUniques)} series={current.series} getV={(s) => (s.u > 0 ? (s.o / s.u) * 100 : 0)} format={(v) => `${v.toFixed(1)}%`} />
+            <MetricChart label="AOV" total={current.orders > 0 ? fmtEur(current.revenue / current.orders) : "—"} series={current.series} getV={(s) => (s.o > 0 ? s.r / s.o : 0)} format={(v) => fmtEur(v)} />
+            <MetricChart label="Unique visitors" total={fmtInt(current.totalUniques)} series={current.series} getV={(s) => s.u} />
+            <MetricChart label="Page views" total={fmtInt(current.steps.reduce((s, x) => s + x.pv, 0))} series={current.series} getV={(s) => s.pv} />
+            <MetricChart label="Checkout clicks" total={fmtInt(current.checkoutClicks)} series={current.series} getV={(s) => s.cc} />
+          </div>
+
+          <div style={{ ...ui.card, padding: "18px 22px" }}>
+            <div style={{ ...ui.label, marginBottom: "10px" }}>Performance breakdown</div>
+            {current.steps.length > 0 ? (
+              <StepTable funnel={current} />
+            ) : (
+              <p style={{ margin: 0, fontSize: "12.5px", color: "#8a92a3" }}>Orders attributed to this funnel, but no pageview data in this period.</p>
+            )}
+          </div>
+        </>
       ) : funnels.length === 0 ? (
         <div style={{ ...ui.card, padding: "40px", textAlign: "center", color: "#8a92a3", fontSize: "13px" }}>
           No funnel traffic recorded in this period.
