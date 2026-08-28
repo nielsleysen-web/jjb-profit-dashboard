@@ -237,6 +237,12 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers, graphicD
         createdAt: at,
         createdBy: session.name,
         sourceLaunchTaskId: task.id,
+        // Bij swipes: de top 5 competitor creatives van de funnel-kaart reizen mee naar de design-taak
+        topCompetitorCreative1: (task.source === "Swipe" && task.topCompetitorCreative1) || "",
+        topCompetitorCreative2: (task.source === "Swipe" && task.topCompetitorCreative2) || "",
+        topCompetitorCreative3: (task.source === "Swipe" && task.topCompetitorCreative3) || "",
+        topCompetitorCreative4: (task.source === "Swipe" && task.topCompetitorCreative4) || "",
+        topCompetitorCreative5: (task.source === "Swipe" && task.topCompetitorCreative5) || "",
       };
       designStore.tasks.push(d);
       await writeData("design-tasks", designStore);
@@ -304,7 +310,7 @@ export default async function handler(req, res) {
     const graphicDesigners = activeUsers.filter((u) => (u.roles || []).includes("Graphic Designer")).map((u) => ({ name: u.name, email: u.email }));
     const adminUser = activeUsers.find((u) => (u.email || "").toLowerCase() === ADMIN_EMAIL) || { name: "Niels Leysen", email: ADMIN_EMAIL };
 
-    const FIELDS = ["productName", "product", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "gender", "ageRange", "alibabaLink", "funnelishLink", "finalCampaignLink", "firstCreativeBatch", "readyForAI", "aiCopy", "productPackshot", "source"];
+    const FIELDS = ["productName", "product", "deadline", "assigneeEmail", "assigneeName", "advertorialLink", "funnelWorkspaceLink", "marketCountry", "countryCode", "funnelAngle", "gender", "ageRange", "alibabaLink", "funnelishLink", "finalCampaignLink", "firstCreativeBatch", "readyForAI", "aiCopy", "productPackshot", "source", "topCompetitorCreative1", "topCompetitorCreative2", "topCompetitorCreative3", "topCompetitorCreative4", "topCompetitorCreative5"];
 
     /* --- create --- */
     if (action === "create") {
