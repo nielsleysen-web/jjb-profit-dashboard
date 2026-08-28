@@ -335,7 +335,9 @@ export default async function handler(req, res) {
     const isAdmin = !!session?.admin;
 
     if (req.method === "GET") {
-      if (!session || !(session.finance || session.admin)) return res.status(401).json({ success: false, error: "No access" });
+      // Toegang: admin, finance, én media buyers (het tabblad staat onder Media Buying)
+      const roles = Array.isArray(session?.roles) ? session.roles : [];
+      if (!session || !(session.finance || session.admin || roles.includes("Media Buyer"))) return res.status(401).json({ success: false, error: "No access" });
       const days = Math.min(90, Math.max(1, parseInt(req.query.days || "7", 10) || 7));
       const store = (await readData("attribution")) || { orders: {}, capi: {}, lastScanAt: null };
 
