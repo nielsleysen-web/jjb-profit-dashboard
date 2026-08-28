@@ -28,9 +28,6 @@ const CATEGORIES = [
     perm: "finance",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "📊" },
-      { href: "/attribution", label: "Ad Attribution", icon: "🎯" },
-      { href: "/funnel-metrics", label: "Funnel Metrics", icon: "📈" },
-      { href: "/daily-overview", label: "Daily Overview", icon: "📅" },
       { href: "/product-economics", label: "Product Economics", icon: "📦" },
     ],
   },
@@ -39,6 +36,7 @@ const CATEGORIES = [
     perm: "launching",
     items: [
       { href: "/product-launching", label: "Product Pipeline", icon: "🚀" },
+      { href: "/funnel-metrics", label: "Funnel Metrics", icon: "📈" },
     ],
   },
   {
@@ -62,6 +60,7 @@ const CATEGORIES = [
     items: [
       { href: "/ready-to-launch", label: "Ready To Launch", icon: "📣" },
       { href: "/launched", label: "Launched", icon: "✅" },
+      { href: "/attribution", label: "Ad Attribution", icon: "🎯" },
     ],
   },
   {
@@ -71,13 +70,17 @@ const CATEGORIES = [
   },
 ];
 
-const ALL_PROTECTED = CATEGORIES.flatMap((c) => c.items.map((i) => i.href));
+// Pagina's die niet meer in het menu staan maar wel beveiligd bereikbaar blijven via de URL
+const EXTRA_PROTECTED = [{ href: "/daily-overview", perm: "finance" }];
+
+const ALL_PROTECTED = [...CATEGORIES.flatMap((c) => c.items.map((i) => i.href)), ...EXTRA_PROTECTED.map((e) => e.href)];
 
 function requiredPerm(pathname) {
   for (const cat of CATEGORIES) {
     if (cat.items.some((i) => i.href === pathname)) return cat.perm;
   }
-  return null;
+  const extra = EXTRA_PROTECTED.find((e) => e.href === pathname);
+  return extra ? extra.perm : null;
 }
 
 const inputStyle = {
