@@ -213,6 +213,7 @@ export default async function handler(req, res) {
     // Orders per funnel-key (jjb_host + jjb_path op de order); oudere orders zonder
     // padsegment vallen terug op de host-root-rij van dat domein
     const ordersBy = {}; // key → { orders, revenue, days: {datum: {o, r}} }
+    const ordersByVariant = {}; // pageid → { o, r } (omzet per A/B-variant)
     let noHostOrders = 0, noHostRevenue = 0;
     for (const o of Object.values(store.orders || {})) {
       if (!o.at) continue;
@@ -228,6 +229,13 @@ export default async function handler(req, res) {
       const dd = (tgt.days[d] = tgt.days[d] || { o: 0, r: 0 });
       dd.o += 1;
       dd.r += o.value || 0;
+      // Omzet per A/B-variant: de order telt mee voor élk pageid dat de koper zag
+      // (advertorial-test én salespage-test krijgen zo elk hun eigen vergelijking)
+      for (const pg of Array.isArray(o.pgs) ? o.pgs : []) {
+        const vo = (ordersByVariant[pg] = ordersByVariant[pg] || { o: 0, r: 0 });
+        vo.o += 1;
+        vo.r += o.value || 0;
+      }
     }
 
     // 5. Response: per funnel de stappen (gesorteerd op uniques) + dagreeks voor de grafiek
@@ -241,7 +249,14 @@ export default async function handler(req, res) {
           const vmap = variantsByPath[`${f.host}|${path}`] || {};
           const vids = Object.keys(vmap).sort();
           // Alleen tonen als er écht een split draait (≥2 varianten op dezelfde URL)
-          const variants = vids.length >= 2 ? vids.map((id) => ({ id, ...vmap[id] })) : [];
+          const variants = vids.length >= 2
+            ? vids.map((id) => ({
+                id,
+                ...vmap[id],
+                orders: ordersByVariant[id]?.o || 0,
+                revenue: Math.round((ordersByVariant[id]?.r || 0) * 100) / 100,
+              }))
+            : [];
           return { path, ...m, variants };
         })
         .sort((a, b) => b.pvu - a.pvu || b.pv - a.pv);
