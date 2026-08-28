@@ -456,6 +456,45 @@ export default function GraphicDesigner() {
    Wordt gegenereerd zodra de taak in "Ready To Work" komt (trigger in design-tasks.js).
    Bron: research-JSON uit de product pipeline, anders de advertorial-link.
    Engels + markttaal, bewerkbare tabel (edits herbouwen het XLSX stil), Regenerate. */
+/* Onderaan de Creative-sectie: Funnel Workspace Link + Research JSON van de
+   gekoppelde launch-taak (via sourceLaunchTaskId; fallback op producttitel).
+   Alleen zichtbaar als er iets te tonen valt. */
+function FunnelInfoBlock({ taskId, productTitle }) {
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    let on = true;
+    fetch("/api/design-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "funnelInfo", taskId }),
+    })
+      .then((r) => r.json())
+      .then((d) => { if (on && d?.success) setInfo(d); })
+      .catch(() => {});
+    return () => { on = false; };
+  }, [taskId]);
+  if (!info || (!info.funnelWorkspaceLink && !info.researchJson)) return null;
+  const downloadJson = () => {
+    const blob = new Blob([JSON.stringify(info.researchJson, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${productTitle || "research"} - research.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  const chip = { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, color: "#1d4ed8", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "8px", padding: "8px 14px", textDecoration: "none", cursor: "pointer" };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", paddingTop: "12px", marginTop: "12px", borderTop: "1px solid #eef0f3" }}>
+      {info.funnelWorkspaceLink ? (
+        <a href={info.funnelWorkspaceLink} target="_blank" rel="noreferrer" style={chip}>🔗 Funnel Workspace</a>
+      ) : null}
+      {info.researchJson ? (
+        <button onClick={downloadJson} style={{ ...chip, fontFamily: "inherit" }}>⬇ Research JSON</button>
+      ) : null}
+    </div>
+  );
+}
+
 function CreativeCopySection({ taskId, canEdit }) {
   const [data, setData] = useState(null); // { store, rows, canEdit }
   const [editCell, setEditCell] = useState(null); // { key, en, tr }
@@ -1866,6 +1905,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                   </div>
                 </div>
               ) : null}
+              <FunnelInfoBlock taskId={t.id} productTitle={t.product?.title} />
             </Section>
 
             {/* Market */}
