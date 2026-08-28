@@ -142,6 +142,30 @@ export default async function handler(req, res) {
       values.push(...(out[0]?.result || []));
     }
 
+    // A/B-varianten (Funnelish pageid) per (dag, host, pad) ophalen
+    const varSets = await redisPipeline(triples.map(([d, h, p]) => ["SMEMBERS", `fmvs:${d}:${h}:${p}`]));
+    const varTriples = []; // [date, host, path, variantId]
+    varSets.forEach((r, i) => {
+      const [d, h, p] = triples[i];
+      for (const vid of r?.result || []) varTriples.push([d, h, p, vid]);
+    });
+    const varKeys = [];
+    for (const [d, h, p, vid] of varTriples) for (const k of ["pv", "pvu", "cc", "ccu"]) varKeys.push(`fmv:${d}:${h}:${p}:${vid}:${k}`);
+    const varValues = [];
+    for (let i = 0; i < varKeys.length; i += 400) {
+      const out = await redisPipeline([["MGET", ...varKeys.slice(i, i + 400)]]);
+      varValues.push(...(out[0]?.result || []));
+    }
+    // variantsByPath: `${host}|${path}` → { variantId: {pv,pvu,cc,ccu} } (gesommeerd over de range)
+    const variantsByPath = {};
+    varTriples.forEach(([d, h, p, vid], i) => {
+      const slot = ((variantsByPath[`${h}|${p}`] = variantsByPath[`${h}|${p}`] || {})[vid] =
+        variantsByPath[`${h}|${p}`][vid] || { pv: 0, pvu: 0, cc: 0, ccu: 0 });
+      ["pv", "pvu", "cc", "ccu"].forEach((k, j) => {
+        slot[k] += parseInt(varValues[i * 4 + j] || "0", 10) || 0;
+      });
+    });
+
     // Groeperen per FUNNEL: host + eerste padsegment (try.getjustjenny.com/lubrisense),
     // met per funnel ook een dagreeks voor de trendgrafiek
     const keyOf = (h, p) => { const s = (p.split("/")[1] || "").toLowerCase(); return s ? `${h}/${s}` : h; };
@@ -213,7 +237,13 @@ export default async function handler(req, res) {
       const f = fun[key];
       const ob = ordersBy[key];
       const steps = Object.entries(f?.paths || {})
-        .map(([path, m]) => ({ path, ...m }))
+        .map(([path, m]) => {
+          const vmap = variantsByPath[`${f.host}|${path}`] || {};
+          const vids = Object.keys(vmap).sort();
+          // Alleen tonen als er écht een split draait (≥2 varianten op dezelfde URL)
+          const variants = vids.length >= 2 ? vids.map((id) => ({ id, ...vmap[id] })) : [];
+          return { path, ...m, variants };
+        })
         .sort((a, b) => b.pvu - a.pvu || b.pv - a.pv);
       const series = datesAsc.map((d) => ({
         d,
