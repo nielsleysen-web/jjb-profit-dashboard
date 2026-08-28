@@ -34,6 +34,10 @@
     if (!data.vid) data.vid = "jjb." + Date.now().toString(36) + "." + Math.random().toString(36).slice(2, 10);
     if (!data.first_touch) data.first_touch = new Date().toISOString();
     if (!data.host) data.host = location.host; // first-touch funnel-domein → jjb_host op de order
+    if (!data.path) { // first-touch padsegment (= de funnel op dat domein) → jjb_path op de order
+      var seg0 = (location.pathname.split("/")[1] || "").toLowerCase();
+      if (seg0) data.path = seg0.slice(0, 60);
+    }
     data.last_url = location.href.slice(0, 500);
     try { localStorage.setItem(LS, JSON.stringify(data)); } catch (e) {}
 
@@ -76,7 +80,7 @@
       if (!/^https?:$/.test(url.protocol)) return;
       if (/\/cart\//.test(url.pathname) || /\/checkouts?\//.test(url.pathname)) {
         // Shopify cart-permalink → alles als order attributes meesturen
-        var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch", "host"];
+        var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch", "host", "path"];
         attrs.forEach(function (k) {
           if (data[k]) url.searchParams.set("attributes[jjb_" + k + "]", data[k]);
         });
