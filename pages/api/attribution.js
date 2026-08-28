@@ -291,6 +291,7 @@ async function runScan(force) {
         vid: attrs.vid || "",
         host: (attrs.host || "").toLowerCase(), // first-touch funnel-domein → Funnel Metrics
         path: (attrs.path || "").toLowerCase(), // first-touch padsegment (funnel op dat domein)
+        pgs: String(attrs.pgs || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 12), // geziene A/B-varianten (pageids)
       };
       store.orders[order.name] = entry;
       if (entry.adId || entry.fbclid || entry.fbc) result.attributed++;
