@@ -76,6 +76,18 @@
       var mpg = document.querySelector('meta[name="pageid"]');
       if (mpg && mpg.content) PG = String(mpg.content).replace(/[^\w-]/g, "").slice(0, 24);
     } catch (e) {}
+    // Alle geziene varianten (pageids) van de hele route bijhouden → jjb_pgs op de order,
+    // zodat omzet per A/B-variant gesplitst kan worden (advertorial én salespage-testen)
+    if (PG) {
+      try {
+        data.pgs = Array.isArray(data.pgs) ? data.pgs : [];
+        if (data.pgs.indexOf(PG) === -1) {
+          data.pgs.push(PG);
+          if (data.pgs.length > 12) data.pgs = data.pgs.slice(-12);
+          localStorage.setItem(LS, JSON.stringify(data));
+        }
+      } catch (e) {}
+    }
     beacon({ t: "pv", h: location.host, p: location.pathname, u: firstToday("pv", location.pathname), pg: PG, upg: PG ? firstToday("pv:" + PG, location.pathname) : 0 });
 
     function decorate(a) {
@@ -86,7 +98,7 @@
       if (!/^https?:$/.test(url.protocol)) return;
       if (/\/cart\//.test(url.pathname) || /\/checkouts?\//.test(url.pathname)) {
         // Shopify cart-permalink → alles als order attributes meesturen
-        var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch", "host", "path"];
+        var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch", "host", "path", "pgs"];
         attrs.forEach(function (k) {
           if (data[k]) url.searchParams.set("attributes[jjb_" + k + "]", data[k]);
         });
