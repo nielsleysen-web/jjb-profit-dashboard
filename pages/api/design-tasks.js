@@ -252,6 +252,32 @@ export default async function handler(req, res) {
 
     const { action, taskId, task: input, status, message, attachment, messageId, replyTo } = req.body || {};
     const store = (await readData("design-tasks")) || { tasks: [] };
+
+    /* --- funnelInfo: Funnel Workspace Link + research-JSON van de gekoppelde launch-taak
+       (voor het blok onderaan de Creative-sectie op het designer-board) --- */
+    if (action === "funnelInfo") {
+      const t = store.tasks.find((x) => x.id === taskId);
+      if (!t) return res.status(404).json({ success: false, error: "Task not found" });
+      const launchStore = (await readData("launch-tasks")) || { tasks: [] };
+      let lt = t.sourceLaunchTaskId ? launchStore.tasks.find((x) => x.id === t.sourceLaunchTaskId) || null : null;
+      // Fallback voor oudere/handmatige design-taken zonder koppeling: match op producttitel
+      if (!lt && t.product?.title) {
+        lt = launchStore.tasks.find((x) => (x.productName || x.product?.title) === t.product.title) || null;
+      }
+      let researchJson = null;
+      if (lt) {
+        try {
+          const sc = await readData(`salescopy-${lt.id}`);
+          researchJson = sc?.researchJson || null;
+        } catch {}
+      }
+      return res.status(200).json({
+        success: true,
+        linked: !!lt,
+        funnelWorkspaceLink: lt?.funnelWorkspaceLink || "",
+        researchJson,
+      });
+    }
     const accounts = (await readData("accounts")) || { users: [] };
     const activeUsers = accounts.users.filter((u) => u.status === "active");
     const mediaBuyers = activeUsers.filter((u) => (u.roles || []).includes("Media Buyer")).map((u) => ({ name: u.name, email: u.email }));
