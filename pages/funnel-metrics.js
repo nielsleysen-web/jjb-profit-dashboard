@@ -148,9 +148,17 @@ function StepTable({ funnel }) {
           {steps.map((s, i) => {
             const prev = i > 0 ? steps[i - 1] : null;
             const drop = prev && prev.pvu > 0 ? 100 - (s.pvu / prev.pvu) * 100 : null;
-            return (
+            // Winnaar van een A/B-test: hoogste checkout rate (bij gelijke stand: meeste checkout-kliks)
+            const rates = (s.variants || []).map((v) => (v.pvu > 0 ? v.ccu / v.pvu : 0));
+            const best = rates.length ? Math.max(...rates) : 0;
+            return [
               <tr key={s.path}>
-                <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", fontFamily: "ui-monospace, monospace", fontSize: "12px", maxWidth: "320px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.path}</td>
+                <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", fontFamily: "ui-monospace, monospace", fontSize: "12px", maxWidth: "320px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.path}
+                  {(s.variants || []).length > 0 && (
+                    <span style={{ marginLeft: "8px", fontSize: "10px", fontWeight: 700, color: "#7c3aed", background: "#f3e8ff", padding: "2px 7px", borderRadius: "999px", fontFamily: "Inter, sans-serif" }}>A/B</span>
+                  )}
+                </td>
                 <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontWeight: 700 }}>{s.pvu.toLocaleString()}</td>
                 <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", color: "#64748b" }}>{s.pv.toLocaleString()}</td>
                 <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right" }}>{first ? pct(s.pvu, first.pvu) : "—"}</td>
@@ -159,8 +167,26 @@ function StepTable({ funnel }) {
                 </td>
                 <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right" }}>{s.ccu > 0 ? s.ccu.toLocaleString() : "—"}</td>
                 <td style={{ padding: "9px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right" }}>{s.ccu > 0 ? pct(s.ccu, s.pvu) : "—"}</td>
-              </tr>
-            );
+              </tr>,
+              ...(s.variants || []).map((v, vi) => {
+                const rate = v.pvu > 0 ? v.ccu / v.pvu : 0;
+                const isBest = best > 0 && rate === best;
+                return (
+                  <tr key={`${s.path}::${v.id}`} style={{ background: "#fbfcfe" }}>
+                    <td style={{ padding: "7px 10px 7px 26px", borderBottom: "1px solid #f4f5f7", fontSize: "11.5px", color: "#64748b" }}>
+                      └ Variant {String.fromCharCode(65 + vi)} <span style={{ color: "#b6bdc9" }}>({v.id})</span>
+                      {isBest && <span style={{ marginLeft: "8px", fontSize: "10px", fontWeight: 700, color: "#166534", background: "#dcfce7", padding: "2px 7px", borderRadius: "999px" }}>▲ winning</span>}
+                    </td>
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#334155", fontWeight: 600 }}>{v.pvu.toLocaleString()}</td>
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#8a92a3" }}>{v.pv.toLocaleString()}</td>
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#8a92a3" }}>{s.pvu > 0 ? pct(v.pvu, s.pvu) : "—"}</td>
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7" }} />
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", color: "#334155" }}>{v.ccu > 0 ? v.ccu.toLocaleString() : "—"}</td>
+                    <td style={{ padding: "7px 10px", borderBottom: "1px solid #f4f5f7", textAlign: "right", fontSize: "11.5px", fontWeight: isBest ? 700 : 400, color: isBest ? "#166534" : "#334155" }}>{v.pvu > 0 ? pct(v.ccu, v.pvu) : "—"}</td>
+                  </tr>
+                );
+              }),
+            ];
           })}
         </tbody>
       </table>
