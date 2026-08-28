@@ -79,7 +79,11 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   try {
     const session = getSession(req);
-    if (!session || !(session.finance || session.admin)) return res.status(401).json({ success: false, error: "No access" });
+    // Toegang: admin, finance, én funnel builders (het tabblad staat onder Product Launching)
+    const roles = Array.isArray(session?.roles) ? session.roles : [];
+    if (!session || !(session.finance || session.admin || roles.includes("Funnel Builder"))) {
+      return res.status(401).json({ success: false, error: "No access" });
+    }
     if (req.method !== "GET") return res.status(405).json({ success: false });
     if (!R_URL || !R_TOK) {
       return res.status(200).json({ success: true, configured: false, funnels: [], noHostOrders: 0, noHostRevenue: 0 });
