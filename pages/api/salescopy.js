@@ -1432,6 +1432,7 @@ async function runStep(store, step, taskId) {
   }
   if (step === "1") {
     const { launchStore, task } = await getLaunchTask(taskId);
+    if (task?.source === "Swipe") throw new Error("Swipe funnel — the Sales Page Copy pipeline is disabled for swipes");
     const link = (task?.advertorialLink || "").trim();
     let adv = "";
     if (link) {
@@ -1742,6 +1743,13 @@ export default async function handler(req, res) {
 
     /* --- startQueue: pipeline server-side laten doorlopen, browser mag dicht --- */
     if (action === "startQueue") {
+      // Swipes hebben geen copy-automation: pipeline nooit starten
+      try {
+        const { task: ltask } = await getLaunchTask(taskId);
+        if (ltask?.source === "Swipe") {
+          return res.status(400).json({ success: false, error: "Swipe funnel — the Sales Page Copy pipeline is disabled for swipes" });
+        }
+      } catch {}
       // Interne aanroep (board-watchdog): alleen een gestorven keten weer aantrappen,
       // nooit een queue herstarten die met Stop bewust is stilgelegd
       if (isInternal && !store.queueActive) return res.status(200).json({ success: true, halted: true });
