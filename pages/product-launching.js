@@ -1898,7 +1898,17 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
             )}
 
             {/* ===== Sectie: Sales Page Copy pipeline ===== */}
-            <SalesCopyPanel t={t} canEdit={canEdit} isAdmin={!!me?.admin} save={save} selectStyle={selectStyle} csvName={naming || t.productName || "sales-copy"} post={post} />
+            {t.source === "Swipe" ? (
+              <Section title="🧠 Sales Page Copy">
+                <div style={{ fontSize: "12.5px", color: "#334155", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: "10px", padding: "10px 14px", lineHeight: 1.6 }}>
+                  ✂️ <b>Swipe funnel</b> — the AI copy pipeline is skipped. Fill in the task details and hit
+                  <b> 💾 Save &amp; Close</b>: the card moves to <b>Ready For Build</b> automatically
+                  (needs the Advertorial Link, Market and Deadline filled in).
+                </div>
+              </Section>
+            ) : (
+              <SalesCopyPanel t={t} canEdit={canEdit} isAdmin={!!me?.admin} save={save} selectStyle={selectStyle} csvName={naming || t.productName || "sales-copy"} post={post} />
+            )}
 
             {/* ===== Sectie: First Creative Batch (helemaal onderaan) ===== */}
             <Section title="🎨 First Creative Batch">
@@ -1926,7 +1936,16 @@ function TaskModal({ t, me, funnelBuilders, team, post, onClose, isMobile, allTa
 
           {/* Save & close onderaan */}
           <div style={{ padding: isMobile ? "10px 18px" : "12px 30px", borderTop: "1px solid #eef0f3", background: "#ffffff", display: "flex", justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{ ...btnPrimary, background: "#16a34a", padding: "10px 24px", fontSize: "13px" }}>
+            <button
+              onClick={async () => {
+                // Swipe + Task Start + kerninfo compleet → automatisch door naar Ready For Build
+                if (t.source === "Swipe" && t.status === "Task Start" && t.advertorialLink && t.marketCountry && t.deadline) {
+                  try { await post({ action: "status", taskId: t.id, status: "Ready For Build" }); } catch (e) {}
+                }
+                onClose();
+              }}
+              style={{ ...btnPrimary, background: "#16a34a", padding: "10px 24px", fontSize: "13px" }}
+            >
               💾 Save & Close
             </button>
           </div>
