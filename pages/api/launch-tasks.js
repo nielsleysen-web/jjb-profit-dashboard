@@ -395,6 +395,9 @@ export default async function handler(req, res) {
     if (action === "status") {
       if (!canStatus) return res.status(403).json({ success: false, error: "No permission to change status" });
       if (!STATUSES.includes(status)) return res.status(400).json({ success: false, error: "Invalid status" });
+      if (task.source === "Swipe" && status === "AI Translation") {
+        return res.status(400).json({ success: false, error: "Swipe funnels skip AI Translation — move the card straight to Ready For Build" });
+      }
       await applyStatusChange(task, status, session, mediaBuyers, graphicDesigners, adminUser);
       await writeData("launch-tasks", store);
       return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
