@@ -173,7 +173,7 @@ export default function ReadyToLaunch() {
                       <div style={{ fontSize: "15px", fontWeight: 700 }}>
                         {t.product?.title || "Creative"}
                         {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
-                        {t.videoFormat && <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "3px 9px", borderRadius: "999px" }}>{t.videoFormat}</span>}
+                        {t.type && <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "3px 9px", borderRadius: "999px" }}>{t.type}</span>}
                       </div>
                       {t.angle && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{t.angle}</div>}
                       <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "5px" }}>
