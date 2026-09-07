@@ -1591,6 +1591,11 @@ function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, 
               <Field label="Final Output Link" last>
                 <TextField value={t.finalOutputLink} disabled={!canEdit && !canOutput} onSave={(v) => save("finalOutputLink", v)} type="url" placeholder="https://…" />
               </Field>
+              {!t.finalOutputLink && (
+                <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "2px" }}>
+                  A Google Drive upload folder is created automatically as soon as this task moves to Ready To Work — drop your files there.
+                </div>
+              )}
             </Section>
 
             {/* Creative Name */}
