@@ -367,6 +367,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
     }
 
+    /* --- Drive-map handmatig aanmaken (voor taken die al voorbij Task Start staan) --- */
+    if (action === "driveFolder") {
+      if (!canOutput) return res.status(403).json({ success: false, error: "No permission to create the upload folder" });
+      if (task.finalOutputLink) return res.status(400).json({ success: false, error: "Final Output Link is already filled in" });
+      if (!task.product?.title) return res.status(400).json({ success: false, error: "Pick a product first — it decides which folder the task goes in" });
+      if (!driveConfigured()) return res.status(500).json({ success: false, error: "Google Drive is not configured on the server" });
+      try {
+        await ensureOutputFolder(task, session);
+      } catch (e) {
+        const msg = e.response?.data?.error?.message || e.message;
+        console.error("Drive folder error:", msg);
+        return res.status(500).json({ success: false, error: `Google Drive: ${msg}` });
+      }
+      await writeData("creative-tasks", store);
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
+    }
+
     /* --- chat --- */
     if (action === "chat") {
       const text = (message || "").trim().slice(0, 1000);
