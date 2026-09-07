@@ -77,11 +77,7 @@ const BOARD_STATUSES = STATUSES.slice(0, 6); // Launched verhuist naar het Launc
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
 const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
-const GENDERS = ["Male", "Female"];
-const AGE_RANGES = ["18-25", "25-40", "40-55", "55+"];
 const TYPES = ["Net New", "Iteration"];
-const VIDEO_ITERATIONS = ["Hook", "Lead", "A-roll", "B-roll", "Video format"];
-const VIDEO_FORMATS = ["Short Form", "VSL", "UGC Yap", "Podcast Yap", "3D Animations"];
 const AROLL_OPTIONS = ["Existing", "Net New", "Keep Current"];
 
 const SUBTITLE_STYLES = ["White Text, Shadowed Background", "Documentary Text", "TikTok Style", "TikTok Explanational", "Keep the same"];
@@ -154,7 +150,6 @@ export default function VideoEditor() {
   const [team, setTeam] = useState([]);
   const [me, setMe] = useState(null);
   const [avatars, setAvatars] = useState([]);
-  const [voices, setVoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
@@ -186,9 +181,8 @@ export default function VideoEditor() {
   useEffect(() => {
     load();
     const iv = setInterval(load, 45000);
-    // HeyGen avatars + ElevenLabs voices (gecachet op de server)
+    // HeyGen avatars (gecachet op de server)
     fetch("/api/heygen-avatars").then((r) => r.json()).then((res) => res?.success && setAvatars(res.avatars)).catch(() => {});
-    fetch("/api/elevenlabs-voices").then((r) => r.json()).then((res) => res?.success && setVoices(res.voices)).catch(() => {});
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -397,8 +391,8 @@ export default function VideoEditor() {
                       )}
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: "12.5px", fontWeight: 700, lineHeight: 1.45, wordBreak: "break-word" }}>{taskTitle(t)}</div>
-                        {t.videoFormat && (
-                          <div style={{ fontSize: "11px", color: "#8a92a3", marginTop: "2px" }}>{t.videoFormat}{t.type ? ` · ${t.type}` : ""}</div>
+                        {t.type && (
+                          <div style={{ fontSize: "11px", color: "#8a92a3", marginTop: "2px" }}>{t.type}</div>
                         )}
                       </div>
                     </div>
@@ -444,7 +438,6 @@ export default function VideoEditor() {
           editors={editors}
           team={team}
           avatars={avatars}
-          voices={voices}
           post={post}
           onClose={() => setOpenTaskId(null)}
           isMobile={isMobile}
@@ -1249,7 +1242,7 @@ function DeadlinePicker({ value, onChange }) {
   );
 }
 
-function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, onClose, isMobile, allTasks, openTaskById }) {
+function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, isMobile, allTasks, openTaskById }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
@@ -1517,7 +1510,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                 <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
               )}
               <div style={{ marginTop: "8px" }}>
-                <Field label="Script Link" last>
+                <Field label="Briefing Link" last>
                   <TextField value={t.scriptLink} disabled={!canEdit} onSave={(v) => save("scriptLink", v)} type="url" placeholder="https://…" />
                 </Field>
               </div>
@@ -1534,16 +1527,8 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               <Field label="Net New / Iteration">
                 <SelectField value={t.type} options={TYPES} onSave={(v) => save("type", v)} disabled={!canEdit} />
               </Field>
-              {t.type === "Iteration" && (
-                <Field label="Video Iteration">
-                  <SelectField value={t.videoIteration} options={VIDEO_ITERATIONS} onSave={(v) => save("videoIteration", v)} disabled={!canEdit} />
-                </Field>
-              )}
-              <Field label="Reference Ad">
+              <Field label="Reference Ad" last>
                 <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
-              </Field>
-              <Field label="Video Format" last>
-                <SelectField value={t.videoFormat} options={VIDEO_FORMATS} onSave={(v) => save("videoFormat", v)} disabled={!canEdit} />
               </Field>
             </Section>
 
@@ -1568,16 +1553,6 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               </Field>
             </Section>
 
-            {/* Audience */}
-            <Section title="🎯 Audience">
-              <Field label="Target Gender">
-                <SelectField value={t.gender} options={GENDERS} onSave={(v) => save("gender", v)} disabled={!canEdit} />
-              </Field>
-              <Field label="Target Age Range" last>
-                <SelectField value={t.ageRange} options={AGE_RANGES} onSave={(v) => save("ageRange", v)} disabled={!canEdit} />
-              </Field>
-            </Section>
-
             {/* A-Roll & Voice */}
             <Section title="🧑‍🎤 A-Roll & Voice">
               <Field label="A-Roll">
@@ -1597,25 +1572,6 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               {t.aRoll === "Net New" && (
                 <Field label="New A-Roll Link">
                   <TextField value={t.aRollLink} disabled={!canEdit} onSave={(v) => save("aRollLink", v)} type="url" placeholder="https://…" />
-                </Field>
-              )}
-              {t.aRoll !== "Keep Current" && (
-                <Field label="ElevenLabs Voice">
-                  {canEdit ? (
-                    <select
-                      value={t.voiceId || ""}
-                      onChange={(e) => {
-                        const v = voices.find((x) => x.id === e.target.value);
-                        post({ action: "update", taskId: t.id, task: { voiceId: e.target.value, voiceName: v?.name || "" } });
-                      }}
-                      style={selectStyle}
-                    >
-                      <option value="">{voices.length ? "— Select voice —" : "No voices synced — check ELEVENLABS_API_KEY"}</option>
-                      {voices.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
-                  ) : (
-                    <span style={{ fontSize: "13px" }}>{t.voiceName || "—"}</span>
-                  )}
                 </Field>
               )}
               <Field label="Type Subtitles" last>
