@@ -11,13 +11,13 @@ const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLower
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 
 const STATUSES = ["Task Start", "Ready To Work", "In Production", "QA Check", "Revisions", "Ready to launch", "Launched"];
+
+// Standaard briefingdocument: hier wordt het script in geschreven.
+const BRIEFING_DOC =
+  "https://docs.google.com/document/d/1zdbrNHePBFWq6voImX-8avF0zZcPq6EPMV9pcbQFSd4/edit?usp=sharing";
 const MARKETS = ["Italy", "France", "Israel"];
 const CODES = ["IT", "FR", "IL"];
-const GENDERS = ["Male", "Female"];
-const AGE_RANGES = ["18-25", "25-40", "40-55", "55+"];
 const TYPES = ["Net New", "Iteration"];
-const VIDEO_ITERATIONS = ["Hood", "Lead", "A-roll", "B-roll", "Video format"];
-const VIDEO_FORMATS = ["Short Form", "VSL", "UGC Yap", "Podcast Yap", "3D Animations"];
 const AROLL_OPTIONS = ["Existing", "Net New", "Keep Current"];
 
 /* ---------------- session ---------------- */
@@ -243,7 +243,7 @@ export default async function handler(req, res) {
       const t = {
         id: uid(),
         product: null,
-        scriptLink: "",
+        scriptLink: BRIEFING_DOC,
         deadline: "",
         strategistEmail: "",
         strategistName: "",
