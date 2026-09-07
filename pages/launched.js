@@ -34,19 +34,14 @@ const CREATIVE_FIELDS = [
   { key: "product", label: "Product", get: (t) => t.product?.title },
   { key: "angle", label: "Angle" },
   { key: "market", label: "Market", get: (t) => (t.market ? `${t.market}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
-  { key: "videoFormat", label: "Video Format" },
   { key: "type", label: "Type" },
-  { key: "videoIteration", label: "Iteration" },
-  { key: "gender", label: "Gender" },
-  { key: "ageRange", label: "Age Range" },
   { key: "strategistName", label: "Creative Strategist" },
   { key: "assigneeName", label: "Video Editor" },
   { key: "deadline", label: "Deadline" },
   { key: "aRoll", label: "A-roll" },
   { key: "aRollAvatarName", label: "Avatar" },
-  { key: "voiceName", label: "Voice" },
   { key: "subtitles", label: "Subtitles" },
-  { key: "scriptLink", label: "Script", type: "url" },
+  { key: "scriptLink", label: "Briefing", type: "url" },
   { key: "advertorialLink", label: "Advertorial", type: "url" },
   { key: "referenceAd", label: "Reference Ad", type: "url" },
   { key: "inspirationLink", label: "Inspiration", type: "url" },
@@ -256,7 +251,7 @@ export default function Launched() {
             {launchedCreatives.map((t) => (
               <Row
                 key={t.id}
-                title={`${t.product?.title || "Creative"}${t.videoFormat ? ` · ${t.videoFormat}` : ""}`}
+                title={`${t.product?.title || "Creative"}${t.type ? ` · ${t.type}` : ""}`}
                 image={t.product?.image}
                 sub={t.angle}
                 by={t.assigneeName}
