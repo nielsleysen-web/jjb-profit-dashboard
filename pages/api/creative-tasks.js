@@ -6,6 +6,7 @@
 
 import axios from "axios";
 import crypto from "crypto";
+import { ensureCreativeFolder, driveConfigured, todayHK } from "../../lib/gdrive";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
@@ -138,6 +139,43 @@ async function pushNotifications(items) {
   }
 }
 
+/* ---------------- naming convention (zelfde volgorde als in de Video Editor) ---------------- */
+const firstName = (name) => (name || "").trim().split(/\s+/)[0] || "";
+const fmtDeadlineDate = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
+};
+// PRODUCT | CREATIVE STRATEGIST | ASSIGNEE | ANGLE | NET NEW/ITERATION | DEADLINE
+const namingConvention = (t) =>
+  [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type, fmtDeadlineDate(t.deadline)]
+    .filter(Boolean)
+    .map((s) => String(s).toUpperCase())
+    .join(" | ");
+
+/* ---------------- Google Drive: uploadmap per taak ---------------- */
+// Creatives / <productnaam> / <datum van vandaag, HK> / <naming convention>
+// De link komt in Final Output Link te staan zodra de taak Ready To Work wordt.
+async function ensureOutputFolder(task, session) {
+  if (task.finalOutputLink) return false; // nooit een handmatig ingevulde link overschrijven
+  if (!driveConfigured()) {
+    console.error("Drive-map overgeslagen: GOOGLE_SA_EMAIL / GOOGLE_SA_PRIVATE_KEY / GDRIVE_CREATIVES_FOLDER ontbreekt");
+    return false;
+  }
+  const productName = task.product?.title;
+  if (!productName) return false; // zonder product weten we niet in welke productmap het hoort
+
+  const link = await ensureCreativeFolder({
+    productName,
+    dateFolder: todayHK(),
+    taskFolder: namingConvention(task) || productName,
+  });
+  task.finalOutputLink = link;
+  addLog(task, session, "📁 Google Drive-uploadmap aangemaakt en gekoppeld aan Final Output Link");
+  return true;
+}
+
 function addLog(task, session, text) {
   task.activity = task.activity || [];
   task.activity.push({ id: uid(), type: "log", author: session.name, email: session.email, text, at: new Date().toISOString() });
@@ -151,8 +189,17 @@ async function applyStatusChange(task, newStatus, session, mediaBuyers) {
 
   const productName = task.product?.title || "creative task";
 
-  if (newStatus === "Ready To Work" && task.assigneeEmail && task.assigneeEmail !== session.email) {
-    notifications.push({ email: task.assigneeEmail, text: `"${productName}" is Ready To Work — you can start editing` });
+  if (newStatus === "Ready To Work") {
+    // Uploadmap in Drive klaarzetten; mislukt dit, dan mag de statuswissel niet blokkeren
+    try {
+      await ensureOutputFolder(task, session);
+    } catch (e) {
+      console.error("Drive folder error:", e.response?.data?.error?.message || e.message);
+      addLog(task, session, "⚠️ Google Drive-map kon niet worden aangemaakt — vul Final Output Link handmatig in");
+    }
+    if (task.assigneeEmail && task.assigneeEmail !== session.email) {
+      notifications.push({ email: task.assigneeEmail, text: `"${productName}" is Ready To Work — you can start editing` });
+    }
   }
   if (newStatus === "QA Check") {
     // Zowel de admin als de verantwoordelijke Creative Strategist krijgen de QA-melding
