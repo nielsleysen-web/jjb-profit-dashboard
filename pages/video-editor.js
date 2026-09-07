@@ -1257,6 +1257,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
   const chatEndRef = useRef(null);
   const debounceRef = useRef(null);
   const naming = namingConvention(t);
@@ -1592,8 +1593,24 @@ function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, 
                 <TextField value={t.finalOutputLink} disabled={!canEdit && !canOutput} onSave={(v) => save("finalOutputLink", v)} type="url" placeholder="https://…" />
               </Field>
               {!t.finalOutputLink && (
-                <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "2px" }}>
-                  A Google Drive upload folder is created automatically as soon as this task moves to Ready To Work — drop your files there.
+                <div style={{ marginTop: "2px" }}>
+                  <div style={{ fontSize: "12px", color: "#8a92a3" }}>
+                    A Google Drive upload folder is created automatically as soon as this task moves to Ready To Work — drop your files there.
+                  </div>
+                  {(canEdit || canOutput) && t.product?.title && (
+                    <button
+                      onClick={async () => {
+                        if (driveBusy) return;
+                        setDriveBusy(true);
+                        await post({ action: "driveFolder", taskId: t.id });
+                        setDriveBusy(false);
+                      }}
+                      disabled={driveBusy}
+                      style={{ marginTop: "8px", padding: "7px 13px", background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "9px", fontSize: "12px", fontWeight: 600, color: "#334155", cursor: driveBusy ? "default" : "pointer", opacity: driveBusy ? 0.6 : 1 }}
+                    >
+                      {driveBusy ? "Creating folder…" : "📁 Create Drive folder now"}
+                    </button>
+                  )}
                 </div>
               )}
             </Section>
