@@ -80,6 +80,10 @@ const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
 const TYPES = ["Net New", "Iteration"];
 const AROLL_OPTIONS = ["Existing", "Net New", "Keep Current"];
 
+// Standaard briefingdocument: hier schrijft Niels het script in.
+const BRIEFING_DOC =
+  "https://docs.google.com/document/d/1zdbrNHePBFWq6voImX-8avF0zZcPq6EPMV9pcbQFSd4/edit?usp=sharing";
+
 const SUBTITLE_STYLES = ["White Text, Shadowed Background", "Documentary Text", "TikTok Style", "TikTok Explanational", "Keep the same"];
 
 const STATUS_META = {
@@ -1511,7 +1515,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, 
               )}
               <div style={{ marginTop: "8px" }}>
                 <Field label="Briefing Link" last>
-                  <TextField value={t.scriptLink} disabled={!canEdit} onSave={(v) => save("scriptLink", v)} type="url" placeholder="https://…" />
+                  <TextField value={t.scriptLink || BRIEFING_DOC} disabled={!canEdit} onSave={(v) => save("scriptLink", v)} type="url" placeholder="https://…" />
                 </Field>
               </div>
             </Section>
