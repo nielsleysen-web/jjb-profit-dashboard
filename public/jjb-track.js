@@ -33,11 +33,27 @@
     if (fbp) data.fbp = decodeURIComponent(fbp[1]);
     if (!data.vid) data.vid = "jjb." + Date.now().toString(36) + "." + Math.random().toString(36).slice(2, 10);
     if (!data.first_touch) data.first_touch = new Date().toISOString();
-    if (!data.host) data.host = location.host; // first-touch funnel-domein → jjb_host op de order
-    if (!data.path) { // first-touch padsegment (= de funnel op dat domein) → jjb_path op de order
-      var seg0 = (location.pathname.split("/")[1] || "").toLowerCase();
-      if (seg0) data.path = seg0.slice(0, 60);
+
+    /* ---- Funnelbezoek afbakenen ----
+       host/path/pgs bepalen aan welke funnel de order wordt toegeschreven. Die mogen
+       NIET voor altijd op de allereerste funnel blijven staan die iemand ooit zag:
+       alle funnels delen hetzelfde domein en dus dezelfde localStorage. We starten een
+       nieuw funnelbezoek zodra iemand via een advertentie binnenkomt, of na 30 minuten
+       stilte. first_touch en vid blijven wél staan — dat is de bezoeker zelf. */
+    var ENTRY = ["ad_id", "adset_id", "campaign_id", "fbclid", "utm_source", "utm_campaign"];
+    var fromAd = ENTRY.some(function (k) { return !!q.get(k); });
+    var stale = !data.last_seen || Date.now() - data.last_seen > 1800000; // 30 min
+    var seg0 = (location.pathname.split("/")[1] || "").toLowerCase().slice(0, 60);
+
+    if (fromAd || stale || !data.host) {
+      data.host = location.host;   // funnel-domein van dit bezoek → jjb_host op de order
+      data.path = seg0;            // padsegment = de funnel op dat domein → jjb_path
+      data.pgs = [];               // A/B-varianten van dit bezoek, niet van vorige funnels
+      data.visit_start = new Date().toISOString();
     }
+    if (!data.path && seg0) data.path = seg0;
+
+    data.last_seen = Date.now();
     data.last_url = location.href.slice(0, 500);
     try { localStorage.setItem(LS, JSON.stringify(data)); } catch (e) {}
 
