@@ -406,6 +406,26 @@ function timeAgo(iso) {
   return mo === 1 ? "1 month ago" : `${mo} months ago`;
 }
 
+/* De ad-naam volgt onze naming convention en is veel te lang voor de zijbalk.
+   We tonen de angle — dat is wat je wil zien — en de volledige naam bij hover. */
+const AD_NOISE = /^(net new|iteration|h\d+|v\d+|ad|ugc|insta|organic ad|podcast ad|person iteration|\d+)$/i;
+const AD_DATE = /^\d{1,2}[-/]\d{1,2}([-/]\d{2,4})?$/;
+function adLabel(name, productTitle) {
+  if (!name) return "";
+  const prod = (productTitle || "").toLowerCase();
+  const parts = name.split(/\s*[|\u2013-]\s*/).map((x) => x.trim()).filter(Boolean);
+  const keep = parts.filter((x) => {
+    const l = x.toLowerCase();
+    if (AD_DATE.test(x) || AD_NOISE.test(x)) return false;
+    if (prod && (l === prod || prod.indexOf(l) > -1 || l.indexOf(prod) > -1)) return false;
+    return true;
+  });
+  const phrases = keep.filter((x) => /\s/.test(x)); // angles bestaan meestal uit meerdere woorden
+  const pick = phrases.length ? phrases.slice(0, 2) : keep.length ? [keep[keep.length - 1]] : parts.slice(0, 1);
+  const out = pick.join(" \u00b7 ");
+  return out.length > 44 ? out.slice(0, 43) + "\u2026" : out;
+}
+
 function RecentActivity({ formatCurrency, isMobile }) {
   const [orders, setOrders] = useState([]);
   const [, setTick] = useState(0);
@@ -487,6 +507,16 @@ function RecentActivity({ formatCurrency, isMobile }) {
                   {item ? `${item.quantity}× ${item.title}` : order.name}
                   {extra > 0 ? ` +${extra}` : ""}
                 </div>
+                {order.tracked ? (
+                  <div
+                    title={[order.campaign, order.ad, order.adId && `ad ${order.adId}`].filter(Boolean).join(" \u00b7 ") || "Tracked ad traffic"}
+                    style={{ fontSize: "11px", color: "#4338ca", background: "#eef2ff", borderRadius: "6px", padding: "2px 6px", marginTop: "4px", display: "inline-block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  >
+                    {adLabel(order.ad, item?.title) || order.campaign || `ad ${order.adId}`}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: "11px", color: "#b8bfcb", marginTop: "4px" }}>no ad tracked</div>
+                )}
                 <div style={{ fontSize: "11px", color: "#94a3b8", marginTop: "2px" }}>{timeAgo(order.createdAt)}</div>
               </div>
             </div>
