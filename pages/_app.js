@@ -52,6 +52,7 @@ const CATEGORIES = [
     items: [
       { href: "/video-editor", label: "Video Editor", icon: "🎬" },
       { href: "/graphic-designer", label: "Graphic Designer", icon: "🎨" },
+      { href: "/creatives-data", label: "Creatives Data", icon: "📊" },
     ],
   },
   {
