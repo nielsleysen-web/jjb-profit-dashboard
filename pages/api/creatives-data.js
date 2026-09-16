@@ -255,13 +255,25 @@ async function fetchOrdersByAd(from, to) {
 
 /* ---------------- taken → naming convention ---------------- */
 const firstName = (name) => (name || "").trim().split(/\s+/)[0] || "";
-const fmtDeadlineDate = (iso) => {
-  if (!iso) return "";
+
+// Deadline-datum zoals het team hem ziet (HK-tijd), in alle schrijfwijzen die in ad-namen voorkomen.
+// ±1 dag tolerantie: media buyers typen de datum soms een dag anders dan de taak.
+function deadlineVariants(iso) {
+  if (!iso) return [];
   const d = new Date(iso);
-  if (isNaN(d)) return "";
-  const p = (n) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
-};
+  if (isNaN(d)) return [];
+  const out = [];
+  for (const delta of [-1, 0, 1]) {
+    const x = new Date(d.getTime() + delta * 86400000);
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Hong_Kong", day: "2-digit", month: "2-digit", year: "numeric" }).formatToParts(x);
+    const get = (t) => parts.find((q) => q.type === t)?.value || "";
+    const dd = get("day"), mm = get("month"), yyyy = get("year");
+    out.push(`${dd}-${mm}-${yyyy}`, `${dd}/${mm}/${yyyy}`, `${dd}.${mm}.${yyyy}`, `${dd}-${mm}-${yyyy.slice(2)}`, `${dd}/${mm}/${yyyy.slice(2)}`, `${dd}-${mm}`, `${dd}/${mm}`, `${dd}${mm}`);
+  }
+  return out;
+}
+const fmtDeadlineDate = (iso) => deadlineVariants(iso)[8] || ""; // de "0 dagen" variant DD-MM-YYYY
+
 const norm = (s) =>
   String(s || "")
     .toUpperCase()
@@ -269,68 +281,84 @@ const norm = (s) =>
     .replace(/\s+/g, " ")
     .trim();
 
-// Tokens van een ad-naam: gesplitst op | of losse streepjes, genormaliseerd
-function tokensOf(name) {
-  return norm(name)
-    .split(/\s*\|\s*|\s+-\s+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-}
+const STOP = new Set(["THE", "AND", "OF", "A", "AN", "TO", "IN", "ON", "FOR", "WITH", "IT", "IS", "AD", "ADS", "NET", "NEW", "ITERATION", "JUST", "JENNY", "VIDEO", "IMAGE", "SWIPE", "UGC"]);
+const wordsOf = (s) => norm(s).split(/[^A-Z0-9]+/).filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
 
 function taskProfile(t, kind) {
-  const product = norm(t.product?.title);
+  const productTitle = t.product?.title || "";
+  const product = norm(productTitle);
+  const productWords = wordsOf(productTitle);
   const editor = norm(firstName(t.assigneeName));
+  const strategist = norm(firstName(t.strategistName));
   const deadline = fmtDeadlineDate(t.deadline);
   const angle = norm(t.angle);
+  const angleWords = [...new Set(wordsOf(t.angle).filter((w) => !productWords.includes(w)))];
   return {
     id: t.id,
     kind, // "video" | "image"
     product,
-    productTitle: t.product?.title || "",
+    productWords,
+    productTitle,
     productImage: t.product?.image || null,
     editor,
     editorName: t.assigneeName || "",
     editorEmail: (t.assigneeEmail || "").toLowerCase(),
+    strategist,
     strategistName: t.strategistName || "",
     angle,
+    angleWords,
     type: t.type || t.batchType || "",
     deadline,
+    deadlineVariants: deadlineVariants(t.deadline),
+    deadlineMs: t.deadline ? new Date(t.deadline).getTime() : 0,
     status: t.status || "",
-    naming: [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type || t.batchType, deadline]
+    naming: [productTitle, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type || t.batchType, deadline]
       .filter(Boolean)
       .map((s) => String(s).toUpperCase())
       .join(" | "),
   };
 }
 
-// Score hoe goed een ad-naam bij een taak past. Product + editor + deadline zijn de kern.
+// Hoe goed past een ad-naam bij een taak? Signalen: product (verplicht), editor, deadline, angle-woorden, strategist.
 function matchScore(adName, prof) {
-  if (!prof.product || !prof.editor) return 0;
   const n = norm(adName);
-  const toks = tokensOf(adName);
-  let score = 0;
-  if (toks.includes(prof.product) || n.includes(prof.product)) score += 3;
-  else return 0;
-  if (toks.includes(prof.editor)) score += 3;
-  else return 0;
-  if (prof.deadline && n.includes(prof.deadline)) score += 3;
-  if (prof.angle && (toks.includes(prof.angle) || n.includes(prof.angle))) score += 2;
-  return score;
+  if (!n || !prof.product) return null;
+  const words = new Set(wordsOf(adName));
+
+  // Product: volledige titel, óf alle kenmerkende woorden, óf het eerste kenmerkende woord (NEUROTONE, KRILL, …)
+  const pw = prof.productWords;
+  const productHit = n.includes(prof.product) || (pw.length > 0 && pw.every((w) => words.has(w))) || (pw.length > 0 && words.has(pw[0]));
+  if (!productHit) return null;
+
+  const editorHit = !!prof.editor && words.has(prof.editor);
+  const strategistHit = !!prof.strategist && words.has(prof.strategist);
+  const dateHit = prof.deadlineVariants.some((v) => (v.length >= 8 ? n.includes(v) : new RegExp(`(^|[^0-9])${v.replace(/[./-]/g, "\\$&")}([^0-9]|$)`).test(n)));
+  const aw = prof.angleWords;
+  const overlap = aw.length ? aw.filter((w) => words.has(w)).length / aw.length : 0;
+
+  let score = 3;
+  if (editorHit) score += 4;
+  if (strategistHit) score += 1;
+  if (dateHit) score += 3;
+  score += Math.round(overlap * 4);
+
+  // Accepteren als: editor + (deadline of de helft van de angle), of een vrijwel volledige angle-match
+  const ok = (editorHit && (dateHit || overlap >= 0.5)) || (overlap >= 0.8 && aw.length >= 2);
+  return { score, ok, editorHit, dateHit, overlap };
 }
 
 function bestTask(adName, profiles) {
   let best = null;
-  let bestScore = 0;
+  let bestM = null;
   for (const p of profiles) {
-    const s = matchScore(adName, p);
-    if (s > bestScore) {
-      bestScore = s;
+    const m = matchScore(adName, p);
+    if (!m) continue;
+    if (!bestM || m.score > bestM.score || (m.score === bestM.score && m.overlap > bestM.overlap)) {
       best = p;
+      bestM = m;
     }
   }
-  // product + editor alleen is te mager (dezelfde editor maakt meerdere creatives voor hetzelfde product);
-  // we willen ook de deadline óf de angle terugzien
-  return bestScore >= 8 ? best : null;
+  return { task: best, match: bestM };
 }
 
 /* ---------------- handler ---------------- */
@@ -396,7 +424,12 @@ export default async function handler(req, res) {
       const manual = links?.[adId];
       let task = manual ? byTaskId[`${manual.kind}:${manual.taskId}`] || null : null;
       const linkedManually = !!task;
-      if (!task && a.adName) task = bestTask(a.adName, profiles);
+      let suggestion = null;
+      if (!task && a.adName) {
+        const { task: guess, match } = bestTask(a.adName, profiles);
+        if (guess && match?.ok) task = guess;
+        else if (guess && match && match.score >= 7) suggestion = { taskId: guess.id, kind: guess.kind, label: guess.naming, editor: guess.editorName, product: guess.productTitle, why: match };
+      }
 
       const spend = round2(a.spend);
       const revenue = round2(o.revenue);
@@ -441,7 +474,7 @@ export default async function handler(req, res) {
           linkedManually,
         });
       } else if (spend > 0 || o.orders > 0) {
-        unmatched.push(base);
+        unmatched.push({ ...base, suggestion });
       }
     }
 
