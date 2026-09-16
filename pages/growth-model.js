@@ -287,7 +287,7 @@ export default function GrowthModel() {
         </div>
         <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
           Launch &amp; kill dates come straight from Meta daily spend (first / last day with spend) — nothing to log manually. CPA uses real Shopify
-          orders, not the pixel. Profit = revenue − COGS − ad spend (incl. 2.5% supplier fee), excl. payment fees. Set Source on each launch task —
+          orders, not the pixel. Profit = revenue − COGS − ad spend, excl. payment fees. Set Source on each launch task —
           that&apos;s the only manual input this page needs.
         </p>
       </div>
