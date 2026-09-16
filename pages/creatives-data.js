@@ -24,6 +24,7 @@ function useIsMobile() {
 }
 
 const RANGES = [
+  { key: "1", label: "Today" },
   { key: "7", label: "7d" },
   { key: "14", label: "14d" },
   { key: "30", label: "30d" },
@@ -67,7 +68,7 @@ const personColor = (seed) => {
 
 export default function CreativesData() {
   const isMobile = useIsMobile();
-  const [range, setRange] = useState("30");
+  const [range, setRange] = useState("1"); // standaard: vandaag
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [data, setData] = useState(null);
