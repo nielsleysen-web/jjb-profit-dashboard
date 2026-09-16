@@ -66,6 +66,93 @@ const personColor = (seed) => {
   return palette[h % palette.length];
 };
 
+/* ---------------- grafieken (SVG, geen library) ---------------- */
+const C_REV = "#4f46e5";   // revenue — indigo
+const C_SPEND = "#f59e0b"; // ad spend — amber
+
+function useTip() {
+  const [tip, setTip] = useState(null); // { x, y, lines: [] }
+  return [tip, setTip];
+}
+function Tip({ tip }) {
+  if (!tip) return null;
+  return (
+    <div style={{ position: "absolute", left: tip.x + 12, top: tip.y - 8, background: "#0f172a", color: "#fff", borderRadius: "8px", padding: "7px 10px", fontSize: "11.5px", lineHeight: 1.45, pointerEvents: "none", whiteSpace: "nowrap", boxShadow: "0 8px 20px rgba(15,23,42,0.25)", zIndex: 5 }}>
+      {tip.lines.map((l, i) => <div key={i} style={{ fontWeight: i === 0 ? 700 : 500, opacity: i === 0 ? 1 : 0.85 }}>{l}</div>)}
+    </div>
+  );
+}
+
+// Revenue vs ad spend per editor — gegroepeerde staven, één as
+function EditorBars({ items, isMobile }) {
+  const [tip, setTip] = useTip();
+  const data = items.slice(0, isMobile ? 5 : 8);
+  if (!data.length) return null;
+  const W = 640, H = 200, padL = 8, padR = 8, padT = 12, padB = 34;
+  const max = Math.max(1, ...data.map((d) => Math.max(d.revenue, d.spend)));
+  const gw = (W - padL - padR) / data.length;
+  const bw = Math.min(26, gw * 0.32);
+  const y = (v) => padT + (H - padT - padB) * (1 - v / max);
+  const base = H - padB;
+  return (
+    <div style={{ position: "relative" }} onMouseLeave={() => setTip(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+        {[0.25, 0.5, 0.75].map((f) => <line key={f} x1={padL} x2={W - padR} y1={y(max * f)} y2={y(max * f)} stroke="#f1f5f9" strokeWidth="1" />)}
+        <line x1={padL} x2={W - padR} y1={base} y2={base} stroke="#e2e8f0" strokeWidth="1" />
+        {data.map((d, i) => {
+          const cx = padL + gw * i + gw / 2;
+          const bars = [
+            { v: d.revenue, c: C_REV, x: cx - bw - 1, label: "Revenue" },
+            { v: d.spend, c: C_SPEND, x: cx + 1, label: "Ad spend" },
+          ];
+          return (
+            <g key={d.key}>
+              {bars.map((b) => {
+                const h = Math.max(0, base - y(b.v));
+                return (
+                  <rect key={b.label} x={b.x} y={base - h} width={bw} height={h} rx="4" fill={b.c}
+                    onMouseMove={(e) => { const r = e.currentTarget.ownerSVGElement.getBoundingClientRect(); setTip({ x: e.clientX - r.left, y: e.clientY - r.top, lines: [d.name, `${b.label}: ${eur0(b.v)}`, `ROAS ${d.roas == null ? "—" : d.roas.toFixed(2)}`] }); }} />
+                );
+              })}
+              <text x={cx} y={base + 16} textAnchor="middle" fontSize="11" fill="#64748b" fontWeight="600">{(d.name || "").split(" ")[0]}</text>
+              <text x={cx} y={base + 29} textAnchor="middle" fontSize="10" fill="#94a3b8">{d.roas == null ? "" : `${d.roas.toFixed(2)}x`}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <Tip tip={tip} />
+    </div>
+  );
+}
+
+// Top creatives op revenue — horizontale staven met directe labels
+function TopCreatives({ items, onPick }) {
+  const [tip, setTip] = useTip();
+  const data = items.slice(0, 6);
+  if (!data.length) return null;
+  const max = Math.max(1, ...data.map((d) => d.revenue));
+  return (
+    <div style={{ position: "relative", display: "grid", gap: "7px" }} onMouseLeave={() => setTip(null)}>
+      {data.map((d) => {
+        const w = Math.max(2, (d.revenue / max) * 100);
+        return (
+          <div key={d.adId} onClick={() => onPick && onPick(d)} style={{ display: "grid", gridTemplateColumns: "150px 1fr 64px", gap: "10px", alignItems: "center", cursor: onPick ? "pointer" : "default" }}
+            onMouseMove={(e) => { const r = e.currentTarget.parentElement.getBoundingClientRect(); setTip({ x: e.clientX - r.left, y: e.clientY - r.top, lines: [adLabel(d.adName, d.product) || d.adName, `${d.editor} · ${d.product}`, `Revenue ${eur0(d.revenue)} · spend ${eur0(d.spend)} · ROAS ${d.roas == null ? "—" : d.roas.toFixed(2)}`] }); }}>
+            <div style={{ fontSize: "11.5px", fontWeight: 600, color: "#334155", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={d.adName}>
+              {d.winner ? "🏆 " : ""}{adLabel(d.adName, d.product) || d.adName}
+            </div>
+            <div style={{ height: "14px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden" }}>
+              <div style={{ width: `${w}%`, height: "100%", background: C_REV, borderRadius: "4px" }} />
+            </div>
+            <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#0f172a", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur0(d.revenue)}</div>
+          </div>
+        );
+      })}
+      <Tip tip={tip} />
+    </div>
+  );
+}
+
 export default function CreativesData() {
   const isMobile = useIsMobile();
   const [range, setRange] = useState("1"); // standaard: vandaag
@@ -80,6 +167,7 @@ export default function CreativesData() {
   const [fKind, setFKind] = useState("");
   const [search, setSearch] = useState("");
   const [activeOnly, setActiveOnly] = useState(true); // standaard: alleen live ads en winners
+  const [groupByProduct, setGroupByProduct] = useState(false);
   const [sort, setSort] = useState({ key: "revenue", dir: "desc" });
   const [prefilled, setPrefilled] = useState(false);
   // handmatig koppelen
@@ -140,16 +228,31 @@ export default function CreativesData() {
 
   const sorted = useMemo(() => {
     const { key, dir } = sort;
-    const s = [...filtered].sort((a, b) => {
+    const m = dir === "desc" ? -1 : 1;
+    // lege waarden altijd onderaan; bij gelijke stand op revenue terugvallen
+    return [...filtered].sort((a, b) => {
       const av = a[key], bv = b[key];
-      if (av == null && bv == null) return 0;
+      if (av == null && bv == null) return b.revenue - a.revenue;
       if (av == null) return 1;
       if (bv == null) return -1;
-      if (typeof av === "string") return av.localeCompare(bv);
-      return av - bv;
+      const c = typeof av === "string" ? av.localeCompare(bv) : av - bv;
+      return c !== 0 ? c * m : b.revenue - a.revenue;
     });
-    return dir === "desc" ? s.reverse() : s;
   }, [filtered, sort]);
+
+  // gegroepeerd op product (optioneel): productkoppen met subtotalen tussen de rijen
+  const grouped = useMemo(() => {
+    if (!groupByProduct) return null;
+    const m = new Map();
+    for (const r of sorted) {
+      const k = r.product || "\u2014";
+      if (!m.has(k)) m.set(k, { product: k, image: r.productImage, rows: [], spend: 0, revenue: 0, orders: 0, profit: 0 });
+      const g = m.get(k);
+      g.rows.push(r);
+      g.spend += r.spend; g.revenue += r.revenue; g.orders += r.orders; g.profit += r.profit || 0;
+    }
+    return [...m.values()].sort((a, b) => b.revenue - a.revenue);
+  }, [sorted, groupByProduct]);
 
   // totalen voor de huidige filter
   const totals = useMemo(() => {
@@ -192,6 +295,7 @@ export default function CreativesData() {
   }, [rows, fProduct, fKind, activeOnly]);
 
   const toggleSort = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
+  const sortBy = (key) => setSort({ key, dir: "desc" }); // stat-kaart: altijd hoog → laag
   const sortMark = (key) => (sort.key === key ? (sort.dir === "desc" ? " ▾" : " ▴") : "");
 
   const linkAd = async (adId, direct) => {
@@ -270,6 +374,10 @@ export default function CreativesData() {
           <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} style={{ margin: 0 }} />
           Live + winners only
         </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 600, cursor: "pointer", padding: "7px 10px", borderRadius: "999px", border: "1px solid " + (groupByProduct ? "#0f172a" : "#e2e6ec"), background: groupByProduct ? "#0f172a" : "#fff", color: groupByProduct ? "#fff" : "#334155" }}>
+          <input type="checkbox" checked={groupByProduct} onChange={(e) => setGroupByProduct(e.target.checked)} style={{ margin: 0 }} />
+          Group by product
+        </label>
         <input placeholder="Search angle, ad, campaign…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...ui.select, minWidth: isMobile ? "100%" : "240px" }} />
         {(fEditor || fProduct || fKind || search) && (
           <button onClick={() => { setFEditor(""); setFProduct(""); setFKind(""); setSearch(""); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: "12.5px", cursor: "pointer", fontWeight: 600 }}>
@@ -286,15 +394,34 @@ export default function CreativesData() {
 
       {data && (
         <>
-          {/* Totalen */}
+          {/* Totalen — klik om de tabel op die metric te sorteren (hoog \u2192 laag) */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : `repeat(${showProfit ? 7 : 6}, 1fr)`, gap: isMobile ? "10px" : "14px", marginBottom: "16px" }}>
-            <Stat label="Ad spend" value={eur0(totals.spend)} />
-            <Stat label="Revenue" value={eur0(totals.revenue)} />
-            <Stat label="ROAS" value={totals.roas == null ? "—" : totals.roas.toFixed(2)} accent={totals.roas == null ? undefined : totals.roas >= winnerRule.minRoas ? "#15803d" : totals.roas >= 1 ? "#b45309" : "#b91c1c"} />
-            {showProfit && <Stat label="Profit" value={eur0(totals.profit)} accent={totals.profit >= 0 ? "#15803d" : "#b91c1c"} />}
-            <Stat label="Orders" value={totals.orders} />
-            <Stat label="CAC" value={totals.cac == null ? "—" : eur(totals.cac)} sub="spend / order" />
-            <Stat label="CVR" value={pct(totals.cvr)} sub="orders / clicks" />
+            <Stat label="Ad spend" value={eur0(totals.spend)} active={sort.key === "spend"} onClick={() => sortBy("spend")} />
+            <Stat label="Revenue" value={eur0(totals.revenue)} active={sort.key === "revenue"} onClick={() => sortBy("revenue")} />
+            <Stat label="ROAS" value={totals.roas == null ? "\u2014" : totals.roas.toFixed(2)} accent={totals.roas == null ? undefined : totals.roas >= winnerRule.minRoas ? "#15803d" : totals.roas >= 1 ? "#b45309" : "#b91c1c"} active={sort.key === "roas"} onClick={() => sortBy("roas")} />
+            {showProfit && <Stat label="Profit" value={eur0(totals.profit)} accent={totals.profit >= 0 ? "#15803d" : "#b91c1c"} active={sort.key === "profit"} onClick={() => sortBy("profit")} />}
+            <Stat label="Orders" value={totals.orders} active={sort.key === "orders"} onClick={() => sortBy("orders")} />
+            <Stat label="CAC" value={totals.cac == null ? "\u2014" : eur(totals.cac)} sub="spend / order" active={sort.key === "cac"} onClick={() => sortBy("cac")} />
+            <Stat label="CVR" value={pct(totals.cvr)} sub="orders / clicks" active={sort.key === "cvr"} onClick={() => sortBy("cvr")} />
+          </div>
+
+          {/* Grafieken */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1.2fr 1fr", gap: "14px", marginBottom: "16px" }}>
+            <div style={{ ...ui.card, padding: isMobile ? "14px 12px" : "18px 20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
+                <h2 style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>Revenue vs ad spend per editor</h2>
+                <span style={{ fontSize: "11px", color: "#8a92a3", display: "inline-flex", gap: "10px" }}>
+                  <span><span style={{ display: "inline-block", width: "9px", height: "9px", borderRadius: "2px", background: C_REV, marginRight: "4px" }} />Revenue</span>
+                  <span><span style={{ display: "inline-block", width: "9px", height: "9px", borderRadius: "2px", background: C_SPEND, marginRight: "4px" }} />Ad spend</span>
+                </span>
+              </div>
+              <EditorBars items={leaderboard} isMobile={isMobile} />
+            </div>
+            <div style={{ ...ui.card, padding: isMobile ? "14px 12px" : "18px 20px" }}>
+              <h2 style={{ margin: "0 0 10px 0", fontSize: "14px", fontWeight: 700 }}>Top creatives by revenue</h2>
+              <TopCreatives items={[...filtered].sort((a, b) => b.revenue - a.revenue)} onPick={(d) => d.outputLink && window.open(d.outputLink, "_blank", "noopener")} />
+              {filtered.length === 0 && <p style={{ fontSize: "12px", color: "#94a3b8", margin: 0 }}>Nothing in this range yet.</p>}
+            </div>
           </div>
 
           {/* Leaderboard */}
@@ -338,6 +465,7 @@ export default function CreativesData() {
                   <tr>
                     {th("angle", "Creative", "left")}
                     {th("editor", "Editor", "left")}
+                    {th("product", "Product", "left")}
                     {th("roas", "ROAS")}
                     {th("revenue", "Revenue")}
                     {showProfit && th("profit", "Profit")}
@@ -350,60 +478,16 @@ export default function CreativesData() {
                 </thead>
                 <tbody>
                   {sorted.length === 0 && (
-                    <tr><td colSpan={showProfit ? 10 : 9} style={{ padding: "28px", textAlign: "center", color: "#94a3b8" }}>No ads match this filter.{activeOnly && rows.length > 0 ? " Turn off \u201cLive + winners only\u201d to see paused ads." : ""}</td></tr>
+                    <tr><td colSpan={showProfit ? 11 : 10} style={{ padding: "28px", textAlign: "center", color: "#94a3b8" }}>No ads match this filter.{activeOnly && rows.length > 0 ? " Turn off \u201cLive + winners only\u201d to see paused ads." : ""}</td></tr>
                   )}
-                  {sorted.map((r) => {
-                    const rc = roasColor(r.roas);
-                    const label = adLabel(r.adName, r.product) || r.angle || r.adName;
-                    return (
-                      <tr key={r.adId} style={{ borderBottom: "1px solid #f4f5f7" }}>
-                        <td style={{ padding: "10px 12px", minWidth: "260px" }}>
-                          <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                            {r.productImage ? (
-                              <img src={r.productImage} alt="" style={{ width: "34px", height: "34px", borderRadius: "8px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
-                            ) : (
-                              <div style={{ width: "34px", height: "34px", borderRadius: "8px", background: "#f1f5f9", flexShrink: 0 }} />
-                            )}
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "340px" }} title={r.adName}>
-                                {r.winner && <span title="Winner" style={{ marginRight: "5px" }}>🏆</span>}
-                                {label}
-                              </div>
-                              <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "340px" }}>
-                                {r.kind === "video" ? "🎬" : "🎨"} {r.product}{r.type ? ` · ${r.type}` : ""}{r.linkedManually ? " · linked manually" : ""}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>
-                            <span style={{ width: "20px", height: "20px", borderRadius: "999px", background: personColor(r.editorEmail || r.editor), color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700 }}>
-                              {(r.editor || "?").charAt(0).toUpperCase()}
-                            </span>
-                            {r.editor || "—"}
-                          </span>
-                        </td>
-                        <td style={td}>
-                          <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: "999px", background: rc.bg, color: rc.c, fontWeight: 700, fontSize: "12px" }}>{num(r.roas)}</span>
-                        </td>
-                        <td style={{ ...td, fontWeight: 700, color: "#0f172a" }}>{eur(r.revenue)}</td>
-                        {showProfit && <td style={{ ...td, color: (r.profit || 0) >= 0 ? "#15803d" : "#b91c1c", fontWeight: 600 }}>{eur(r.profit)}</td>}
-                        <td style={td}>{eur(r.spend)}</td>
-                        <td style={td}>{r.orders}</td>
-                        <td style={td}>{r.cac == null ? "—" : eur(r.cac)}</td>
-                        <td style={td}>{pct(r.cvr)}</td>
-                        <td style={{ ...td, fontSize: "12px" }}>
-                          {r.live ? <span style={{ color: "#15803d", fontWeight: 700 }}>● live</span> : <span style={{ color: "#94a3b8" }}>paused</span>}
-                          <div style={{ fontSize: "11px", color: "#94a3b8" }}>{r.activeDays} {r.activeDays === 1 ? "day" : "days"}</div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {(grouped || [{ rows: sorted }]).map((g, gi) => (
+                    <GroupRows key={g.product || gi} group={grouped ? g : null} rows={g.rows} showProfit={showProfit} td={td} />
+                  ))}
                 </tbody>
               </table>
             </div>
             <p style={{ margin: "12px 0 0 0", fontSize: "11.5px", color: "#8a92a3" }}>
-              Revenue and orders are first-party (exact ad ID on the Shopify order). Ad spend and clicks come from Meta. CVR = orders / outbound clicks. CAC = ad spend / orders.
+              Click a creative to open its Drive folder or Frame.io link. Revenue and orders are first-party (exact ad ID on the Shopify order). Ad spend and clicks come from Meta. CVR = orders / outbound clicks. CAC = ad spend / orders.
               {!data.isAdmin && data.unmatchedCount > 0 && ` · ${data.unmatchedCount} ads could not be linked to a task — check the naming convention with the media buyer.`}
             </p>
           </div>
@@ -475,10 +559,94 @@ export default function CreativesData() {
   );
 }
 
-function Stat({ label, value, sub, accent }) {
+function GroupRows({ group, rows, showProfit, td }) {
   return (
-    <div style={{ ...ui.card, padding: "14px 16px" }}>
-      <div style={{ ...ui.label, marginBottom: "6px" }}>{label}</div>
+    <>
+      {group && (
+        <tr style={{ background: "#f8fafc" }}>
+          <td colSpan={showProfit ? 11 : 10} style={{ padding: "9px 12px", borderTop: "1px solid #eceef2", borderBottom: "1px solid #eceef2" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              {group.image ? <img src={group.image} alt="" style={{ width: "22px", height: "22px", borderRadius: "6px", objectFit: "cover" }} /> : null}
+              <span style={{ fontWeight: 800, fontSize: "12.5px", color: "#0f172a" }}>{group.product}</span>
+              <span style={{ fontSize: "11.5px", color: "#64748b" }}>
+                {group.rows.length} ads · revenue <b style={{ color: "#0f172a" }}>{eur0(group.revenue)}</b> · spend {eur0(group.spend)} · ROAS <b style={{ color: "#0f172a" }}>{group.spend > 0 ? (group.revenue / group.spend).toFixed(2) : "—"}</b> · {group.orders} orders
+                {showProfit ? <> · profit <b style={{ color: group.profit >= 0 ? "#15803d" : "#b91c1c" }}>{eur0(group.profit)}</b></> : null}
+              </span>
+            </div>
+          </td>
+        </tr>
+      )}
+      {rows.map((r) => <CreativeRow key={r.adId} r={r} showProfit={showProfit} td={td} />)}
+    </>
+  );
+}
+
+function CreativeRow({ r, showProfit, td }) {
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const rc = roasColor(r.roas);
+  const label = adLabel(r.adName, r.product) || r.angle || r.adName;
+  const open = () => r.outputLink && window.open(r.outputLink, "_blank", "noopener");
+  const isDrive = /drive\.google\.com/.test(r.outputLink || "");
+  const thumbSrc = r.thumbId && !thumbFailed ? `/api/creative-thumb?id=${encodeURIComponent(r.thumbId)}` : null;
+  return (
+    <tr style={{ borderBottom: "1px solid #f4f5f7" }}>
+      <td style={{ padding: "10px 12px", minWidth: "280px" }}>
+        <div onClick={open} title={r.outputLink ? `Open in ${isDrive ? "Google Drive" : "Frame.io"}\n${r.adName}` : r.adName} style={{ display: "flex", gap: "10px", alignItems: "center", cursor: r.outputLink ? "pointer" : "default" }}>
+          <div style={{ width: "56px", height: "56px", borderRadius: "10px", overflow: "hidden", background: "#f1f5f9", border: "1px solid #eceef2", flexShrink: 0, position: "relative" }}>
+            {thumbSrc ? (
+              <img src={thumbSrc} alt="" onError={() => setThumbFailed(true)} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            ) : r.productImage ? (
+              <img src={r.productImage} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: 0.85 }} />
+            ) : null}
+            <span style={{ position: "absolute", right: "3px", bottom: "3px", fontSize: "10px", background: "rgba(15,23,42,0.75)", color: "#fff", borderRadius: "5px", padding: "1px 4px" }}>{r.kind === "video" ? "🎬" : "🎨"}</span>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "300px" }}>
+              {r.winner && <span title="Winner" style={{ marginRight: "5px" }}>🏆</span>}
+              {label}
+            </div>
+            <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "300px" }}>
+              {r.type || (r.kind === "video" ? "Video" : "Image")}{r.linkedManually ? " · linked manually" : ""}
+              {r.outputLink ? <span style={{ color: "#4338ca", fontWeight: 600 }}> · {isDrive ? "📁 Drive" : "🎬 Frame.io"} ↗</span> : <span> · no output link</span>}
+            </div>
+          </div>
+        </div>
+      </td>
+      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: 600, color: "#334155" }}>
+          <span style={{ width: "20px", height: "20px", borderRadius: "999px", background: personColor(r.editorEmail || r.editor), color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700 }}>
+            {(r.editor || "?").charAt(0).toUpperCase()}
+          </span>
+          {r.editor || "—"}
+        </span>
+      </td>
+      <td style={{ padding: "10px 12px", whiteSpace: "nowrap", fontSize: "12.5px", color: "#334155" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          {r.productImage ? <img src={r.productImage} alt="" style={{ width: "18px", height: "18px", borderRadius: "5px", objectFit: "cover" }} /> : null}
+          {r.product || "—"}
+        </span>
+      </td>
+      <td style={td}>
+        <span style={{ display: "inline-block", padding: "3px 9px", borderRadius: "999px", background: rc.bg, color: rc.c, fontWeight: 700, fontSize: "12px" }}>{num(r.roas)}</span>
+      </td>
+      <td style={{ ...td, fontWeight: 700, color: "#0f172a" }}>{eur(r.revenue)}</td>
+      {showProfit && <td style={{ ...td, color: (r.profit || 0) >= 0 ? "#15803d" : "#b91c1c", fontWeight: 600 }}>{eur(r.profit)}</td>}
+      <td style={td}>{eur(r.spend)}</td>
+      <td style={td}>{r.orders}</td>
+      <td style={td}>{r.cac == null ? "—" : eur(r.cac)}</td>
+      <td style={td}>{pct(r.cvr)}</td>
+      <td style={{ ...td, fontSize: "12px" }}>
+        {r.live ? <span style={{ color: "#15803d", fontWeight: 700 }}>● live</span> : <span style={{ color: "#94a3b8" }}>paused</span>}
+        <div style={{ fontSize: "11px", color: "#94a3b8" }}>{r.activeDays} {r.activeDays === 1 ? "day" : "days"}</div>
+      </td>
+    </tr>
+  );
+}
+
+function Stat({ label, value, sub, accent, active, onClick }) {
+  return (
+    <div onClick={onClick} title={onClick ? `Sort by ${label} (high \u2192 low)` : undefined} style={{ ...ui.card, padding: "14px 16px", cursor: onClick ? "pointer" : "default", borderColor: active ? "#0f172a" : ui.card.border.split(" ").pop(), boxShadow: active ? "0 0 0 1px #0f172a inset" : ui.card.boxShadow, transition: "box-shadow .15s" }}>
+      <div style={{ ...ui.label, marginBottom: "6px", color: active ? "#0f172a" : ui.label.color }}>{label}{active ? " \u25be" : ""}</div>
       <div style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.4px", color: accent || "#0f172a" }}>{value}</div>
       {sub && <div style={{ fontSize: "11px", color: "#8a92a3", marginTop: "2px" }}>{sub}</div>}
     </div>
