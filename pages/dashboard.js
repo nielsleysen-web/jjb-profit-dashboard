@@ -55,7 +55,6 @@ export default function Dashboard() {
   const [customTo, setCustomTo] = useState("");
   const [refreshedAt, setRefreshedAt] = useState("");
   const [storeTime, setStoreTime] = useState("");
-  const [supplierFee, setSupplierFee] = useState(true); // 2,5% fee standaard AAN
   const inFlight = useRef(false);
   const isMobile = useIsMobile();
 
@@ -63,7 +62,7 @@ export default function Dashboard() {
     if (dateRange === "custom" && (!customFrom || !customTo)) return;
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, customFrom, customTo, supplierFee]);
+  }, [dateRange, customFrom, customTo]);
 
   // silent = achtergrond-refresh: geen loading-flikkering, fouten stil houden
   const fetchData = async (silent = false) => {
@@ -74,11 +73,10 @@ export default function Dashboard() {
       setError("");
     }
     try {
-      const feeParam = `&supplierFee=${supplierFee ? 1 : 0}`;
       const url =
         dateRange === "custom"
-          ? `/api/dashboard?range=custom&from=${customFrom}&to=${customTo}${feeParam}`
-          : `/api/dashboard?range=${dateRange}${feeParam}`;
+          ? `/api/dashboard?range=custom&from=${customFrom}&to=${customTo}`
+          : `/api/dashboard?range=${dateRange}`;
       const response = await fetch(url);
       const result = await response.json();
       if (!result.success) throw new Error(result.error);
@@ -108,7 +106,7 @@ export default function Dashboard() {
     }, intervalMs);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange, customFrom, customTo, supplierFee]);
+  }, [dateRange, customFrom, customTo]);
 
   // Live klok in de tijdzone van de winkel
   useEffect(() => {
@@ -281,24 +279,26 @@ export default function Dashboard() {
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Revenue" value={formatCurrency(data.revenue)} change={data.revenueChange} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(6, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "20px" }}>
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Profit %" value={`${(data.profitPercent || 0).toFixed(1)}%`} change={data.profitPercentChange} />
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Blended ROAS" value={data.adSpend > 0 ? (data.roas || 0).toFixed(2) : "—"} sub="revenue / ad spend" />
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="Avg. Order Value" value={formatCurrency(data.avgOrderValue)} change={data.aovChange} />
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} small label="COGS + Fees" value={formatCurrency(data.cogsAndFees)} sub={`COGS ${formatCurrency(data.cogs)} · fees ${formatCurrency(data.fees)}`} />
-        <div onClick={() => setSupplierFee((v) => !v)} style={{ cursor: "pointer" }} title={supplierFee ? "Click to exclude the 2.5% supplier fee from profit" : "Click to include the 2.5% supplier fee in profit"}>
-          <Card
-            compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}
-            small
-            label="Ad Spend (Meta)"
-            value={formatCurrency(data.adSpend)}
-            sub={
-              supplierFee
-                ? `${(data.adSpendPercent || 0).toFixed(1)}% of revenue · +${formatCurrency(data.adSupplierFee)} supplier fee (2.5%)`
-                : `${(data.adSpendPercent || 0).toFixed(1)}% of revenue · supplier fee OFF — profit excl. 2.5%`
-            }
-          />
-        </div>
+        <Card
+          compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}
+          small
+          label="Ad Spend (Meta)"
+          value={formatCurrency(data.adSpend)}
+          sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue`}
+        />
+        <Card
+          compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}
+          small
+          label="CAC"
+          value={data.totalOrders > 0 ? formatCurrency(data.cac) : "—"}
+          change={data.cacChange}
+          lowerIsBetter
+        />
       </div>
 
       {/* Products */}
@@ -499,7 +499,7 @@ function RecentActivity({ formatCurrency, isMobile }) {
 
 const cellR = { padding: "10px 12px", textAlign: "right", color: "#334155", fontVariantNumeric: "tabular-nums" };
 
-function Card({ label, value, change, sub, accent, small, compareLabel, extra }) {
+function Card({ label, value, change, sub, accent, small, compareLabel, extra, lowerIsBetter }) {
   return (
     <div style={{ ...ui.card, padding: small ? "18px 20px" : "22px 24px" }}>
       <div style={{ ...ui.label, marginBottom: small ? "8px" : "10px" }}>{label}</div>
@@ -521,13 +521,15 @@ function Card({ label, value, change, sub, accent, small, compareLabel, extra })
           {(() => {
             const v = change || 0;
             const up = v >= 0;
+            // Bij CAC is stijgen slecht en dalen goed — kleur en pijl los van elkaar
+            const good = lowerIsBetter ? v <= 0 : up;
             return (
               <span
                 style={{
                   fontSize: "12px",
                   fontWeight: 600,
-                  color: up ? "#16a34a" : "#dc2626",
-                  background: up ? "#f0fdf4" : "#fef2f2",
+                  color: good ? "#16a34a" : "#dc2626",
+                  background: good ? "#f0fdf4" : "#fef2f2",
                   padding: "2px 8px",
                   borderRadius: "999px",
                 }}
