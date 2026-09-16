@@ -363,6 +363,33 @@ function bestTask(adName, profiles) {
   return { task: best, match: bestM };
 }
 
+/* ---------------- thumbnails buiten Drive (Frame.io e.d.) ---------------- */
+// Deelpagina's van Frame.io dragen een og:image met de preview van het asset — precies
+// wat Slack toont bij een link. Die halen we op; geen Frame.io-token nodig.
+async function fetchOgImage(url) {
+  if (!/^https:\/\//i.test(url)) return "";
+  const r = await axios.get(url, {
+    timeout: 8000,
+    maxRedirects: 5,
+    responseType: "text",
+    maxContentLength: 2_000_000,
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; JJB-OperationsCentre/1.0; +https://getjustjenny.com)", Accept: "text/html,*/*" },
+    validateStatus: (st) => st >= 200 && st < 400,
+  });
+  const html = String(r.data || "");
+  const m =
+    html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i) ||
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i) ||
+    html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+  const img = m ? m[1].replace(/&amp;/g, "&") : "";
+  return /^https:\/\//i.test(img) ? img : "";
+}
+
+// Externe afbeelding via onze eigen proxy laden, met handtekening zodat alleen URL's
+// die déze API heeft gevonden doorgelaten worden (geen open proxy).
+const signUrl = (u) => crypto.createHmac("sha256", SESSION_SECRET).update(u).digest("base64url").slice(0, 24);
+const proxied = (u) => `/api/creative-thumb?u=${encodeURIComponent(u)}&s=${signUrl(u)}`;
+
 /* ---------------- handler ---------------- */
 const round2 = (v) => Math.round((v || 0) * 100) / 100;
 
@@ -477,7 +504,7 @@ export default async function handler(req, res) {
           type: task.type,
           linkedManually,
           outputLink: task.outputLink,
-          thumbId: thumbs[`${task.kind}:${task.id}`]?.fileId || "",
+          thumbSrc: "",
         });
       } else if (spend > 0 || o.orders > 0) {
         unmatched.push({ ...base, suggestion });
@@ -487,43 +514,59 @@ export default async function handler(req, res) {
     rows.sort((x, y) => y.revenue - x.revenue || y.spend - x.spend);
     unmatched.sort((x, y) => y.spend - x.spend);
 
-    // Thumbnails: voor Drive-mappen zonder (verse) cache het nieuwste bestand opzoeken.
-    // Begrensd per request zodat de pagina snel blijft; de rest volgt bij de volgende load.
-    if (driveConfigured()) {
+    // Thumbnails. Drive-map → nieuwste video/afbeelding via het service-account.
+    // Andere links (Frame.io) → og:image van de deelpagina. Alles gecachet in creative-thumbs,
+    // en per request begrensd zodat de pagina snel blijft; de rest volgt bij de volgende load.
+    {
       const DAY = 86400000;
       const todo = [];
       const seen = new Set();
       for (const r of rows) {
         const key = `${r.kind}:${r.taskId}`;
-        if (seen.has(key)) continue;
+        if (seen.has(key) || !r.outputLink) continue;
         seen.add(key);
         const folderId = folderIdFromLink(r.outputLink);
-        if (!folderId) continue;
+        const source = folderId ? `drive:${folderId}` : `url:${r.outputLink}`;
         const cached = thumbs[key];
-        const fresh = cached && cached.folderId === folderId && Date.now() - (cached.at || 0) < (cached.fileId ? 7 * DAY : DAY);
-        if (!fresh) todo.push({ key, folderId });
+        const hit = cached && cached.source === source;
+        const found = hit && (cached.fileId || cached.ogImage);
+        const fresh = hit && Date.now() - (cached.at || 0) < (found ? 7 * DAY : DAY);
+        if (!fresh) todo.push({ key, folderId, url: r.outputLink, source });
       }
       if (todo.length) {
         let changed = false;
         await Promise.all(
-          todo.slice(0, 12).map(async ({ key, folderId }) => {
+          todo.slice(0, 12).map(async ({ key, folderId, url, source }) => {
             try {
-              const f = await findCreativeFile(folderId);
-              thumbs[key] = { folderId, fileId: f?.hasThumbnail ? f.id : "", name: f?.name || "", at: Date.now() };
+              if (folderId) {
+                if (!driveConfigured()) return;
+                const f = await findCreativeFile(folderId);
+                thumbs[key] = { source, fileId: f?.hasThumbnail ? f.id : "", ogImage: "", name: f?.name || "", at: Date.now() };
+              } else {
+                const og = await fetchOgImage(url);
+                thumbs[key] = { source, fileId: "", ogImage: og, name: "", at: Date.now() };
+              }
               changed = true;
             } catch (e) {
-              console.warn("thumbnail lookup:", key, e.response?.data?.error?.message || e.message);
+              console.warn("thumbnail lookup:", key, e.response?.status || "", e.message);
+              thumbs[key] = { source, fileId: "", ogImage: "", name: "", at: Date.now() };
+              changed = true;
             }
           })
         );
         if (changed) {
-          for (const r of rows) r.thumbId = thumbs[`${r.kind}:${r.taskId}`]?.fileId || r.thumbId || "";
           try {
             await writeData("creative-thumbs", thumbs);
           } catch (e) {
             console.warn("thumbnail cache write:", e.message);
           }
         }
+      }
+      for (const r of rows) {
+        const t = thumbs[`${r.kind}:${r.taskId}`];
+        if (!t) continue;
+        if (t.fileId) r.thumbSrc = `/api/creative-thumb?id=${encodeURIComponent(t.fileId)}`;
+        else if (t.ogImage) r.thumbSrc = proxied(t.ogImage);
       }
     }
 
