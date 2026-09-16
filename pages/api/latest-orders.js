@@ -56,6 +56,7 @@ const QUERY_FULL = `
         name
         createdAt
         currentTotalPriceSet { shopMoney { amount } }
+        customAttributes { key value }
         customer { firstName lastName }
         shippingAddress { city country }
         lineItems(first: 5) {
@@ -80,6 +81,7 @@ const QUERY_BASIC = `
         name
         createdAt
         currentTotalPriceSet { shopMoney { amount } }
+        customAttributes { key value }
         lineItems(first: 5) {
           nodes {
             title
@@ -140,6 +142,13 @@ export default async function handler(req, res) {
           image: i.image?.url || null,
         }));
       const fullName = [o.customer?.firstName, o.customer?.lastName].filter(Boolean).join(" ");
+      // jjb_-attributes die jjb-track.js op de cart-permalink zet → welke ad deze sale bracht
+      const attrs = {};
+      for (const a of o.customAttributes || []) {
+        if (a?.key && a.key.indexOf("jjb_") === 0) attrs[a.key.slice(4)] = a.value || "";
+      }
+      const ad = attrs.utm_content || "";        // {{ad.name}} uit de URL-parameters
+      const campaign = attrs.utm_campaign || ""; // {{campaign.name}}
       return {
         id: o.id,
         name: o.name,
@@ -150,6 +159,12 @@ export default async function handler(req, res) {
         city: o.shippingAddress?.city || null,
         country: o.shippingAddress?.country || null,
         items,
+        ad,
+        adId: attrs.ad_id || "",
+        campaign,
+        funnel: attrs.path || "",
+        // alleen echt advertentieverkeer telt als herkend
+        tracked: !!(attrs.ad_id || ad || attrs.fbclid),
       };
     });
 
