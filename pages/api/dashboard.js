@@ -41,10 +41,6 @@ const STORE_TIMEZONE = "Europe/Brussels";
 const FALLBACK_FEE_PERCENT = 0.029;
 const FALLBACK_FEE_FIXED = 0.3;
 
-// Fee aan de ad account supplier: 2,5% bovenop de Meta ad spend,
-// wordt mee afgetrokken van de net profit.
-const AD_SUPPLIER_FEE_PERCENT = 0.025;
-
 // Optionele COGS override per variant. Wordt gebruikt als er GEEN unitCost
 // in Shopify staat. Key = "Product titel|Variant titel", value = kostprijs in EUR.
 // Voorbeeld: "ArmLift|2": 10.43
@@ -87,8 +83,6 @@ export default async function handler(req, res) {
 
   try {
     const { range = "7d", from, to } = req.query;
-    // supplierFee=0: de 2,5% ad account supplier fee buiten de profit-berekening laten (toggle op de Ad Spend-kaart)
-    const includeSupplierFee = req.query.supplierFee !== "0";
     const { dateFrom, dateTo, prevFrom, prevTo } = getDateRange(range, from, to);
 
     // 1 window = huidige + vorige periode → in één keer ophalen, daarna splitsen
@@ -98,7 +92,7 @@ export default async function handler(req, res) {
       readCampaignLinks(),
     ]);
 
-    const dashboard = buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee, aliases: links.aliases });
+    const dashboard = buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, aliases: links.aliases });
     dashboard.isAdmin = !!session.admin;
     dashboard.campaignAliases = links.aliases;
 
@@ -624,8 +618,7 @@ function matchAdSpendToProducts(productMap, campaignSpend, inPeriod, aliases = {
     .sort((a, b) => b.spend - a.spend);
 }
 
-function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, includeSupplierFee = true, aliases = {} }) {
-  const feePct = includeSupplierFee ? AD_SUPPLIER_FEE_PERCENT : 0;
+function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, aliases = {} }) {
   const inCurrent = (d) => d >= dateFrom && d <= dateTo;
   const inPrev = (d) => d >= prevFrom && d <= prevTo;
 
@@ -672,12 +665,12 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
 
   const unmatchedCampaigns = matchAdSpendToProducts(cur.productMap, meta.campaignSpend, inCurrent, aliases);
 
-  // Kerncijfers (incl. 2,5% ad account supplier fee, tenzij uitgezet via de toggle)
-  const adSupplierFee = adSpend * feePct;
-  const prevAdSupplierFee = prevAdSpend * feePct;
   // Shipping-opbrengst telt NIET mee als omzet, maar wel als pure extra winst
-  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend - adSupplierFee + cur.shipping;
-  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend - prevAdSupplierFee + prev.shipping;
+  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend + cur.shipping;
+  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend + prev.shipping;
+  // CAC = wat je per order aan advertenties betaalt
+  const cac = cur.totalOrders > 0 ? adSpend / cur.totalOrders : 0;
+  const prevCac = prev.totalOrders > 0 ? prevAdSpend / prev.totalOrders : 0;
   const avgOrderValue = cur.totalOrders > 0 ? cur.revenue / cur.totalOrders : 0;
   const prevAOV = prev.totalOrders > 0 ? prev.revenue / prev.totalOrders : 0;
   const profitPercent = cur.revenue > 0 ? (netProfit / cur.revenue) * 100 : 0;
@@ -697,7 +690,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
       fees: round2(day.fees),
       shippingProfit: round2(day.shipping || 0),
       adSpend: round2(spend),
-      profit: round2(day.revenue - day.cogs - day.fees - spend - spend * feePct + (day.shipping || 0)),
+      profit: round2(day.revenue - day.cogs - day.fees - spend + (day.shipping || 0)),
     });
   }
 
@@ -783,7 +776,8 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, incl
     avgOrderValue: round2(avgOrderValue),
     aovChange: round1(pctChange(avgOrderValue, prevAOV)),
     adSpend: round2(adSpend),
-    adSupplierFee: round2(adSupplierFee),
+    cac: round2(cac),
+    cacChange: round1(pctChange(cac, prevCac)),
     adSpendPercent:
       cur.revenue > 0 ? round1((adSpend / cur.revenue) * 100) : 0,
     roas: adSpend > 0 ? round2(cur.revenue / adSpend) : 0,
