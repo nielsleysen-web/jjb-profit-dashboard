@@ -28,7 +28,6 @@ const GATE_SWIPE = 60;             // testbudget swipe (EUR) — verdict valt zo
 const GATE_OWN = 210;              // testbudget eigen funnel (EUR)
 const MIN_DAILY_SPEND = 0.5;       // dagen met minder spend tellen niet als "live"
 const DEAD_AFTER_DAYS = 3;         // geen spend in de laatste 3 dagen = campagne is uit
-const AD_SUPPLIER_FEE = 0.025;     // 2,5% supplier fee bovenop Meta spend
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 // Aannames uit het hypothesedocument — de pagina zet ze naast de metingen
@@ -314,7 +313,7 @@ function buildGrowthModel(tasks, campaignDays, ordersByProduct, today) {
       orders += o.qty;
       revenue += o.revenue;
       cogs += o.cogs;
-      dailyProfit.push(o.revenue - o.cogs - spend * (1 + AD_SUPPLIER_FEE));
+      dailyProfit.push(o.revenue - o.cogs - spend);
     }
 
     const cpa = orders > 0 ? totalSpend / orders : null;
@@ -345,7 +344,7 @@ function buildGrowthModel(tasks, campaignDays, ordersByProduct, today) {
       const w = dailyProfit.slice(Math.max(0, i - 1), i + 2);
       peak = Math.max(peak, w.reduce((a, b) => a + b, 0) / w.length);
     }
-    const totalProfit = revenue - cogs - totalSpend * (1 + AD_SUPPLIER_FEE);
+    const totalProfit = revenue - cogs - totalSpend;
     const avgDailyProfit = lifespanDays > 0 ? totalProfit / lifespanDays : 0;
     const decayPct = peak > 0 ? Math.min(1, Math.max(0, avgDailyProfit / peak)) : null;
 
