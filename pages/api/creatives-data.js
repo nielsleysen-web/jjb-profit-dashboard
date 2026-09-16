@@ -13,6 +13,7 @@
 
 import axios from "axios";
 import crypto from "crypto";
+import { driveConfigured, folderIdFromLink, findCreativeFile } from "../../lib/gdrive";
 
 export const config = { maxDuration: 60 };
 
@@ -312,6 +313,7 @@ function taskProfile(t, kind) {
     deadlineVariants: deadlineVariants(t.deadline),
     deadlineMs: t.deadline ? new Date(t.deadline).getTime() : 0,
     status: t.status || "",
+    outputLink: t.finalOutputLink || t.frameioLink || "",
     naming: [productTitle, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type || t.batchType, deadline]
       .filter(Boolean)
       .map((s) => String(s).toUpperCase())
@@ -397,13 +399,15 @@ export default async function handler(req, res) {
     if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
 
     const { from, to } = resolveRange(req.query);
-    const [ads, ordersByAd, videoStore, designStore, links] = await Promise.all([
+    const [ads, ordersByAd, videoStore, designStore, links, thumbStore] = await Promise.all([
       fetchAdSpend(from, to),
       fetchOrdersByAd(from, to),
       readData("creative-tasks"),
       readData("design-tasks"),
       readData("creative-links"),
+      readData("creative-thumbs"),
     ]);
+    const thumbs = thumbStore && typeof thumbStore === "object" ? thumbStore : {};
 
     const profiles = [
       ...((videoStore?.tasks || []).map((t) => taskProfile(t, "video"))),
@@ -472,6 +476,8 @@ export default async function handler(req, res) {
           angle: task.angle,
           type: task.type,
           linkedManually,
+          outputLink: task.outputLink,
+          thumbId: thumbs[`${task.kind}:${task.id}`]?.fileId || "",
         });
       } else if (spend > 0 || o.orders > 0) {
         unmatched.push({ ...base, suggestion });
@@ -480,6 +486,46 @@ export default async function handler(req, res) {
 
     rows.sort((x, y) => y.revenue - x.revenue || y.spend - x.spend);
     unmatched.sort((x, y) => y.spend - x.spend);
+
+    // Thumbnails: voor Drive-mappen zonder (verse) cache het nieuwste bestand opzoeken.
+    // Begrensd per request zodat de pagina snel blijft; de rest volgt bij de volgende load.
+    if (driveConfigured()) {
+      const DAY = 86400000;
+      const todo = [];
+      const seen = new Set();
+      for (const r of rows) {
+        const key = `${r.kind}:${r.taskId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const folderId = folderIdFromLink(r.outputLink);
+        if (!folderId) continue;
+        const cached = thumbs[key];
+        const fresh = cached && cached.folderId === folderId && Date.now() - (cached.at || 0) < (cached.fileId ? 7 * DAY : DAY);
+        if (!fresh) todo.push({ key, folderId });
+      }
+      if (todo.length) {
+        let changed = false;
+        await Promise.all(
+          todo.slice(0, 12).map(async ({ key, folderId }) => {
+            try {
+              const f = await findCreativeFile(folderId);
+              thumbs[key] = { folderId, fileId: f?.hasThumbnail ? f.id : "", name: f?.name || "", at: Date.now() };
+              changed = true;
+            } catch (e) {
+              console.warn("thumbnail lookup:", key, e.response?.data?.error?.message || e.message);
+            }
+          })
+        );
+        if (changed) {
+          for (const r of rows) r.thumbId = thumbs[`${r.kind}:${r.taskId}`]?.fileId || r.thumbId || "";
+          try {
+            await writeData("creative-thumbs", thumbs);
+          } catch (e) {
+            console.warn("thumbnail cache write:", e.message);
+          }
+        }
+      }
+    }
 
     // Keuzelijst voor handmatig koppelen (alleen admin) — alleen taken die al een editor + product hebben
     const taskOptions = isAdmin
