@@ -587,7 +587,7 @@ function CreativeRow({ r, showProfit, td }) {
   const label = adLabel(r.adName, r.product) || r.angle || r.adName;
   const open = () => r.outputLink && window.open(r.outputLink, "_blank", "noopener");
   const isDrive = /drive\.google\.com/.test(r.outputLink || "");
-  const thumbSrc = r.thumbId && !thumbFailed ? `/api/creative-thumb?id=${encodeURIComponent(r.thumbId)}` : null;
+  const thumbSrc = r.thumbSrc && !thumbFailed ? r.thumbSrc : null;
   return (
     <tr style={{ borderBottom: "1px solid #f4f5f7" }}>
       <td style={{ padding: "10px 12px", minWidth: "280px" }}>
@@ -607,7 +607,7 @@ function CreativeRow({ r, showProfit, td }) {
             </div>
             <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "300px" }}>
               {r.type || (r.kind === "video" ? "Video" : "Image")}{r.linkedManually ? " · linked manually" : ""}
-              {r.outputLink ? <span style={{ color: "#4338ca", fontWeight: 600 }}> · {isDrive ? "📁 Drive" : "🎬 Frame.io"} ↗</span> : <span> · no output link</span>}
+              {r.outputLink ? <span style={{ color: "#4338ca", fontWeight: 600 }}> · {isDrive ? "📁 Drive" : "🔗 Frame.io"} ↗</span> : <span> · no output link</span>}
             </div>
           </div>
         </div>
