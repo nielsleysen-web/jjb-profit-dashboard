@@ -79,6 +79,7 @@ export default function CreativesData() {
   const [fProduct, setFProduct] = useState("");
   const [fKind, setFKind] = useState("");
   const [search, setSearch] = useState("");
+  const [activeOnly, setActiveOnly] = useState(true); // standaard: alleen live ads en winners
   const [sort, setSort] = useState({ key: "revenue", dir: "desc" });
   const [prefilled, setPrefilled] = useState(false);
   // handmatig koppelen
@@ -131,10 +132,11 @@ export default function CreativesData() {
       if (fEditor && (r.editorEmail || r.editor) !== fEditor) return false;
       if (fProduct && r.product !== fProduct) return false;
       if (fKind && r.kind !== fKind) return false;
+      if (activeOnly && !(r.live || r.winner)) return false;
       if (q && !`${r.adName} ${r.angle} ${r.campaignName} ${r.product} ${r.editor}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [rows, fEditor, fProduct, fKind, search]);
+  }, [rows, fEditor, fProduct, fKind, search, activeOnly]);
 
   const sorted = useMemo(() => {
     const { key, dir } = sort;
@@ -175,6 +177,7 @@ export default function CreativesData() {
     for (const r of rows) {
       if (fProduct && r.product !== fProduct) continue;
       if (fKind && r.kind !== fKind) continue;
+      if (activeOnly && !(r.live || r.winner)) continue;
       const k = r.editorEmail || r.editor || "?";
       if (!m[k]) m[k] = { key: k, name: r.editor || r.editorEmail, spend: 0, revenue: 0, orders: 0, ads: 0, winners: 0 };
       m[k].spend += r.spend;
@@ -186,13 +189,13 @@ export default function CreativesData() {
     return Object.values(m)
       .map((e) => ({ ...e, roas: e.spend > 0 ? e.revenue / e.spend : null }))
       .sort((a, b) => b.revenue - a.revenue);
-  }, [rows, fProduct, fKind]);
+  }, [rows, fProduct, fKind, activeOnly]);
 
   const toggleSort = (key) => setSort((s) => (s.key === key ? { key, dir: s.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
   const sortMark = (key) => (sort.key === key ? (sort.dir === "desc" ? " ▾" : " ▴") : "");
 
-  const linkAd = async (adId) => {
-    const pick = linkPick[adId];
+  const linkAd = async (adId, direct) => {
+    const pick = direct || linkPick[adId];
     if (!pick) return;
     const [kind, taskId] = pick.split(":");
     setLinkBusy(adId);
@@ -263,6 +266,10 @@ export default function CreativesData() {
           <option value="video">🎬 Video</option>
           <option value="image">🎨 Image</option>
         </select>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12.5px", color: "#334155", fontWeight: 600, cursor: "pointer", padding: "7px 10px", borderRadius: "999px", border: "1px solid " + (activeOnly ? "#0f172a" : "#e2e6ec"), background: activeOnly ? "#0f172a" : "#fff", color: activeOnly ? "#fff" : "#334155" }}>
+          <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} style={{ margin: 0 }} />
+          Live + winners only
+        </label>
         <input placeholder="Search angle, ad, campaign…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ ...ui.select, minWidth: isMobile ? "100%" : "240px" }} />
         {(fEditor || fProduct || fKind || search) && (
           <button onClick={() => { setFEditor(""); setFProduct(""); setFKind(""); setSearch(""); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: "12.5px", cursor: "pointer", fontWeight: 600 }}>
@@ -343,7 +350,7 @@ export default function CreativesData() {
                 </thead>
                 <tbody>
                   {sorted.length === 0 && (
-                    <tr><td colSpan={showProfit ? 10 : 9} style={{ padding: "28px", textAlign: "center", color: "#94a3b8" }}>No ads match this filter.</td></tr>
+                    <tr><td colSpan={showProfit ? 10 : 9} style={{ padding: "28px", textAlign: "center", color: "#94a3b8" }}>No ads match this filter.{activeOnly && rows.length > 0 ? " Turn off \u201cLive + winners only\u201d to see paused ads." : ""}</td></tr>
                   )}
                   {sorted.map((r) => {
                     const rc = roasColor(r.roas);
@@ -419,6 +426,18 @@ export default function CreativesData() {
                         <div style={{ fontSize: "11.5px", color: "#8a92a3" }}>
                           {u.campaignName} · spend {eur(u.spend)} · {u.orders} orders · {eur(u.revenue)}
                         </div>
+                        {u.suggestion && (
+                          <div style={{ fontSize: "11.5px", color: "#4338ca", marginTop: "3px", display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                            <span>Looks like <b>{u.suggestion.editor}</b> · {u.suggestion.label}</span>
+                            <button
+                              onClick={() => { setLinkPick((p) => ({ ...p, [u.adId]: `${u.suggestion.kind}:${u.suggestion.taskId}` })); setTimeout(() => linkAd(u.adId, `${u.suggestion.kind}:${u.suggestion.taskId}`), 0); }}
+                              disabled={linkBusy === u.adId}
+                              style={{ padding: "3px 9px", borderRadius: "999px", border: "1px solid #c7d2fe", background: "#eef2ff", color: "#4338ca", fontSize: "11.5px", fontWeight: 700, cursor: "pointer" }}
+                            >
+                              Link this one
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <select value={linkPick[u.adId] || ""} onChange={(e) => setLinkPick((p) => ({ ...p, [u.adId]: e.target.value }))} style={{ ...ui.select, maxWidth: isMobile ? "100%" : "420px" }}>
                         <option value="">— Link to task —</option>
