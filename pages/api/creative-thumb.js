@@ -4,7 +4,11 @@
 // (achter login), en de CDN cachet hem een dag.
 //
 // GET /api/creative-thumb?id=<drive file id>
+// GET /api/creative-thumb?u=<externe https-url>&s=<handtekening>   (Frame.io og:image)
+//   De handtekening komt van creatives-data.js; zonder geldige s wordt niets opgehaald,
+//   zodat dit geen open proxy is.
 
+import axios from "axios";
 import crypto from "crypto";
 import { fetchThumbnail, driveConfigured } from "../../lib/gdrive";
 
@@ -31,6 +35,30 @@ const EMPTY = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBR
 export default async function handler(req, res) {
   if (req.method !== "GET") return res.status(405).end();
   if (!hasSession(req)) return res.status(401).end();
+  const empty = (maxAge) => {
+    res.setHeader("Cache-Control", `private, max-age=${maxAge}`);
+    res.setHeader("Content-Type", "image/gif");
+    return res.status(404).send(EMPTY);
+  };
+
+  // Externe preview (Frame.io) — alleen met geldige handtekening
+  if (req.query.u) {
+    const u = String(req.query.u);
+    const sig = crypto.createHmac("sha256", SESSION_SECRET).update(u).digest("base64url").slice(0, 24);
+    if (String(req.query.s || "") !== sig || !/^https:\/\//i.test(u)) return res.status(403).end();
+    try {
+      const img = await axios.get(u, { responseType: "arraybuffer", timeout: 10000, maxRedirects: 3, maxContentLength: 8_000_000, headers: { "User-Agent": "Mozilla/5.0 (compatible; JJB-OperationsCentre/1.0)" } });
+      const ct = String(img.headers["content-type"] || "");
+      if (!ct.startsWith("image/")) return empty(300);
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      return res.status(200).send(Buffer.from(img.data));
+    } catch (e) {
+      console.warn("creative-thumb (external):", e.response?.status || "", e.message);
+      return empty(300);
+    }
+  }
+
   const id = String(req.query.id || "");
   if (!/^[A-Za-z0-9_-]{10,}$/.test(id)) return res.status(400).end();
   if (!driveConfigured()) return res.status(404).end();
