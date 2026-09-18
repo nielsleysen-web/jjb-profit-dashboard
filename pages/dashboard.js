@@ -276,7 +276,13 @@ export default function Dashboard() {
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "16px" }}>
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Total Orders" value={data.totalOrders || 0} change={data.ordersChange} />
         <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Net Profit" value={formatCurrency(data.netProfit)} change={data.profitChange} accent={data.netProfit >= 0 ? "#16a34a" : "#dc2626"} />
-        <Card compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined} label="Revenue" value={formatCurrency(data.revenue)} change={data.revenueChange} />
+        <Card
+          compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}
+          label="Revenue"
+          value={formatCurrency(data.revenue)}
+          change={data.revenueChange}
+          extra={data.shippingProfit > 0 ? `incl. ${formatCurrency(data.shippingProfit)} shipping \u2014 100% profit` : undefined}
+        />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(6, 1fr)", gap: isMobile ? "10px" : "16px", marginBottom: "20px" }}>
