@@ -508,10 +508,11 @@ function summarizeOrders(orders) {
     const refunded = parseFloat(
       order.totalRefundedSet?.shopMoney?.amount || 0
     );
-    // Shipping wordt UIT de omzet gehaald en apart geteld: het is geen productomzet
-    // maar pure extra winst (de verzendoptie kost ons niets extra).
+    // Shipping (betaalde verzendoptie) telt VOLLEDIG mee als omzet: de klant betaalt het,
+    // en het kost ons niets extra (zit al in de COGS). Het loopt dus door in revenue,
+    // ROAS, profit % en de productcijfers. Apart bijgehouden voor het bijschrift.
     const ship = parseFloat(order.totalShippingPriceSet?.shopMoney?.amount || 0);
-    const net = gross - refunded - ship;
+    const net = gross - refunded;
     revenue += net;
     shipping += ship;
 
@@ -525,12 +526,14 @@ function summarizeOrders(orders) {
     daily[day].fees += f;
     daily[day].shipping += ship;
 
+    // Shipping van deze order naar rato van de itemomzet over de producten verdelen,
+    // zodat productomzet optelt tot de totale omzet
+    const itemsTotal = order.lineItems.nodes.reduce((t, it) => t + parseFloat(it.discountedTotalSet?.shopMoney?.amount || 0), 0);
     for (const item of order.lineItems.nodes) {
       const name = item.product?.title || item.title;
       const itemCogs = lineItemCOGS(item);
-      const itemRevenue = parseFloat(
-        item.discountedTotalSet?.shopMoney?.amount || 0
-      );
+      const itemBase = parseFloat(item.discountedTotalSet?.shopMoney?.amount || 0);
+      const itemRevenue = itemBase + (itemsTotal > 0 ? ship * (itemBase / itemsTotal) : 0);
 
       cogs += itemCogs;
       daily[day].cogs += itemCogs;
@@ -666,8 +669,9 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, alia
   const unmatchedCampaigns = matchAdSpendToProducts(cur.productMap, meta.campaignSpend, inCurrent, aliases);
 
   // Shipping-opbrengst telt NIET mee als omzet, maar wel als pure extra winst
-  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend + cur.shipping;
-  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend + prev.shipping;
+  // Shipping zit in revenue en heeft geen kosten → automatisch volledig winst
+  const netProfit = cur.revenue - cur.cogs - cur.fees - adSpend;
+  const prevNetProfit = prev.revenue - prev.cogs - prev.fees - prevAdSpend;
   // CAC = wat je per order aan advertenties betaalt
   const cac = cur.totalOrders > 0 ? adSpend / cur.totalOrders : 0;
   const prevCac = prev.totalOrders > 0 ? prevAdSpend / prev.totalOrders : 0;
@@ -690,7 +694,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, alia
       fees: round2(day.fees),
       shippingProfit: round2(day.shipping || 0),
       adSpend: round2(spend),
-      profit: round2(day.revenue - day.cogs - day.fees - spend + (day.shipping || 0)),
+      profit: round2(day.revenue - day.cogs - day.fees - spend),
     });
   }
 
@@ -708,9 +712,8 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, alia
         });
         const gross = parseFloat(order.currentTotalPriceSet.shopMoney.amount);
         const refunded = parseFloat(order.totalRefundedSet?.shopMoney?.amount || 0);
-        const ship = parseFloat(order.totalShippingPriceSet?.shopMoney?.amount || 0);
         if (!hourly[h]) hourly[h] = { revenue: 0, orders: 0 };
-        hourly[h].revenue += gross - refunded - ship; // omzet excl. shipping, consistent met de kaarten
+        hourly[h].revenue += gross - refunded; // incl. shipping, consistent met de kaarten
         hourly[h].orders++;
       }
       const points = [];
