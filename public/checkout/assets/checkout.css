@@ -578,3 +578,9 @@ h2 + .fld { margin-top: 0; }
 .pm-more{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 5px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.1);font-size:12px;color:#444;font-weight:500}
 @media (max-width:640px){ .cc-ph{font-size:14px} .cc-row{gap:10px} }
 .cc-ph{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* v13: PayPal (links) en Google/Apple Pay (rechts) naast elkaar */
+.express-row{display:flex;gap:10px;align-items:stretch}
+.express-row > div{flex:1;min-width:0}
+.express-row > div:empty{display:none}
+.paypal-container{margin:0}

@@ -14,7 +14,7 @@ const CONFIG = {
   CYCLE_DAYS: 28,            // idem intervalDays
   MEMBERSHIP_CENTS: 4900,    // idem price — enkel voor de tekst, Stripe rekent met STRIPE_PRICE_MEMBERSHIP
   FUNNEL: 'main',
-  PAYPAL_CLIENT_ID: '',      // native PayPal-abonnementen staan uit; PayPal loopt via Stripe
+  PAYPAL_CLIENT_ID: '',      // wordt ingevuld door /api/checkout-config (PayPal rechtstreeks, buiten Stripe)
   PAYPAL_PLANS: { 1: '', 2: '', 3: '', 5: '' },
   META_CONTENT_IDS: ['10561889403146'],
   // Wordt ingevuld door /api/checkout-config
@@ -157,7 +157,7 @@ function updateAmounts() {
    charged a DIFFERENT amount by PayPal. Gate: hide PayPal whenever the displayed
    total diverges from the plan price, and say why. */
 function updatePayPalGate() {
-  const blocked = false; // PayPal loopt via Stripe: korting en verzending werken gewoon
+  const blocked = !!promo; // PayPal-plannen hebben een vaste prijs: geen kortingscode mogelijk
   const hideRow = blocked || apGuardActive;
   const expressBtn = $('#paypal-button-container');
   const payRow = $('#pm-paypal');
@@ -400,8 +400,9 @@ function setPayPalSelected(on) {
   $('#pm-cc-toggle').setAttribute('aria-pressed', String(!on));
   $('#pm-paypal-body').hidden = !on;
   $('#pm-cc-body').hidden = on;
-  // PayPal via Stripe: zelfde knop, andere tekst (redirect naar PayPal)
-  $('#pay-btn-text').textContent = on ? 'Paga con PayPal' : PAY_LABEL;
+  // PayPal: de gele PayPal-knop in de rij vervangt de gewone bestelknop
+  $('#pay-btn').hidden = on && !!CONFIG.PAYPAL_CLIENT_ID;
+  if (!CONFIG.PAYPAL_CLIENT_ID) $('#pay-btn-text').textContent = on ? 'Paga con PayPal' : PAY_LABEL;
 }
 
 const IS_MOBILE = matchMedia('(max-width: 999px)').matches;
@@ -439,7 +440,7 @@ const cardStyle = {
 function initStripe() {
   if (!stripe) {
     // Preview zonder Stripe-sleutel: toon hoe de snelle knoppen eruitzien (niet klikbaar)
-    if (!CONFIG.STRIPE_PK) { $('#express-section').hidden = false; $('#ece-preview').hidden = false; $('#pm-paypal').hidden = false; }
+    if (!CONFIG.STRIPE_PK) { $('#express-section').hidden = false; $('#ece-preview').hidden = !!CONFIG.PAYPAL_CLIENT_ID; $('#pm-paypal').hidden = false; }
     showError(CONFIG.STRIPE_PK ? 'Impossibile caricare il pagamento. Ricarica la pagina o prova con un altro browser.'
       : 'Il pagamento sarà disponibile a breve.');
     $('#pay-btn').disabled = true;
@@ -486,6 +487,7 @@ function initStripe() {
   });
   expressCheckout.mount('#express-checkout-element');
   expressCheckout.on('ready', (e) => {
+    if (!e.availablePaymentMethods) $('#express-checkout-element').style.display = 'none';
     if (e.availablePaymentMethods) {
       expressAvailable = true;
       if (!apGuardActive) $('#express-section').hidden = false;
@@ -593,70 +595,70 @@ function highlightShippingGaps() {
   }
 }
 
-/* ---------- PayPal subscription button ---------- */
+/* ---------- PayPal (rechtstreeks, buiten Stripe) ----------
+   Onze server kiest het juiste PayPal-plan (bundel × verzending) en maakt het abonnement;
+   na goedkeuring maakt /api/paypal/confirm meteen de Shopify-order (met ad-tracking). */
+let paypalReady = false;
 function initPayPal() {
-  const planId = PLANS[pack];
-  if (!planId || planId.indexOf('P-') !== 0 || PAYPAL_CLIENT_ID.indexOf('REPLACE') === 0) return;
+  if (!CONFIG.PAYPAL_CLIENT_ID) return;
   const s = document.createElement('script');
-  s.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(PAYPAL_CLIENT_ID)
-        + '&vault=true&intent=subscription&disable-funding=credit,card';
+  s.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(CONFIG.PAYPAL_CLIENT_ID)
+        + '&vault=true&intent=subscription&currency=EUR&locale=it_IT&disable-funding=credit,card';
   s.onload = () => {
     if (!window.paypal) return;
-    const buttonConfig = {
+    const makeConfig = (inline) => ({
       fundingSource: window.paypal.FUNDING.PAYPAL,
-      style: { shape: 'rect', height: 48, label: 'paypal', tagline: false },
-      // Gate the PayPal flow on a complete shipping address+name. This is what
-      // closes the "express button clicked with an empty form" hole: without a
-      // provided address we'd fall back to PayPal's stored copy, which can be
-      // empty → an unshippable Shopify order. Reject → force the form first, so
-      // createSubscription below always sends SET_PROVIDED_ADDRESS.
+      style: { shape: 'rect', height: 48, label: 'paypal', tagline: false, color: 'gold' },
+      // Onderaan (in het formulier): eerst naam + adres invullen, zodat het juiste adres naar Shopify gaat.
+      // Bovenaan (snelle knop): mag zonder formulier — dan nemen we het adres uit PayPal.
       onClick: (data, actions) => {
-        if (paypalSubscriber()) return actions.resolve();
+        if (promo) { showError('I codici sconto sono disponibili con il pagamento con carta.'); return actions.reject(); }
+        if (!inline || paypalSubscriber()) return actions.resolve();
         showError('Inserisci nome e indirizzo di spedizione prima di pagare con PayPal.');
         highlightShippingGaps();
         const first = $('#first-name');
         (first.value.trim() ? $('#address') : first).scrollIntoView({ behavior: 'smooth', block: 'center' });
         return actions.reject();
       },
-      createSubscription: (data, actions) => {
-        // Prefer the address the buyer typed on our form (SET_PROVIDED_ADDRESS)
-        // so it's guaranteed to reach Shopify; fall back to PayPal's stored
-        // address only when the form isn't complete (e.g. the top express
-        // button clicked before typing an address).
-        const provided = paypalSubscriber();
-        return actions.subscription.create({
-          plan_id: planId,
-          custom_id: CONFIG.FUNNEL + '|' + pack,
-          ...(provided ? { subscriber: provided } : {}),
-          application_context: {
-            brand_name: CONFIG.BRAND_NAME,
-            shipping_preference: provided ? 'SET_PROVIDED_ADDRESS' : 'GET_FROM_FILE',
-            user_action: 'SUBSCRIBE_NOW',
-          },
+      createSubscription: async () => {
+        const sh = paypalSubscriber() ? collectShipping() : null;
+        const r = await fetch('/api/paypal/create-subscription', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pack, ship_method: shipMethod, track: attribution(),
+            email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh,
+          }),
         });
+        const d = await r.json();
+        if (!r.ok || !d.id) { showError(d.error || 'PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.'); throw new Error('paypal create'); }
+        return d.id;
       },
-      onApprove: (data) => {
-        // PayPal owns email + shipping here; the webhook writes them to Shopify.
-        sessionStorage.setItem('checkout_order', JSON.stringify({
-          pack, label: P.label,
-          amount: P.amount, discount: 0, shipping_cents: 0, total: P.amount,
-          ship_method: 'Standard (5-8 Business Days)',
-          paypal: true, ts: Date.now(),
-        }));
-        location.href = successUrl(data.subscriptionID);
+      onApprove: async (data) => {
+        setBusy(true);
+        const id = data.subscriptionID;
+        try {
+          await fetch('/api/paypal/confirm', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, track: attribution(), phone: ($('#phone') && $('#phone').value.trim()) || '' }),
+          });
+        } catch (e) { logClient('paypal_confirm', e && e.message, 'paypal'); }
+        try { sessionStorage.setItem('checkout_purchase_fired', id); } catch (e) {}
+        location.href = new URL(CONFIG.SUCCESS_PATH + '?pp=' + encodeURIComponent(id) + '&b=' + pack, location.origin).href;
       },
-      onError: () => showError('PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.'),
-    };
-    // Express button up top
-    window.paypal.Buttons(buttonConfig).render('#paypal-button-container').then(() => {
-      expressAvailable = true;
+      onError: (err) => { showError('PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.'); logClient('paypal_error', err && err.message, 'paypal'); },
+    });
+    // Snelle knop bovenaan
+    window.paypal.Buttons(makeConfig(false)).render('#paypal-button-container').then(() => {
+      paypalReady = true;
+      $('#ece-preview').hidden = true;
       if (!apGuardActive) $('#express-section').hidden = false;
-    });
-    // Shopify-style payment-method row: same button, revealed when the row is selected
-    window.paypal.Buttons(buttonConfig).render('#paypal-inline-container').then(() => {
+      updatePayPalGate();
+    }).catch(() => {});
+    // Rij "PayPal" bij Pagamento
+    window.paypal.Buttons(makeConfig(true)).render('#paypal-inline-container').then(() => {
       $('#pm-paypal').hidden = false;
-      updatePayPalGate(); // apply promo/express gate to the freshly-revealed row
-    });
+      updatePayPalGate();
+    }).catch(() => {});
   };
   document.head.appendChild(s);
 }
@@ -970,6 +972,7 @@ async function loadConfig() {
     CONFIG.STRIPE_PK = c.stripePk || '';
     CONFIG.STRIPE_PAYPAL = !!c.paypal;
     CONFIG.META_PIXEL_ID = c.pixelId || '';
+    CONFIG.PAYPAL_CLIENT_ID = c.paypalClientId || '';
   } catch (e) { logClient('config', e && e.message, 'boot'); }
   if (CONFIG.STRIPE_PK && typeof Stripe !== 'undefined') stripe = Stripe(CONFIG.STRIPE_PK, { locale: 'it' });
   if (CONFIG.META_PIXEL_ID) loadPixel(CONFIG.META_PIXEL_ID);
@@ -1082,6 +1085,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('#checkout-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     $('#pay-error').hidden = true;
+    if (payPalSelected && CONFIG.PAYPAL_CLIENT_ID) return; // PayPal betaalt via de gele PayPal-knop
     if (!validateForm()) return;
     setBusy(true);
     // AddPaymentInfo: fires here on submit, when email + name + full address are

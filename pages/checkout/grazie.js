@@ -168,7 +168,8 @@ export default function Grazie() {
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
-    setQ({ sub: p.get("sub") || "", b: p.get("b"), rs: p.get("redirect_status") || "" });
+    // Stripe: ?sub=sub_…   PayPal: ?pp=I-…
+    setQ({ sub: p.get("sub") || p.get("pp") || "", paypal: !!p.get("pp"), b: p.get("b"), rs: p.get("redirect_status") || "" });
   }, []);
 
   // Gegevens ophalen; zolang de Shopify-order er nog niet is (webhook), even opnieuw proberen
@@ -178,7 +179,8 @@ export default function Grazie() {
     let timer;
     const load = async () => {
       try {
-        const r = await fetch(`/api/stripe/order?sub=${encodeURIComponent(q.sub)}`).then((x) => x.json());
+        const url = q.paypal ? `/api/paypal/order?id=${encodeURIComponent(q.sub)}` : `/api/stripe/order?sub=${encodeURIComponent(q.sub)}`;
+        const r = await fetch(url).then((x) => x.json());
         if (r.error) { setErr(r.error); return; }
         setData(r);
         tries.current += 1;

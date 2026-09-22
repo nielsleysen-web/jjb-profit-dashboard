@@ -11,6 +11,7 @@
 import Stripe from "stripe";
 import { upsertRow } from "../../lib/gsheets";
 import { shopifyGraphql, findOrderForInvoice } from "../../lib/shopify-admin";
+import { paypalConfigured, pp, findOrderForPaypal } from "../../lib/paypal";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 const MAX_Q = 11;
@@ -26,7 +27,7 @@ function itTime(ms) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  if (!stripe || !process.env.QUIZ_SHEET_ID) return res.status(500).json({ error: "Non configurato" });
+  if (!process.env.QUIZ_SHEET_ID) return res.status(500).json({ error: "Non configurato" });
 
   const b = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
   const subId = String(b.sub || "");
@@ -34,14 +35,22 @@ export default async function handler(req, res) {
   const answers = (Array.isArray(b.answers) ? b.answers : []).slice(0, MAX_Q).map((a) => String(a || "").trim().slice(0, 2000));
   const questions = (Array.isArray(b.questions) ? b.questions : []).slice(0, MAX_Q).map((q) => String(q || "").slice(0, 300));
   const first = Number(b.first) || Date.now();
-  if (!/^sub_[A-Za-z0-9]{8,}$/.test(subId) || !/^[0-9a-f]{18}$/.test(sid) || !answers.length) {
+  const isPaypal = /^I-[A-Z0-9]{6,}$/.test(subId);
+  if ((!isPaypal && !/^sub_[A-Za-z0-9]{8,}$/.test(subId)) || !/^[0-9a-f]{18}$/.test(sid) || !answers.length) {
     return res.status(400).json({ error: "Richiesta non valida" });
   }
 
   try {
-    // Alleen echte, recente bestellingen mogen schrijven
-    const sub = await stripe.subscriptions.retrieve(subId);
-    if (Date.now() / 1000 - sub.created > 30 * 86400) return res.status(404).json({ error: "Non trovato" });
+    // Alleen echte, recente bestellingen mogen schrijven (Stripe of PayPal)
+    let sub = null;
+    if (isPaypal) {
+      if (!paypalConfigured()) return res.status(500).json({ error: "Non configurato" });
+      const ps = await pp("get", `/v1/billing/subscriptions/${subId}`);
+      if (Date.now() - new Date(ps.create_time).getTime() > 30 * 86400000) return res.status(404).json({ error: "Non trovato" });
+    } else {
+      sub = await stripe.subscriptions.retrieve(subId);
+      if (Date.now() / 1000 - sub.created > 30 * 86400) return res.status(404).json({ error: "Non trovato" });
+    }
 
     const completed = answers.length >= MAX_Q;
     const row = [
@@ -57,8 +66,8 @@ export default async function handler(req, res) {
 
     if (completed) {
       try {
-        const invId = typeof sub.latest_invoice === "string" ? sub.latest_invoice : sub.latest_invoice?.id;
-        const order = invId ? await findOrderForInvoice(invId) : null;
+        const invId = sub ? (typeof sub.latest_invoice === "string" ? sub.latest_invoice : sub.latest_invoice?.id) : null;
+        const order = isPaypal ? await findOrderForPaypal(subId) : invId ? await findOrderForInvoice(invId) : null;
         if (order) {
           const lines = answers.map((a, k) => `${k + 1}. ${questions[k] || ""}\n→ ${a || "-"}`).join("\n\n");
           const note = `${order.note ? order.note + "\n\n" : ""}— Enquête bedankpagina (SID ${sid}) —\n${lines}`.slice(0, 5000);

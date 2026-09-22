@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Checkout — Just Jenny</title>
-<link rel="stylesheet" href="/checkout/assets/checkout.css?v=12">
+<link rel="stylesheet" href="/checkout/assets/checkout.css?v=13">
 <script src="https://js.stripe.com/v3/"></script>
 <!-- Meta Pixel wordt geladen door checkout.js zodra META_PIXEL_ID in Vercel staat -->
 </head>
@@ -57,12 +57,14 @@
       <!-- Express checkout (PayPal / Google Pay / Apple Pay via Stripe) -->
       <section class="express-section" id="express-section" hidden>
         <p class="express-caption">Check-out rapido</p>
-        <div id="express-checkout-element"></div>
+        <div class="express-row">
+          <div id="paypal-button-container" class="paypal-container"></div>
+          <div id="express-checkout-element"></div>
+        </div>
         <div class="ece-preview" id="ece-preview" hidden>
           <span class="pp"><i>Pay</i><em>Pal</em></span>
           <span class="gp"><b class="g">G</b> Pay</span>
         </div>
-        <div id="paypal-button-container" class="paypal-container"></div>
         <div class="or-divider"><span>OPPURE</span></div>
       </section>
 
@@ -342,6 +344,6 @@
   </ul>
 </template>
 
-<script src="/checkout/assets/checkout.js?v=12"></script>
+<script src="/checkout/assets/checkout.js?v=13"></script>
 </body>
 </html>
