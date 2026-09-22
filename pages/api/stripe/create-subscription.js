@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       currency: CURRENCY,
       unit_amount: MEMBERSHIP.price,
       recurring: { interval: "day", interval_count: MEMBERSHIP.intervalDays },
-      product_data: { name: `${MEMBERSHIP.name} (ogni ${MEMBERSHIP.intervalDays} giorni)` },
+      product_data: { name: MEMBERSHIP.name },
     }));
     const bundlePrice = await getOrCreatePrice(`jj_bundle_${bundle.qty}_${bundle.price}_${V}`, {
       currency: CURRENCY,
