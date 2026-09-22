@@ -541,7 +541,7 @@ function summarizeOrders(orders) {
       if (itemRevenue === 0 && itemCogs === 0) continue; // gratis geschenken overslaan
 
       if (!productMap[name]) {
-        productMap[name] = { name, image: null, orders: 0, revenue: 0, cogs: 0, adSpend: 0, outboundClicks: 0 };
+        productMap[name] = { name, image: null, orders: 0, revenue: 0, cogs: 0, fees: 0, adSpend: 0, outboundClicks: 0 };
       }
       if (!productMap[name].image && item.image?.url) {
         productMap[name].image = item.image.url;
@@ -549,6 +549,8 @@ function summarizeOrders(orders) {
       productMap[name].orders += item.quantity;
       productMap[name].revenue += itemRevenue;
       productMap[name].cogs += itemCogs;
+      // Betaalkosten van de order naar rato meegeven, zodat productwinst optelt tot de netto winst
+      productMap[name].fees += itemsTotal > 0 ? f * (itemBase / itemsTotal) : 0;
     }
   }
 
@@ -748,11 +750,12 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, alia
   // Producten gesorteerd op winst
   const products = Object.values(cur.productMap)
     .map((p) => {
-      const profit = p.revenue - p.cogs - p.adSpend;
+      const profit = p.revenue - p.cogs - (p.fees || 0) - p.adSpend;
       return {
         ...p,
         revenue: round2(p.revenue),
         cogs: round2(p.cogs),
+        fees: round2(p.fees || 0),
         adSpend: round2(p.adSpend),
         profit: round2(profit),
         profitPercent: p.revenue > 0 ? round1((profit / p.revenue) * 100) : null,
