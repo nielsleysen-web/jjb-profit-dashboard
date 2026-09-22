@@ -1,6 +1,6 @@
 /* Just Jenny checkout (checkout.getjustjenny.com) — gebaseerd op de subscription-checkout-kit.
    Stripe (losse kaartvelden + Express Checkout: Apple Pay / Google Pay / PayPal / Link).
-   Model: de bundel wordt NU betaald (+ verzending), daarna start de NeuroTone Membership:
+   Model: de bundel wordt NU betaald (+ verzending), daarna start de Just Jenny Health For Life Membership:
    7 dagen gratis proef, dan €49 elke 28 dagen. Alleen de eerste order gaat naar Shopify.
    Sleutels (publishable key, pixel-ID) komen uit Vercel via /api/checkout-config —
    er staan dus geen sleutels in dit (publieke) bestand. */
@@ -57,8 +57,8 @@ const PACKS = {
 };
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
-  insured: { cents: 395, title: 'Spedizione assicurata + ecologica' },
-  free:    { cents: 0,   title: 'Spedizione gratuita' },
+  free:    { cents: 0,   title: 'Standard (5-8 giorni lavorativi)' },
+  insured: { cents: 395, title: 'Express (3-5 giorni lavorativi)' },
 };
 const PROVINCES = { AG:'Agrigento',AL:'Alessandria',AN:'Ancona',AO:'Aosta',AR:'Arezzo',AP:'Ascoli Piceno',AT:'Asti',AV:'Avellino',BA:'Bari',BT:'Barletta-Andria-Trani',BL:'Belluno',BN:'Benevento',BG:'Bergamo',BI:'Biella',BO:'Bologna',BZ:'Bolzano',BS:'Brescia',BR:'Brindisi',CA:'Cagliari',CL:'Caltanissetta',CB:'Campobasso',CE:'Caserta',CT:'Catania',CZ:'Catanzaro',CH:'Chieti',CO:'Como',CS:'Cosenza',CR:'Cremona',KR:'Crotone',CN:'Cuneo',EN:'Enna',FM:'Fermo',FE:'Ferrara',FI:'Firenze',FG:'Foggia',FC:'Forlì-Cesena',FR:'Frosinone',GE:'Genova',GO:'Gorizia',GR:'Grosseto',IM:'Imperia',IS:'Isernia',SP:'La Spezia',AQ:"L'Aquila",LT:'Latina',LE:'Lecce',LC:'Lecco',LI:'Livorno',LO:'Lodi',LU:'Lucca',MC:'Macerata',MN:'Mantova',MS:'Massa-Carrara',MT:'Matera',ME:'Messina',MI:'Milano',MO:'Modena',MB:'Monza e Brianza',NA:'Napoli',NO:'Novara',NU:'Nuoro',OR:'Oristano',PD:'Padova',PA:'Palermo',PR:'Parma',PV:'Pavia',PG:'Perugia',PU:'Pesaro e Urbino',PE:'Pescara',PC:'Piacenza',PI:'Pisa',PT:'Pistoia',PN:'Pordenone',PZ:'Potenza',PO:'Prato',RG:'Ragusa',RA:'Ravenna',RC:'Reggio Calabria',RE:'Reggio Emilia',RI:'Rieti',RN:'Rimini',RM:'Roma',RO:'Rovigo',SA:'Salerno',SS:'Sassari',SV:'Savona',SI:'Siena',SR:'Siracusa',SO:'Sondrio',SU:'Sud Sardegna',TA:'Taranto',TE:'Teramo',TR:'Terni',TO:'Torino',TP:'Trapani',TN:'Trento',TV:'Treviso',TS:'Trieste',UD:'Udine',VA:'Varese',VE:'Venezia',VB:'Verbano-Cusio-Ossola',VC:'Vercelli',VR:'Verona',VV:'Vibo Valentia',VI:'Vicenza',VT:'Viterbo' };
 const COUNTRIES = { IT: 'Italia' };
@@ -78,14 +78,14 @@ const P = PACKS[pack];
 // fire here on page parse — removed: it double-counted IC and muddied the signal
 // sent to Meta's optimizer.)
 
-let shipMethod = 'insured';
+let shipMethod = 'insured'; // standaard: Express 3,95 €
 let promo = null; // { code, percent_off, amount_off, duration }
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
 const money = (c) => (c / 100).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
-function shipCents() { return (SHIP[shipMethod] || SHIP.insured).cents; }
+function shipCents() { return (SHIP[shipMethod] || SHIP.free).cents; }
 // Stripe applies subscription-level discounts to the WHOLE first invoice,
 // including the one-time express-shipping item — mirror that here.
 function discountCents() {
@@ -357,10 +357,10 @@ function addBusinessDays(from, n) {
   return d;
 }
 function renderShipDates() {
-  const fmt = (d) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const fmt = (d) => d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
   $$('.ship-date').forEach(el => {
     const [min, max] = el.dataset.shipDate.split(',').map(Number);
-    el.textContent = fmt(addBusinessDays(new Date(), min)) + '–' + fmt(addBusinessDays(new Date(), max));
+    el.textContent = fmt(addBusinessDays(new Date(), min)) + ' – ' + fmt(addBusinessDays(new Date(), max));
   });
 }
 
@@ -439,7 +439,7 @@ const cardStyle = {
 function initStripe() {
   if (!stripe) {
     showError(CONFIG.STRIPE_PK ? 'Impossibile caricare il pagamento. Ricarica la pagina o prova con un altro browser.'
-      : 'Anteprima — il pagamento non è ancora collegato (manca la chiave Stripe).');
+      : 'Il pagamento sarà disponibile a breve.');
     $('#pay-btn').disabled = true;
     return;
   }
@@ -491,7 +491,7 @@ function initStripe() {
       shippingAddressRequired: true,
       allowedShippingCountries: ALLOWED_COUNTRIES,
       // eerste optie = voorgeselecteerd in Apple Pay / Google Pay — volg de keuze in het formulier
-      shippingRates: shipMethod === 'free' ? [free, insured] : [insured, free],
+      shippingRates: shipMethod === 'insured' ? [insured, free] : [free, insured],
     });
   });
   expressCheckout.on('shippingratechange', (e) => {
@@ -910,7 +910,7 @@ function saveOrderForThankYou(extra) {
     first_name: ($('#first-name').value || '').trim(),
     shipping,
     billing: extra.wallet ? shipping : collectBilling(shipping),
-    ship_method: (SHIP[shipMethod] || SHIP.insured).title,
+    ship_method: (SHIP[shipMethod] || SHIP.free).title,
     ts: Date.now(),
   }));
 }
