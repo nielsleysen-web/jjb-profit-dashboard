@@ -66,11 +66,34 @@ const css = `
   body{margin:0;background:#fff;color:#1a1a1a;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
   .gz-wrap{max-width:672px;margin:0 auto;padding:0 16px 60px}
   .gz-card{border:1px solid #e3e3e3;border-radius:14px;background:#fff;padding:18px 16px;margin-top:18px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
-  .ck-trust{margin:14px auto 0;max-width:300px;border:1px solid #e6e6e6;border-radius:4px;overflow:hidden;font-size:9px}
-  .ck-trust .t1{background:#f2f2f2;padding:7px 10px 3px;text-align:center;font-weight:700;font-size:11px}
-  .ck-trust .t2{background:#f2f2f2;padding:0 10px 7px;text-align:center;color:#444}
-  .ck-trust .t3{padding:6px 10px;text-align:center}
-  .ck-trust .t3 span{background:#e9ecef;border-radius:999px;padding:3px 10px;font-weight:600;color:#2b3a33}
+  /* Header = zelfde als de checkout (logo · pil met klanten · 3 voordelen) */
+  .jh{background:#fff;border-bottom:1px solid #e3e3e3;padding:12px 16px 10px;text-align:center}
+  .jh-logo{height:22px;width:auto;display:block;margin:0 auto}
+  .jh-pill{display:inline-flex;align-items:center;gap:10px;margin:10px auto 0;padding:6px 18px 6px 8px;border-radius:10px;background:linear-gradient(90deg,#fdeee4 0%,#fbe6da 50%,#fdf3ec 100%)}
+  .jh-avs{display:inline-flex}
+  .jh-av{position:relative;width:28px;height:28px;border-radius:50%;border:2px solid #fff;margin-left:-8px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+  .jh-av:first-child{margin-left:0}
+  .jh-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .jh-av1{background:#df8455}.jh-av2{background:#c96f43}.jh-av3{background:#e9a07a}
+  .jh-count{font-size:14.5px;letter-spacing:.3px;color:#1a1a1a;white-space:nowrap}
+  .jh-count b{font-weight:800}
+  .jh-ben{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:9px;color:#333;font-size:13px}
+  .jh-ben span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .jh-ben b{font-weight:700}
+  .jh-ben em{font-style:normal}
+  .jh-ben svg{width:16px;height:16px;flex:none;color:#444}
+  .jh-ben i{width:1px;height:16px;background:#d9d9d9}
+  @media (max-width:640px){
+    .jh{padding:10px 8px 9px}
+    .jh-logo{height:17px}
+    .jh-pill{gap:8px;padding:5px 13px 5px 7px;margin-top:8px}
+    .jh-av{width:22px;height:22px;margin-left:-7px;font-size:9px;border-width:1.5px}
+    .jh-count{font-size:12px}
+    .jh-ben{gap:6px;font-size:10.5px;margin-top:8px}
+    .jh-ben span{gap:3px}
+    .jh-ben svg{width:13px;height:13px}
+    .jh-ben i{height:13px}
+  }
   .gz-q textarea{width:100%;min-height:124px;border:1px solid #d9d9d9;border-radius:10px;padding:14px 12px;font:inherit;font-size:15px;resize:vertical;outline:none;color:#1a1a1a}
   .gz-q textarea:focus{border-color:${GREEN};box-shadow:0 0 0 1px ${GREEN}}
   .gz-btn{border:none;border-radius:10px;background:${GREEN};color:#fff;font:inherit;font-size:15px;font-weight:700;padding:15px 16px;cursor:pointer}
@@ -210,13 +233,28 @@ export default function Grazie() {
         <style dangerouslySetInnerHTML={{ __html: css }} />
       </Head>
 
-      <div className="gz-wrap">
-        <div className="ck-trust">
-          <div className="t1">🇮🇹 Valutazione 4,8 ⭐ da oltre 40.000 clienti</div>
-          <div className="t2">🚚 Spedizione gratuita &nbsp; 🔒 Ordine sicuro &nbsp; 🔄 Garanzia 90 giorni</div>
-          <div className="t3"><span>🔒 Il tuo pagamento è sicuro e protetto</span></div>
+      <header className="jh">
+        <img className="jh-logo" src="https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114" alt="Just Jenny" />
+        <div className="jh-pill">
+          <span className="jh-avs">
+            {["G", "M", "A"].map((l, k) => (
+              <span key={l} className={`jh-av jh-av${k + 1}`}>
+                <img src={`/checkout/assets/avatar${k + 1}.jpg?v=2`} alt="" onError={(e) => { e.currentTarget.style.display = "none"; }} />{l}
+              </span>
+            ))}
+          </span>
+          <span className="jh-count"><b>40.000+</b> CLIENTI SODDISFATTI</span>
         </div>
+        <div className="jh-ben">
+          <span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="M12 7v5.2l3.4 2" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg><em>Spedizione <b>VELOCE</b></em></span>
+          <i />
+          <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l7.5 2.9v5.4c0 4.8-3.2 8.7-7.5 10.3-4.3-1.6-7.5-5.5-7.5-10.3V5.7z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" /><path d="M8.6 12.2l2.4 2.3 4.4-4.6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>Garanzia 90 giorni</span>
+          <i />
+          <span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="M8.3 10.5V7.8a3.7 3.7 0 017.4 0v2.7" fill="none" stroke="currentColor" strokeWidth="1.6" /><circle cx="12" cy="15.5" r="1.2" fill="currentColor" /></svg>Checkout sicuro</span>
+        </div>
+      </header>
 
+      <div className="gz-wrap">
         {preview && <div className="gz-note">Anteprima con dati di esempio — dopo un pagamento reale qui compaiono i dati dell’ordine.</div>}
 
         {failed ? (
