@@ -270,10 +270,46 @@ function stateCodeFromName(country, name) {
   const list = country === 'IT' ? PROVINCES : null;
   if (!list) return name;
   if (list[name.toUpperCase()]) return name.toUpperCase();
-  // Photon geeft "Como" of "Provincia di Como" / "Città metropolitana di Milano"
-  const clean = name.toLowerCase().replace(/^(provincia (autonoma )?di |città metropolitana di |libero consorzio comunale di )/, '').trim();
+  // Photon geeft "Como" of "Provincia di Como" / "Città metropolitana di Milano" / "Roma Capitale"
+  const clean = name.toLowerCase()
+    .replace(/^(provincia (autonoma )?di |città metropolitana di |libero consorzio comunale di )/, '')
+    .replace(/ capitale$/, '').trim();
   const hit = Object.entries(list).find(([, n]) => n.toLowerCase() === clean);
   return hit ? hit[0] : '';
+}
+
+/* Provincia uit de CAP (Italiaanse postcodes: de eerste cijfers bepalen de provincie).
+   Vangnet als de adres-suggestie geen provincie meegeeft, en bij zelf typen van de CAP. */
+const CAP2 = {
+  '00':'RM','01':'VT','02':'RI','03':'FR','04':'LT','05':'TR','06':'PG','07':'SS','08':'NU',
+  '10':'TO','11':'AO','12':'CN','13':'VC','14':'AT','15':'AL','16':'GE','17':'SV','18':'IM','19':'SP',
+  '20':'MI','21':'VA','22':'CO','23':'SO','24':'BG','25':'BS','26':'CR','27':'PV','28':'NO','29':'PC',
+  '30':'VE','31':'TV','32':'BL','33':'UD','34':'TS','35':'PD','36':'VI','37':'VR','38':'TN','39':'BZ',
+  '40':'BO','41':'MO','42':'RE','43':'PR','44':'FE','45':'RO','46':'MN','47':'FC','48':'RA',
+  '50':'FI','51':'PT','52':'AR','53':'SI','54':'MS','55':'LU','56':'PI','57':'LI','58':'GR','59':'PO',
+  '60':'AN','61':'PU','62':'MC','63':'AP','64':'TE','65':'PE','66':'CH','67':'AQ',
+  '70':'BA','71':'FG','72':'BR','73':'LE','74':'TA','75':'MT','76':'BT',
+  '80':'NA','81':'CE','82':'BN','83':'AV','84':'SA','85':'PZ','86':'CB','87':'CS','88':'CZ','89':'RC',
+  '90':'PA','91':'TP','92':'AG','93':'CL','94':'EN','95':'CT','96':'SR','97':'RG','98':'ME',
+};
+const CAP3 = { '138':'BI','139':'BI','208':'MB','209':'MB','238':'LC','239':'LC','268':'LO','269':'LO',
+  '288':'VB','289':'VB','478':'RN','479':'RN','638':'FM','639':'FM','888':'KR','889':'KR','898':'VV','899':'VV' };
+const CAP4 = { '3307':'PN','3308':'PN','3309':'PN','3317':'PN','3407':'GO','3417':'GO',
+  '8607':'IS','8608':'IS','8609':'IS','8617':'IS','0907':'OR','0908':'OR','0909':'OR','0917':'OR','0912':'CA','0913':'CA' };
+function provinceFromCap(zip) {
+  const z = String(zip || '').trim();
+  if (!/^\d{5}$/.test(z)) return '';
+  if (z.startsWith('09')) return CAP4[z.slice(0, 4)] || ''; // Sardegna-zuid: te gemengd, laat klant kiezen
+  return CAP4[z.slice(0, 4)] || CAP3[z.slice(0, 3)] || CAP2[z.slice(0, 2)] || '';
+}
+// Provincie invullen, tenzij de klant er zelf al een koos
+function autoSetProvince(code) {
+  const sel = $('#state');
+  if (!code || !sel || !PROVINCES[code]) return;
+  if (sel.value && sel.dataset.auto !== '1') return;
+  sel.value = code;
+  sel.dataset.auto = '1';
+  sel.classList.remove('invalid');
 }
 
 /* ---------- Address autocomplete (Photon/OSM, filtered to the chosen country) ---------- */
@@ -295,7 +331,8 @@ function initAddressAutocomplete() {
     addrDebounce = setTimeout(async () => {
       try {
         const country = $('#country').value;
-        const r = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=8&lat=42.5&lon=12.5');
+        // lang=default → plaatsnamen in het Italiaans ("Roma", niet "Rome")
+        const r = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=8&lat=42.5&lon=12.5&lang=default');
         const data = await r.json();
         const seen = new Set();
         const items = (data.features || [])
@@ -328,8 +365,9 @@ function initAddressAutocomplete() {
             const country2 = $('#country').value;
             if (it.zip) $('#zip').value = it.zip.split(';')[0];
             if (regionUsesSelect(country2)) {
-              const code = stateCodeFromName(country2, it.state);
-              if (code) $('#state').value = code;
+              // Suggestie kiezen = nieuw adres → provincie altijd opnieuw bepalen
+              const code = stateCodeFromName(country2, it.state) || stateCodeFromName(country2, it.city) || provinceFromCap($('#zip').value);
+              if (code) { $('#state').dataset.auto = '1'; autoSetProvince(code); }
             } else if (it.state) {
               $('#state-free').value = it.state;
             }
@@ -1033,7 +1071,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Escape' && !helpTip.hidden) { helpTip.hidden = true; helpBtn.setAttribute('aria-expanded', 'false'); }
   });
   ['address', 'city', 'zip'].forEach(id => $('#' + id).addEventListener('input', shipGate));
-  $('#state').addEventListener('change', () => { $('#state').classList.remove('invalid'); shipGate(); });
+  $('#state').addEventListener('change', () => { $('#state').classList.remove('invalid'); $('#state').dataset.auto = ''; shipGate(); });
+  // CAP getypt → provincie automatisch (alleen Italië, en niet als de klant zelf koos)
+  $('#zip').addEventListener('input', () => {
+    if (regionUsesSelect($('#country').value) && $('#country').value === 'IT') { autoSetProvince(provinceFromCap($('#zip').value)); shipGate(); }
+  });
   $('#email').addEventListener('input', () => {
     $('#email').classList.remove('invalid');
     $('#email-msg').hidden = true;
