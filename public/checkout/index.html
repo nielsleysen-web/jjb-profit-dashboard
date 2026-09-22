@@ -5,22 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Checkout — Just Jenny</title>
-<link rel="stylesheet" href="/checkout/assets/checkout.css?v=8">
+<link rel="stylesheet" href="/checkout/assets/checkout.css?v=9">
 <script src="https://js.stripe.com/v3/"></script>
 <!-- Meta Pixel wordt geladen door checkout.js zodra META_PIXEL_ID in Vercel staat -->
 </head>
 <body>
 
-<header class="jj-header">
-  <div class="jj-top">
-    <img class="jj-logo" src="https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114" alt="Just Jenny">
-    <div class="jj-tpbox">
-      <div class="r1"><b>Eccellente</b> <span class="jj-tp" aria-label="5 stelle"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7z" fill="#fff"/></svg></i><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7z" fill="#fff"/></svg></i><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7z" fill="#fff"/></svg></i><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7z" fill="#fff"/></svg></i><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7z" fill="#fff"/></svg></i></span></div>
-      <div class="r2"><b>40.000+</b> recensioni su <img class="jj-tp-logo" src="/checkout/assets/trustpilot-logo.svg" alt="Trustpilot" onerror="this.outerHTML='&lt;b&gt;Trustpilot&lt;/b&gt;'"></div>
-    </div>
+<header class="jh">
+  <img class="jh-logo" src="https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114" alt="Just Jenny">
+  <div class="jh-pill">
+    <span class="jh-avs"><span class="jh-av jh-av1"><img src="/checkout/assets/avatar1.jpg" alt="" onerror="this.remove()">G</span><span class="jh-av jh-av2"><img src="/checkout/assets/avatar2.jpg" alt="" onerror="this.remove()">M</span><span class="jh-av jh-av3"><img src="/checkout/assets/avatar3.jpg" alt="" onerror="this.remove()">A</span></span>
+    <span class="jh-count"><b>40.000+</b> CLIENTI SODDISFATTI</span>
   </div>
-  <div class="jj-bar">
-    <span><svg viewBox="0 0 26 24" aria-hidden="true"><path d="M1.5 5.5h13v11h-13z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14.5 9.5h5l4 4v3h-9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="6" cy="18.5" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="19" cy="18.5" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg><b>SPEDIZIONE VELOCE<em class="jj-hide-m"> IN ITALIA</em></b></span><i>•</i><span><svg viewBox="0 0 22 24" aria-hidden="true"><path d="M11 1.5l8.5 3.3v5.8c0 5.4-3.6 9.8-8.5 11.9-4.9-2.1-8.5-6.5-8.5-11.9V4.8z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 11.8l2.8 2.7L15 9.3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><b>GARANZIA 90 GIORNI</b></span><i>•</i><span><svg viewBox="0 0 18 22" aria-hidden="true"><rect x="1.5" y="9" width="15" height="11.5" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 9V6a4 4 0 018 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg><b>CHECKOUT SICURO<em class="jj-hide-m"> SSL</em></b></span>
+  <div class="jh-ben">
+    <span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5.2l3.4 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><em>Spedizione <b>VELOCE</b></em></span>
+    <i></i>
+    <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l7.5 2.9v5.4c0 4.8-3.2 8.7-7.5 10.3-4.3-1.6-7.5-5.5-7.5-10.3V5.7z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.6 12.2l2.4 2.3 4.4-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Garanzia 90 giorni</span>
+    <i></i>
+    <span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.3 10.5V7.8a3.7 3.7 0 017.4 0v2.7" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="15.5" r="1.2" fill="currentColor"/></svg>Checkout sicuro</span>
   </div>
 </header>
 
@@ -330,6 +332,6 @@
   </ul>
 </template>
 
-<script src="/checkout/assets/checkout.js?v=8"></script>
+<script src="/checkout/assets/checkout.js?v=9"></script>
 </body>
 </html>
