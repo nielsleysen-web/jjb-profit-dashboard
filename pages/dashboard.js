@@ -383,7 +383,7 @@ export default function Dashboard() {
         </table>
         </div>
         <p style={{ margin: "14px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-          Ad spend matched by campaign name • product profit = revenue − COGS − matched ad spend • CVR = orders / unique outbound clicks of the matched campaigns
+          Ad spend matched by campaign name • product profit = revenue − COGS − payment fees − matched ad spend • CVR = orders / unique outbound clicks of the matched campaigns
         </p>
         {data.isAdmin && (data.unmatchedCampaigns || []).length > 0 && (
           <p style={{ margin: "6px 0 0 0", fontSize: "12px", color: "#b45309", fontWeight: 600 }}>
