@@ -485,3 +485,19 @@ h2 + .fld { margin-top: 0; }
   .jj-bar{font-size:9.5px;gap:4px;padding:8px 5px}
   .jj-bar span svg{width:10px;height:10px}
 }
+
+/* v8: Trustpilot-blok in hun stijl (Eccellente + sterren + "recensioni su [logo]") */
+.jj-tpbox{display:flex;align-items:center;gap:8px;font-size:14px;color:#191919}
+.jj-tpbox .r1,.jj-tpbox .r2{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.jj-tpbox b{font-weight:700;color:#191919}
+.jj-tp i{background:#00b67a}
+.jj-tp-logo{height:20px;width:auto;display:inline-block;vertical-align:middle}
+@media (max-width:640px){
+  .jj-top{flex-wrap:nowrap;justify-content:space-between;gap:10px;max-width:420px;margin:0 auto}
+  .jj-logo{height:13px;flex:none}
+  .jj-tpbox{flex-direction:column;align-items:flex-end;gap:3px;font-size:11px}
+  .jj-tpbox .r1,.jj-tpbox .r2{gap:4px}
+  .jj-tp i{width:14px;height:14px}
+  .jj-tp svg{width:10px;height:10px}
+  .jj-tp-logo{height:14px}
+}
