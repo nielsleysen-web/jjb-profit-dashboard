@@ -464,3 +464,24 @@ h2 + .fld { margin-top: 0; }
 /* Bestelknop in de Just Jenny-groen (zoals de Shopify-checkout) */
 .pay-btn{background:#87b995}
 .pay-btn:hover{background:#76ab85}
+
+/* v7: kleiner logo, sterren in blokjes (Trustpilot-stijl), icoontjes in de balk */
+.jj-logo{height:22px}
+.jj-tp{display:inline-flex;gap:2px}
+.jj-tp i{width:20px;height:20px;background:#00b67a;display:inline-flex;align-items:center;justify-content:center}
+.jj-tp svg{width:15px;height:15px}
+.jj-bar span{display:inline-flex;align-items:center;gap:6px}
+.jj-bar span svg{width:15px;height:15px;flex:none}
+@media (max-width:640px){
+  .jj-logo{height:17px}
+  .jj-tp i{width:16px;height:16px}
+  .jj-tp svg{width:12px;height:12px}
+  .jj-bar span{gap:3px}
+  .jj-bar span svg{width:11px;height:11px}
+}
+.jj-bar{max-width:760px}
+.jj-bar b{font-weight:700}
+@media (max-width:640px){
+  .jj-bar{font-size:9.5px;gap:4px;padding:8px 5px}
+  .jj-bar span svg{width:10px;height:10px}
+}
