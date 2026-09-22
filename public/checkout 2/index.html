@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Checkout — Just Jenny</title>
+<link rel="stylesheet" href="/checkout/assets/checkout.css">
+<script src="https://js.stripe.com/v3/"></script>
+<!-- Meta Pixel wordt geladen door checkout.js zodra META_PIXEL_ID in Vercel staat -->
+</head>
+<body>
+
+<header class="mobile-header">
+  <div class="jj-trust brand-logo-sm">
+    <div class="t1">🇮🇹 Valutazione 4,8 ⭐ da oltre 14.000 clienti</div>
+    <div class="t2">🚚 Spedizione gratuita &nbsp; 🔒 Ordine sicuro &nbsp; 🔄 Garanzia 90 giorni</div>
+    <div class="t3"><span>🔒 Il tuo pagamento è sicuro e protetto</span></div>
+  </div>
+</header>
+
+<details class="summary-mobile">
+  <summary>
+    <span class="sm-label">Riepilogo ordine <svg width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2"/></svg></span>
+    <span class="sm-total js-total">53,90 €</span>
+  </summary>
+  <div class="summary-body">
+    <div class="js-summary-slot"></div>
+  </div>
+</details>
+
+<div class="wrap">
+  <main class="form-col">
+    <div class="jj-trust desktop-only">
+      <div class="t1">🇮🇹 Valutazione 4,8 ⭐ da oltre 14.000 clienti</div>
+      <div class="t2">🚚 Spedizione gratuita &nbsp; 🔒 Ordine sicuro &nbsp; 🔄 Garanzia 90 giorni</div>
+      <div class="t3"><span>🔒 Il tuo pagamento è sicuro e protetto</span></div>
+    </div>
+
+    <div id="already-purchased" class="ap-banner" hidden>
+      <strong>✓ Il tuo ordine è già stato effettuato.</strong>
+      <a id="ap-view" href="/checkout/grazie">Vedi la conferma</a>
+      <span class="ap-sep">·</span>
+      <a href="#" id="ap-new">Effettua un altro ordine</a>
+    </div>
+
+    <form id="checkout-form" novalidate>
+
+      <!-- Express checkout (Apple Pay / Google Pay / PayPal / Link via Stripe) -->
+      <section class="express-section" id="express-section" hidden>
+        <p class="express-caption">Check-out rapido</p>
+        <div id="express-checkout-element"></div>
+        <div id="paypal-button-container" class="paypal-container"></div>
+        <div class="or-divider"><span>OPPURE</span></div>
+      </section>
+
+      <div class="jj-stock">⚠️ Attenzione: scorte limitate! Effettua il tuo ordine prima dell’esaurimento delle scorte.</div>
+
+      <!-- Contact -->
+      <section>
+        <h2>Contatti</h2>
+        <div class="fld fld-help">
+          <input id="email" name="email" type="email" placeholder=" " autocomplete="email" required>
+          <label for="email">Email</label>
+          <button type="button" class="help-btn" id="email-help" aria-label="Perché ci serve la tua email" aria-expanded="false">
+            <svg class="help-ic" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M7.6 8a2.4 2.4 0 1 1 3.4 2.2c-.7.3-1 .7-1 1.5v.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="10" cy="14.4" r="1" fill="currentColor"/></svg>
+          </button>
+          <div class="help-tip" id="email-tip" role="tooltip" hidden>La usiamo per la conferma dell’ordine e il tracciamento della spedizione</div>
+        </div>
+        <div class="fld-msg" id="email-msg" hidden>Inserisci un indirizzo email valido</div>
+      </section>
+
+      <!-- Delivery -->
+      <section>
+        <h2>Consegna</h2>
+        <div class="fld fld-select">
+          <select id="country" name="country" autocomplete="country"></select>
+          <label for="country">Paese/Regione</label>
+          <svg class="caret" width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+        </div>
+        <div class="row row-2">
+          <div class="fld">
+            <input id="first-name" name="first-name" type="text" placeholder=" " autocomplete="given-name">
+            <label for="first-name">Nome</label>
+          </div>
+          <div class="fld">
+            <input id="last-name" name="last-name" type="text" placeholder=" " autocomplete="family-name" required>
+            <label for="last-name">Cognome</label>
+          </div>
+        </div>
+        <div class="fld fld-search">
+          <input id="address" name="address" type="text" placeholder=" " autocomplete="address-line1" required>
+          <label for="address">Indirizzo</label>
+          <svg class="search-ic" width="18" height="18" viewBox="0 0 18 18"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12.5 12.5L17 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <div class="addr-suggest" id="addr-suggest" hidden>
+            <div class="as-head"><span>Suggerimenti</span><button type="button" class="as-close" id="as-close" aria-label="Chiudi">&times;</button></div>
+            <div id="as-list"></div>
+          </div>
+        </div>
+        <div class="fld">
+          <input id="address2" name="address2" type="text" placeholder=" " autocomplete="address-line2">
+          <label for="address2">Interno, scala, ecc. (facoltativo)</label>
+        </div>
+        <div class="row row-3">
+          <div class="fld">
+            <input id="zip" name="zip" type="text" inputmode="numeric" maxlength="5" placeholder=" " autocomplete="postal-code" required>
+            <label for="zip" id="zip-label">CAP</label>
+          </div>
+          <div class="fld">
+            <input id="city" name="city" type="text" placeholder=" " autocomplete="address-level2" required>
+            <label for="city">Città</label>
+          </div>
+          <div class="fld fld-select" id="state-select-wrap">
+            <select id="state" name="state" autocomplete="address-level1" required></select>
+            <label for="state" id="state-label">Provincia</label>
+            <svg class="caret" width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+          </div>
+          <div class="fld" id="state-text-wrap" hidden>
+            <input id="state-free" name="state-free" type="text" placeholder=" " autocomplete="address-level1">
+            <label for="state-free" id="state-free-label">Provincia</label>
+          </div>
+        </div>
+        <div class="fld">
+          <input id="phone" name="phone" type="tel" placeholder=" " autocomplete="tel">
+          <label for="phone">Telefono (per il corriere)</label>
+        </div>
+      </section>
+
+      <!-- Shipping method -->
+      <section>
+        <h2 class="h2-sm">Metodo di spedizione</h2>
+        <div class="ship-empty" id="ship-empty">Inserisci il tuo indirizzo di spedizione per visualizzare i metodi di spedizione disponibili.</div>
+        <div class="ship-options" id="ship-options" hidden>
+          <label class="ship-opt selected">
+            <input type="radio" name="ship" value="free" checked>
+            <span class="ship-radio"></span>
+            <span class="ship-info">
+              <span class="ship-title">Standard (5-8 giorni lavorativi)</span>
+              <span class="ship-date" data-ship-date="5,8"></span>
+              <span class="ship-sub">Spedizione gratuita</span>
+            </span>
+            <span class="ship-price">GRATIS</span>
+          </label>
+          <label class="ship-opt">
+            <input type="radio" name="ship" value="insured">
+            <span class="ship-radio"></span>
+            <span class="ship-info">
+              <span class="ship-title">Express (3-5 giorni lavorativi)</span>
+              <span class="ship-date" data-ship-date="3,5"></span>
+            </span>
+            <span class="ship-price">3,95 €</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Payment -->
+      <section>
+        <h2>Pagamento</h2>
+        <p class="pay-sub">Tutte le transazioni sono sicure e crittografate.</p>
+        <div class="pm-group">
+
+          <div class="pm-method pm-cc selected" id="pm-cc">
+            <button type="button" class="pm-head" id="pm-cc-toggle" aria-pressed="true">
+              <span class="pm-radio"></span>
+              <span class="pm-name">Carta di credito</span>
+              <span class="pm-brands" aria-hidden="true">
+                <img src="/checkout/assets/cards/visa.svg" alt="Visa">
+                <img src="/checkout/assets/cards/mastercard.svg" alt="Mastercard">
+                <img src="/checkout/assets/cards/amex.svg" alt="American Express">
+                <img src="/checkout/assets/cards/unionpay.svg" alt="UnionPay">
+              </span>
+            </button>
+            <div class="pm-cc-body" id="pm-cc-body">
+              <div class="cc-fld">
+                <div class="cc-el" id="card-number"></div>
+                <svg class="cc-ic" width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="8" width="12" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+              </div>
+              <div class="cc-fld">
+                <div class="cc-el" id="card-expiry"></div>
+              </div>
+              <div class="cc-fld">
+                <div class="cc-el" id="card-cvc"></div>
+                <svg class="cc-ic" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.8 7.2a2.2 2.2 0 1 1 3.1 2c-.6.3-.9.6-.9 1.3v.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="13" r=".9" fill="currentColor"/></svg>
+              </div>
+              <div class="cc-fld">
+                <input id="card-name" type="text" placeholder="Nome sulla carta" autocomplete="cc-name">
+              </div>
+              <label class="bill-check">
+                <input type="checkbox" id="bill-same" checked>
+                <span class="checkmark"><svg width="11" height="9" viewBox="0 0 11 9"><path d="M1 4.5L4 7.5L10 1" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+                Usa l’indirizzo di spedizione come indirizzo di fatturazione
+              </label>
+              <div id="billing-fields" hidden>
+                <div class="fld fld-select">
+                  <select id="bill-country" autocomplete="billing country"></select>
+                  <label for="bill-country">Paese/Regione</label>
+                  <svg class="caret" width="12" height="8" viewBox="0 0 12 8"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                </div>
+                <div class="fld">
+                  <input id="bill-address" type="text" placeholder=" " autocomplete="billing address-line1">
+                  <label for="bill-address">Indirizzo di fatturazione</label>
+                </div>
+                <div class="row row-3">
+                  <div class="fld">
+                    <input id="bill-zip" type="text" placeholder=" " autocomplete="billing postal-code">
+                    <label for="bill-zip">CAP</label>
+                  </div>
+                  <div class="fld">
+                    <input id="bill-city" type="text" placeholder=" " autocomplete="billing address-level2">
+                    <label for="bill-city">Città</label>
+                  </div>
+                  <div class="fld">
+                    <input id="bill-state" type="text" placeholder=" " autocomplete="billing address-level1">
+                    <label for="bill-state">Provincia</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pm-method pm-paypal" id="pm-paypal" hidden>
+            <button type="button" class="pm-head" id="pm-paypal-toggle" aria-pressed="false">
+              <span class="pm-radio"></span>
+              <span class="pm-name">PayPal</span>
+              <span class="pm-logo" aria-hidden="true"><i>Pay</i><em>Pal</em></span>
+            </button>
+            <div class="pm-paypal-body" id="pm-paypal-body" hidden>
+              <p class="pm-paypal-note">Dopo aver cliccato su “Paga con PayPal” verrai reindirizzato a PayPal per completare l’acquisto in modo sicuro.</p>
+              <div id="paypal-inline-container"></div>
+            </div>
+          </div>
+
+          <div id="paypal-gate-note" class="pp-gate-note" hidden>I codici sconto sono disponibili con il pagamento con carta.</div>
+
+        </div>
+      </section>
+
+      <!-- Mobile-only: sconto + totale -->
+      <div class="mobile-checkout-footer">
+        <button type="button" class="add-discount" id="add-discount-btn">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8.6 1.5H13a1.5 1.5 0 0 1 1.5 1.5v4.4a1.5 1.5 0 0 1-.44 1.06l-6 6a1.5 1.5 0 0 1-2.12 0l-4.4-4.4a1.5 1.5 0 0 1 0-2.12l6-6A1.5 1.5 0 0 1 8.6 1.5z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="5" r="1.1" fill="currentColor"/></svg>
+          Aggiungi sconto
+        </button>
+        <div class="discount-row" id="form-discount" hidden>
+          <div class="fld fld-discount">
+            <input type="text" class="js-discount-input" placeholder=" " autocomplete="off">
+            <label>Codice sconto</label>
+          </div>
+          <button type="button" class="apply-btn js-apply">Applica</button>
+        </div>
+        <div class="discount-msg js-discount-msg" hidden></div>
+
+        <div class="mobile-total" id="mobile-total">
+          <img class="js-thumb" src="" alt="NeuroTone">
+          <span class="mt-label">Totale<br><span class="mt-items js-items">1 articolo</span></span>
+          <span class="mt-amount"><span class="usd-pill">EUR</span> <span class="mt-price js-total">53,90 €</span></span>
+          <svg class="mt-caret" width="14" height="9" viewBox="0 0 14 9"><path d="M1 1l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+      </div>
+
+      <div id="pay-error" class="pay-error" role="alert" hidden></div>
+      <button type="submit" id="pay-btn" class="pay-btn"><span id="pay-btn-text">Sì! Confermo l’ordine!</span><span id="pay-spinner" class="spinner" hidden></span></button>
+
+      <div class="trust-row" aria-hidden="false">
+        <div class="trust-item">
+          <svg width="22" height="24" viewBox="0 0 22 24"><path d="M11 1l9 3.5v6c0 5.8-3.8 10.4-9 12.5-5.2-2.1-9-6.7-9-12.5v-6L11 1z" fill="none" stroke="#2c6e65" stroke-width="1.6"/><path d="M7 11.5l2.8 2.8L15 9" fill="none" stroke="#2c6e65" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>Garanzia 90 giorni</b>Soddisfatti o rimborsati</span>
+        </div>
+        <div class="trust-item">
+          <svg width="26" height="24" viewBox="0 0 26 24"><path d="M1.5 5.5h13v11h-13z" fill="none" stroke="#2c6e65" stroke-width="1.6" stroke-linejoin="round"/><path d="M14.5 9.5h5l4 4v3h-9z" fill="none" stroke="#2c6e65" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6" cy="18.5" r="2.2" fill="#fff" stroke="#2c6e65" stroke-width="1.6"/><circle cx="19" cy="18.5" r="2.2" fill="#fff" stroke="#2c6e65" stroke-width="1.6"/></svg>
+          <span><b>Ordina entro le 23:00</b>= spedito domani ✔</span>
+        </div>
+        <div class="trust-item">
+          <svg width="20" height="24" viewBox="0 0 18 22"><rect x="1.5" y="9" width="15" height="11.5" rx="2" fill="none" stroke="#2c6e65" stroke-width="1.6"/><path d="M5 9V6a4 4 0 018 0v3" fill="none" stroke="#2c6e65" stroke-width="1.6"/><circle cx="9" cy="14.5" r="1.4" fill="#2c6e65"/></svg>
+          <span><b>Pagamento sicuro</b>Crittografia SSL</span>
+        </div>
+      </div>
+
+      <!-- Informativa abbonamento — moet zichtbaar blijven bij de bestelknop (kaartnetwerken / consumentenrecht):
+           bedrag, cyclus, proefperiode en hoe je opzegt. Bedragen worden ingevuld door updateAmounts(). -->
+      <p class="sub-terms legal">Cliccando su «Sì! Confermo l’ordine!» accetto di essere vincolato/a ai
+        <a href="https://getjustjenny.com/policies/terms-of-service" target="_blank" rel="noopener">Termini e condizioni</a>.
+        Acconsento all’addebito di <span class="js-renewal-amt"></span> ogni <span class="js-cycle-days"></span> giorni al termine
+        della prova gratuita di <span class="js-trial-days"></span> giorni per la mia Just Jenny Membership inclusa nel mio ordine,
+        e posso <a href="https://getjustjenny.com/policies/subscription-policy" target="_blank" rel="noopener">modificare o annullare la mia membership in qualsiasi momento</a>.</p>
+
+    </form>
+  </main>
+
+  <aside class="summary-col desktop-only">
+    <div class="summary-inner js-summary-slot"></div>
+  </aside>
+</div>
+
+<!-- Riepilogo ordine — gerenderd in de desktopkolom én de mobiele lade -->
+<template id="summary-template">
+  <div class="prod-row">
+    <div class="prod-thumb">
+      <img src="" alt="NeuroTone">
+      <span class="qty-badge">1</span>
+    </div>
+    <div class="prod-info">
+      <div class="prod-name">Neurotone Drops</div>
+      <div class="prod-variant js-pack-label">3x NeuroTone™</div>
+      <div class="prod-save js-save"></div>
+    </div>
+    <div class="prod-price">
+      <span class="compare js-compare"></span>
+      <span class="actual"><span class="js-price">49,95 €</span><span class="permo"></span></span>
+    </div>
+  </div>
+  <div class="discount-row">
+    <div class="fld fld-discount">
+      <input type="text" class="js-discount-input" placeholder=" " autocomplete="off">
+      <label>Codice sconto</label>
+    </div>
+    <button type="button" class="apply-btn js-apply">Applica</button>
+  </div>
+  <div class="discount-msg js-discount-msg" hidden></div>
+  <div class="totals">
+    <div class="t-row"><span>Subtotale</span><span class="js-subtotal">49,95 €</span></div>
+    <div class="t-row js-discount-line" hidden><span class="js-discount-label">Sconto</span><span class="js-discount-amt"></span></div>
+    <div class="t-row"><span>Spedizione</span><span class="js-shipping">GRATIS</span></div>
+    <div class="t-row t-total"><span>Totale</span><span><span class="usd">EUR</span> <strong class="js-total">53,90 €</strong></span></div>
+  </div>
+  <ul class="sum-trust">
+    <li><span class="tk">&#10003;</span><span><b>Garanzia soddisfatti o rimborsati di 90 giorni</b> &mdash; risultati o rimborso completo, senza domande</span></li>
+    <li><span class="tk">&#10003;</span><span><b>Spedizione tracciata gratuita</b> &mdash; ogni ordine viene spedito con tracciamento in tempo reale</span></li>
+    <li><span class="tk">&#10003;</span><span><b>Oltre 40.000 recensioni a 5 stelle su Trustpilot</b></span></li>
+  </ul>
+</template>
+
+<script src="/checkout/assets/checkout.js"></script>
+</body>
+</html>
