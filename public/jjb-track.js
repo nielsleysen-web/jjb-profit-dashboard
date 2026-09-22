@@ -112,9 +112,15 @@
       var url;
       try { url = new URL(href, location.href); } catch (e) { return; }
       if (!/^https?:$/.test(url.protocol)) return;
-      if (/\/cart\//.test(url.pathname) || /\/checkouts?\//.test(url.pathname)) {
+      var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch", "host", "path", "pgs"];
+      if (/^checkout\./i.test(url.host)) {
+        // Eigen Stripe-checkout (checkout.getjustjenny.com) → zelfde tracking als losse query-params
+        attrs.forEach(function (k) {
+          if (data[k]) url.searchParams.set(k, data[k]);
+        });
+        if (PG) url.searchParams.set("pg", PG);
+      } else if (/\/cart\//.test(url.pathname) || /\/checkouts?\//.test(url.pathname)) {
         // Shopify cart-permalink → alles als order attributes meesturen
-        var attrs = ["ad_id", "adset_id", "campaign_id", "fbclid", "fbc", "fbp", "vid", "utm_source", "utm_campaign", "utm_content", "first_touch", "host", "path", "pgs"];
         attrs.forEach(function (k) {
           if (data[k]) url.searchParams.set("attributes[jjb_" + k + "]", data[k]);
         });
@@ -134,7 +140,7 @@
       if (!a) return;
       decorate(a);
       var href = a.getAttribute("href") || "";
-      if (/\/cart\/|\/checkouts?\//.test(href)) {
+      if (/\/cart\/|\/checkouts?\//.test(href) || /^https?:\/\/checkout\./i.test(href)) {
         beacon({ t: "cc", h: location.host, p: location.pathname, u: firstToday("cc", location.pathname), pg: PG, upg: PG ? firstToday("cc:" + PG, location.pathname) : 0 });
       }
     }
