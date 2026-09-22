@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { pickBundle, SHIPPING, MEMBERSHIP, fmtEur, PRODUCT_TITLE } from "../../lib/checkout";
+import { pickBundle, SHIPPING, fmtEur, PRODUCT_TITLE } from "../../lib/checkout";
 
 // Enquête (post-purchase quiz). Antwoorden → Google Sheet via /api/checkout-quiz.
 // Vragen aanpassen kan hier; de volgorde moet gelijk blijven aan de kolommen in de Sheet.
@@ -287,11 +287,6 @@ export default function Grazie() {
                   <div style={{ fontSize: "12.5px", color: "#6b6b6b", marginTop: "8px" }}>Incluse imposte per un ammontare di {fmtEur(data.order.tax)}</div>
                 )}
               </div>
-            </div>
-
-            {/* Membership — transparant voor de klant (minder chargebacks) */}
-            <div className="gz-card" style={{ fontSize: "13.5px", lineHeight: 1.55, color: "#333", background: "#f7f9f8", borderColor: "#dfe8e3" }}>
-              <b>{MEMBERSHIP.name} attiva</b> — {MEMBERSHIP.trialDays} giorni di prova gratuita, poi {fmtEur(MEMBERSHIP.price)} ogni {MEMBERSHIP.intervalDays} giorni. Puoi annullare in qualsiasi momento.
             </div>
 
             {/* Klantgegevens */}
