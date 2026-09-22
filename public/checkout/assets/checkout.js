@@ -438,6 +438,8 @@ const cardStyle = {
 
 function initStripe() {
   if (!stripe) {
+    // Preview zonder Stripe-sleutel: toon hoe de snelle knoppen eruitzien (niet klikbaar)
+    if (!CONFIG.STRIPE_PK) { $('#express-section').hidden = false; $('#ece-preview').hidden = false; $('#pm-paypal').hidden = false; }
     showError(CONFIG.STRIPE_PK ? 'Impossibile caricare il pagamento. Ricarica la pagina o prova con un altro browser.'
       : 'Il pagamento sarà disponibile a breve.');
     $('#pay-btn').disabled = true;
@@ -458,8 +460,9 @@ function initStripe() {
   // Split card elements inside our own Shopify-style markup
   const elementsCard = stripe.elements({ locale: 'it' });
   cardNumber = elementsCard.create('cardNumber', { style: cardStyle, placeholder: 'Numero della carta', showIcon: false });
-  const cardExpiry = elementsCard.create('cardExpiry', { style: cardStyle, placeholder: 'Data di scadenza (MM / AA)' });
-  const cardCvc = elementsCard.create('cardCvc', { style: cardStyle, placeholder: 'Codice di sicurezza' });
+  const cardExpiry = elementsCard.create('cardExpiry', { style: cardStyle, placeholder: 'Scadenza (MM/AA)' });
+  const cardCvc = elementsCard.create('cardCvc', { style: cardStyle, placeholder: 'Codice CVV' });
+  $$('.cc-ph').forEach(el => el.remove()); // eigen placeholders weg; Stripe toont zijn eigen tekst
   cardNumber.mount('#card-number');
   cardExpiry.mount('#card-expiry');
   cardCvc.mount('#card-cvc');
@@ -474,7 +477,13 @@ function initStripe() {
   });
 
 
-  const expressCheckout = elementsExpress.create('expressCheckout', { buttonHeight: 48 });
+  // Snelle knoppen bovenaan: PayPal + Google Pay (+ Apple Pay op iPhone/Safari), naast elkaar
+  const expressCheckout = elementsExpress.create('expressCheckout', {
+    buttonHeight: 48,
+    layout: { maxColumns: 3, maxRows: 1, overflow: 'auto' },
+    buttonTheme: { paypal: 'gold', googlePay: 'black', applePay: 'black' },
+    paymentMethods: { paypal: 'auto', googlePay: 'always', applePay: 'always', link: 'never', amazonPay: 'never', klarna: 'never' },
+  });
   expressCheckout.mount('#express-checkout-element');
   expressCheckout.on('ready', (e) => {
     if (e.availablePaymentMethods) {
@@ -975,7 +984,30 @@ function loadPixel(id) {
   fbq('track', 'PageView');
 }
 
+/* ---------- Reserveringstimer: 7 minuten per bezoek (sessionStorage, dus verversen reset hem niet) ---------- */
+function startTimer() {
+  const clock = $('#jj-timer-clock'), box = $('#jj-timer');
+  if (!clock || !box) return;
+  const KEY = 'jj_timer_end', LEN = 7 * 60 * 1000;
+  let end = 0;
+  try { end = parseInt(sessionStorage.getItem(KEY) || '0', 10); } catch (e) {}
+  if (!end || end < Date.now() - 30 * 60 * 1000) { end = Date.now() + LEN; try { sessionStorage.setItem(KEY, String(end)); } catch (e) {} }
+  const tick = () => {
+    const left = Math.max(0, end - Date.now());
+    if (left <= 0) {
+      $('#jj-timer-text').innerHTML = 'Il tuo ordine è ancora riservato: <b>completa l’acquisto ora</b>';
+      box.classList.add('done');
+      return;
+    }
+    const m = Math.floor(left / 60000), sec = Math.floor((left % 60000) / 1000);
+    clock.textContent = m + ':' + String(sec).padStart(2, '0');
+    setTimeout(tick, 1000 - (Date.now() % 1000));
+  };
+  tick();
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  startTimer();
   await loadConfig();
   fillCountries($('#country'));
   fillCountries($('#bill-country'));

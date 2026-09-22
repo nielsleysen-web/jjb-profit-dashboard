@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Checkout — Just Jenny</title>
-<link rel="stylesheet" href="/checkout/assets/checkout.css?v=10">
+<link rel="stylesheet" href="/checkout/assets/checkout.css?v=12">
 <script src="https://js.stripe.com/v3/"></script>
 <!-- Meta Pixel wordt geladen door checkout.js zodra META_PIXEL_ID in Vercel staat -->
 </head>
@@ -48,15 +48,23 @@
 
     <form id="checkout-form" novalidate>
 
-      <!-- Express checkout (Apple Pay / Google Pay / PayPal / Link via Stripe) -->
+      <!-- Reserveringstimer (7 minuten, blijft doorlopen bij verversen) -->
+      <div class="jj-timer" id="jj-timer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v6.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.2" fill="currentColor"/></svg>
+        <span id="jj-timer-text">A causa dell’elevata richiesta, il tuo ordine è riservato per: <b id="jj-timer-clock">7:00</b> minuti</span>
+      </div>
+
+      <!-- Express checkout (PayPal / Google Pay / Apple Pay via Stripe) -->
       <section class="express-section" id="express-section" hidden>
         <p class="express-caption">Check-out rapido</p>
         <div id="express-checkout-element"></div>
+        <div class="ece-preview" id="ece-preview" hidden>
+          <span class="pp"><i>Pay</i><em>Pal</em></span>
+          <span class="gp"><b class="g">G</b> Pay</span>
+        </div>
         <div id="paypal-button-container" class="paypal-container"></div>
         <div class="or-divider"><span>OPPURE</span></div>
       </section>
-
-      <div class="jj-stock">⚠️ Attenzione: scorte limitate! Effettua il tuo ordine prima dell’esaurimento delle scorte.</div>
 
       <!-- Contact -->
       <section>
@@ -169,20 +177,22 @@
                 <img src="/checkout/assets/cards/visa.svg" alt="Visa">
                 <img src="/checkout/assets/cards/mastercard.svg" alt="Mastercard">
                 <img src="/checkout/assets/cards/amex.svg" alt="American Express">
-                <img src="/checkout/assets/cards/unionpay.svg" alt="UnionPay">
+                <span class="pm-more">+5</span>
               </span>
             </button>
             <div class="pm-cc-body" id="pm-cc-body">
               <div class="cc-fld">
-                <div class="cc-el" id="card-number"></div>
+                <div class="cc-el" id="card-number"><span class="cc-ph">Numero della carta</span></div>
                 <svg class="cc-ic" width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="8" width="12" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 8V6a3 3 0 0 1 6 0v2" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
               </div>
-              <div class="cc-fld">
-                <div class="cc-el" id="card-expiry"></div>
-              </div>
-              <div class="cc-fld">
-                <div class="cc-el" id="card-cvc"></div>
-                <svg class="cc-ic" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.8 7.2a2.2 2.2 0 1 1 3.1 2c-.6.3-.9.6-.9 1.3v.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="13" r=".9" fill="currentColor"/></svg>
+              <div class="cc-row">
+                <div class="cc-fld">
+                  <div class="cc-el" id="card-expiry"><span class="cc-ph">Scadenza (MM/AA)</span></div>
+                </div>
+                <div class="cc-fld">
+                  <div class="cc-el" id="card-cvc"><span class="cc-ph">Codice CVV</span></div>
+                  <svg class="cc-ic" width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.8 7.2a2.2 2.2 0 1 1 3.1 2c-.6.3-.9.6-.9 1.3v.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="13" r=".9" fill="currentColor"/></svg>
+                </div>
               </div>
               <div class="cc-fld">
                 <input id="card-name" type="text" placeholder="Nome sulla carta" autocomplete="cc-name">
@@ -332,6 +342,6 @@
   </ul>
 </template>
 
-<script src="/checkout/assets/checkout.js?v=10"></script>
+<script src="/checkout/assets/checkout.js?v=12"></script>
 </body>
 </html>

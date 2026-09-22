@@ -555,3 +555,26 @@ h2 + .fld { margin-top: 0; }
   .jh-ben svg{width:13px;height:13px}
   .jh-ben i{height:13px}
 }
+
+/* v11: reserveringstimer + preview van de snelle knoppen */
+.jj-timer{display:flex;align-items:center;gap:12px;margin:18px 0 4px;padding:14px 16px;border:1px solid #f3d3d3;background:#fcf4f4;border-radius:12px;color:#4a0d0d;font-size:15px;font-weight:600;line-height:1.35}
+.jj-timer svg{width:22px;height:22px;flex:none;color:#c9302c}
+.jj-timer b{font-weight:800;font-variant-numeric:tabular-nums}
+.jj-timer.done{border-color:#f1dca7;background:#fff8e6;color:#6b4e0f}
+.jj-timer.done svg{color:#c98a0c}
+.ece-preview{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ece-preview span{height:48px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;cursor:default;user-select:none}
+.ece-preview .pp{background:#ffc439}
+.ece-preview .pp i{color:#003087;font-style:italic}.ece-preview .pp em{color:#0070e0;font-style:italic}
+.ece-preview .gp{background:#000;color:#fff;font-weight:500;gap:4px}
+.ece-preview .gp .g{font-weight:700;background:conic-gradient(#4285f4 0 25%,#34a853 0 50%,#fbbc05 0 75%,#ea4335 0);-webkit-background-clip:text;background-clip:text;color:transparent}
+@media (max-width:640px){ .jj-timer{font-size:13.5px;padding:12px 13px;gap:10px} }
+.jj-timer{font-size:14.5px}
+
+/* v12: vervaldatum + CVC naast elkaar, "+5"-badge, placeholders in preview */
+.cc-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.cc-row .cc-fld{margin-top:0}
+.cc-ph{color:var(--muted);font-size:15px;line-height:1;pointer-events:none}
+.pm-more{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:24px;padding:0 5px;border-radius:3px;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.1);font-size:12px;color:#444;font-weight:500}
+@media (max-width:640px){ .cc-ph{font-size:14px} .cc-row{gap:10px} }
+.cc-ph{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
