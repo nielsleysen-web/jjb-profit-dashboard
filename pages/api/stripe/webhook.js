@@ -146,7 +146,9 @@ export default async function handler(req, res) {
 
   try {
     if (event.type === "invoice.paid") {
-      const inv = event.data.object;
+      // Factuur opnieuw ophalen met ONZE vaste API-versie: nieuwere Stripe-versies zetten
+      // subscription/payment_intent op een andere plek in het event. Zo werkt het altijd.
+      const inv = await stripe.invoices.retrieve(event.data.object.id);
       // Alleen de eerste factuur van een abonnement bevat de front-end bundel → Shopify-order
       if (inv.billing_reason === "subscription_create" && inv.amount_paid > 0) {
         const already = await orderExistsForInvoice(inv.id);
