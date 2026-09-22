@@ -210,7 +210,7 @@ export default function Grazie() {
 
       <div className="gz-wrap">
         <div className="ck-trust">
-          <div className="t1">🇮🇹 Valutazione 4,8 ⭐ da oltre 14.000 clienti</div>
+          <div className="t1">🇮🇹 Valutazione 4,8 ⭐ da oltre 40.000 clienti</div>
           <div className="t2">🚚 Spedizione gratuita &nbsp; 🔒 Ordine sicuro &nbsp; 🔄 Garanzia 90 giorni</div>
           <div className="t3"><span>🔒 Il tuo pagamento è sicuro e protetto</span></div>
         </div>
