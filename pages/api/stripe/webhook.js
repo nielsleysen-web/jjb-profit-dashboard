@@ -5,13 +5,14 @@
 // Stripe — daar wordt niets verzonden.
 //
 // Stripe → Developers → Webhooks → endpoint: https://<dashboard>/api/stripe/webhook
-// Events: invoice.paid   (meer is niet nodig; de dashboards lezen Stripe rechtstreeks)
+// Events: invoice.paid  (verplicht) · customer.subscription.deleted (optioneel: opzegging → Klaviyo)
 // Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 // Shopify-scope: write_orders (naast de bestaande read-scopes)
 
 import Stripe from "stripe";
 import axios from "axios";
-import { BUNDLES, SHIPPING, PRODUCT_TITLE } from "../../../lib/checkout";
+import { BUNDLES, SHIPPING, PRODUCT_TITLE, MEMBERSHIP } from "../../../lib/checkout";
+import { syncNewMember, syncRenewal, syncCancel } from "../../../lib/klaviyo";
 
 export const config = { api: { bodyParser: false } }; // ruwe body nodig voor de handtekening
 
@@ -164,9 +165,38 @@ export default async function handler(req, res) {
         ]);
         const order = await createShopifyOrder({ invoice: inv, subscription, customer, paymentIntent });
         // Ordernaam terugschrijven op het abonnement → handig in Stripe zelf
-        if (subscription) await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name } });
+        if (subscription) await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name } }).catch(() => {});
+        // Abonnee → Klaviyo (lijst + event "Started Membership"); nooit blokkerend
+        const md = { ...(subscription?.metadata || {}), ...(paymentIntent?.metadata || {}) };
+        const qty = parseInt(md.qty || md.bundle || "3", 10);
+        const addr = customer?.shipping?.address || customer?.address || {};
+        const [fn, ...ln] = String(customer?.shipping?.name || customer?.name || "").split(" ");
+        await syncNewMember({
+          email: customer?.email || inv.customer_email, firstName: fn, lastName: ln.join(" "),
+          phone: itPhone(customer?.shipping?.phone || customer?.phone),
+          address: { address1: addr.line1, city: addr.city, zip: addr.postal_code, province: addr.state },
+          provider: "stripe", subscriptionId: subscription?.id || subId, qty,
+          bundleLabel: (BUNDLES[qty] || BUNDLES[3]).label, shippingTitle: (SHIPPING[md.shipping] || SHIPPING.insured).title,
+          amountPaid: (inv.amount_paid || 0) / 100, trialEnds: subscription?.trial_end ? subscription.trial_end * 1000 : null,
+          orderName: order.name, membershipPrice: MEMBERSHIP.price / 100, intervalDays: MEMBERSHIP.intervalDays,
+        });
         return res.status(200).json({ received: true, order: order.name });
       }
+      // Rebill (€49 elke 28 dagen) → alleen Klaviyo-event, geen Shopify-order
+      if (inv.billing_reason === "subscription_cycle" && inv.amount_paid > 0) {
+        const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
+        const sub = subId ? await stripe.subscriptions.retrieve(subId).catch(() => null) : null;
+        await syncRenewal({ email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
+          amountPaid: (inv.amount_paid || 0) / 100, nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
+        return res.status(200).json({ received: true, renewal: true });
+      }
+    }
+    if (event.type === "customer.subscription.deleted") {
+      const sub = event.data.object;
+      const custId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
+      const customer = custId ? await stripe.customers.retrieve(custId).catch(() => null) : null;
+      await syncCancel({ email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });
+      return res.status(200).json({ received: true, cancelled: true });
     }
     return res.status(200).json({ received: true, ignored: event.type });
   } catch (e) {
