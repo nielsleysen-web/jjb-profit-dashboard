@@ -2,9 +2,9 @@
 // Vangnet: als de klant na PayPal niet terugkomt op de checkout, maakt deze webhook de
 // Shopify-order toch aan. Rebills (PAYMENT.SALE.COMPLETED) negeren we: daar wordt niets verzonden.
 // PayPal Developer → je app → Webhooks → URL: https://<dashboard>/api/paypal/webhook
-// Event: BILLING.SUBSCRIPTION.ACTIVATED · Env: PAYPAL_WEBHOOK_ID
+// Events: BILLING.SUBSCRIPTION.ACTIVATED (+ CANCELLED/EXPIRED → Klaviyo) · Env: PAYPAL_WEBHOOK_ID
 
-import { paypalConfigured, pp, ensureOrderForPaypal } from "../../../lib/paypal";
+import { paypalConfigured, pp, ensureOrderForPaypal, cancelMemberForPaypal } from "../../../lib/paypal";
 
 export const config = { maxDuration: 30 };
 
@@ -27,6 +27,11 @@ export default async function handler(req, res) {
       if (Date.now() - new Date(sub.create_time).getTime() < 120000) return res.status(503).send("retry later");
       const order = await ensureOrderForPaypal(sub, {});
       return res.status(200).json({ received: true, order: order.name });
+    }
+    if ((event.event_type === "BILLING.SUBSCRIPTION.CANCELLED" || event.event_type === "BILLING.SUBSCRIPTION.EXPIRED") && event.resource?.id) {
+      const sub = await pp("get", `/v1/billing/subscriptions/${event.resource.id}`);
+      await cancelMemberForPaypal(sub, event.event_type === "BILLING.SUBSCRIPTION.EXPIRED" ? "expired" : "cancelled");
+      return res.status(200).json({ received: true, cancelled: true });
     }
     return res.status(200).json({ received: true, ignored: event.event_type });
   } catch (e) {
