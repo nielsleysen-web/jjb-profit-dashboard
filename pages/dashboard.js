@@ -488,7 +488,8 @@ function RecentActivity({ formatCurrency, isMobile }) {
                 display: "flex",
                 gap: "10px",
                 padding: "10px",
-                background: "#f8fafc",
+                background: order.membership ? "#ecfdf5" : "#f8fafc",
+                border: order.membership ? "1px solid #a7f3d0" : "1px solid transparent",
                 borderRadius: "12px",
                 alignItems: "flex-start",
               }}
@@ -505,9 +506,14 @@ function RecentActivity({ formatCurrency, isMobile }) {
                 </div>
               )}
               <div style={{ minWidth: 0, flex: 1 }}>
+                {order.membership && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "10px", fontWeight: 800, letterSpacing: "0.4px", color: "#047857", background: "#d1fae5", borderRadius: "999px", padding: "2px 8px", marginBottom: "4px" }}>
+                    ★ MEMBERSHIP{order.gateway ? ` · ${order.gateway === "paypal" ? "PayPal" : "Card"}` : ""}
+                  </div>
+                )}
                 <div style={{ fontSize: "12.5px", color: "#334155", lineHeight: 1.45 }}>
                   <b style={{ color: "#0f172a" }}>{order.customerFull || order.customer || "Someone"}</b>{" "}
-                  purchased <b style={{ color: "#16a34a" }}>{formatCurrency(order.total)}</b>
+                  {order.membership ? "joined for" : "purchased"} <b style={{ color: "#16a34a" }}>{formatCurrency(order.total)}</b>
                 </div>
                 <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {item ? `${item.quantity}× ${item.title}` : order.name}
