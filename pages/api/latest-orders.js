@@ -57,6 +57,7 @@ const QUERY_FULL = `
         createdAt
         currentTotalPriceSet { shopMoney { amount } }
         customAttributes { key value }
+        tags
         customer { firstName lastName }
         shippingAddress { city country }
         lineItems(first: 5) {
@@ -82,6 +83,7 @@ const QUERY_BASIC = `
         createdAt
         currentTotalPriceSet { shopMoney { amount } }
         customAttributes { key value }
+        tags
         lineItems(first: 5) {
           nodes {
             title
@@ -165,6 +167,9 @@ export default async function handler(req, res) {
         funnel: attrs.path || "",
         // alleen echt advertentieverkeer telt als herkend
         tracked: !!(attrs.ad_id || ad || attrs.fbclid),
+        // Membership-checkout (Stripe/PayPal) → groene kaart in Recent activity
+        membership: (o.tags || []).includes("subscription-frontend"),
+        gateway: (o.tags || []).includes("paypal") ? "paypal" : (o.tags || []).includes("stripe") ? "stripe" : "",
       };
     });
 
