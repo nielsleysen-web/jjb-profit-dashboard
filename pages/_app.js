@@ -37,6 +37,7 @@ const CATEGORIES = [
     items: [
       { href: "/product-launching", label: "Product Pipeline", icon: "🚀" },
       { href: "/funnel-metrics", label: "Funnel Metrics", icon: "📈" },
+      { href: "/ab-test", label: "A/B Tests", icon: "🧪" },
     ],
   },
   {
