@@ -216,6 +216,37 @@ export default function Grazie() {
     return () => clearTimeout(timer);
   }, [q]);
 
+  // Meta pixel: Purchase in de browser, met hetzelfde event_id (jjb-<ordernummer>) als het
+  // server-side CAPI-event uit de webhook → Meta telt hem één keer. Eén keer per order (localStorage).
+  useEffect(() => {
+    if (!q?.sub || !data?.paid || !data?.order?.name) return;
+    const orderNo = String(data.order.name).replace("#", "");
+    const key = `jjb_purchase_${orderNo}`;
+    try { if (localStorage.getItem(key)) return; } catch {}
+    fetch("/api/checkout-config").then((r) => r.json()).then((cfg) => {
+      const pixelId = cfg?.pixelId || cfg?.META_PIXEL_ID;
+      if (!pixelId) return;
+      if (!window.fbq) {
+        /* eslint-disable */
+        !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+        /* eslint-enable */
+        window.fbq("init", pixelId);
+        window.fbq("track", "PageView");
+      }
+      const b = pickBundle(data.qty || q.b);
+      window.fbq("track", "Purchase", {
+        value: (data.amountPaid ?? b.price + (SHIPPING[data.shipping] || SHIPPING.insured).price) / 100,
+        currency: "EUR",
+        content_type: "product",
+        content_ids: ["10561889403146"],
+        contents: [{ id: "10561889403146", quantity: b.qty }],
+        num_items: b.qty,
+        order_id: orderNo,
+      }, { eventID: `jjb-${orderNo}` });
+      try { localStorage.setItem(key, "1"); } catch {}
+    }).catch(() => {});
+  }, [q, data]);
+
   const preview = q && !q.sub;
   const failed = q?.rs === "failed";
   const bundle = pickBundle(data?.qty || q?.b);
