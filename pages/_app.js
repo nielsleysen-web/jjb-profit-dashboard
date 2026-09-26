@@ -28,6 +28,7 @@ const CATEGORIES = [
     perm: "finance",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "📊" },
+      { href: "/subscriptions", label: "Membership", icon: "💚" },
       { href: "/product-economics", label: "Product Economics", icon: "📦" },
     ],
   },
@@ -281,10 +282,10 @@ export default function App({ Component, pageProps }) {
             ? { display: "flex", gap: "4px", alignItems: "center" }
             : {
                 marginBottom: "10px",
-                background: "#f6f8fa",
-                border: "1px solid #eef1f5",
+                background: "transparent",
+                border: "none",
                 borderRadius: "12px",
-                padding: "6px",
+                padding: "0 0 6px",
               }
         }
       >
@@ -303,10 +304,10 @@ export default function App({ Component, pageProps }) {
               marginBottom: isCollapsed ? 0 : "4px",
             }}
           >
-            <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+            <span style={{ fontSize: "10.5px", fontWeight: 700, color: horizontal ? "#475569" : "#64748b", textTransform: "uppercase", letterSpacing: "0.8px" }}>
               {cat.name}
             </span>
-            <span style={{ fontSize: "10px", color: "#475569", fontWeight: 700 }}>{isCollapsed ? "▶" : "▼"}</span>
+            <span style={{ fontSize: "10px", color: "#64748b", fontWeight: 700 }}>{isCollapsed ? "▶" : "▼"}</span>
           </button>
         )}
         {(horizontal || !isCollapsed) && cat.items.map((item) => {
@@ -321,12 +322,12 @@ export default function App({ Component, pageProps }) {
                   justifyContent: "space-between",
                   gap: "6px",
                   padding: horizontal ? "7px 10px" : "8px 10px",
-                  background: active ? "#0f172a" : horizontal ? "transparent" : "#ffffff",
-                  border: horizontal ? "none" : active ? "1px solid #0f172a" : "1px solid #e8ecf1",
-                  color: active ? "#ffffff" : "#475569",
+                  background: horizontal ? (active ? "#0f172a" : "transparent") : active ? "#1e293b" : "transparent",
+                  border: "none",
+                  color: horizontal ? (active ? "#ffffff" : "#475569") : active ? "#ffffff" : "#cbd5e1",
                   textDecoration: "none",
-                  fontSize: horizontal ? "12px" : "12.5px",
-                  fontWeight: 600,
+                  fontSize: horizontal ? "12px" : "13px",
+                  fontWeight: active ? 700 : 500,
                   borderRadius: "9px",
                   whiteSpace: "nowrap",
                   marginBottom: horizontal ? 0 : "4px",
@@ -383,19 +384,19 @@ export default function App({ Component, pageProps }) {
           </button>
         </div>
       ) : (
-        <div style={{ width: "236px", background: "white", borderRight: "1px solid #eceef2", padding: "24px 14px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div style={{ width: "236px", background: "#0f172a", borderRight: "1px solid #0f172a", padding: "24px 14px", display: "flex", flexDirection: "column", flexShrink: 0 }}>
           <div style={{ paddingLeft: "12px", marginBottom: "26px" }}>
-            <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#0f172a" }}>Just Jenny</h2>
-            <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#8a92a3" }}>Operations Centre</p>
+            <h2 style={{ margin: 0, fontSize: "15px", fontWeight: 800, color: "#ffffff" }}>Just Jenny</h2>
+            <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#64748b" }}>Operations Centre</p>
           </div>
           <nav style={{ flex: 1 }}>
             <NavLinks />
           </nav>
-          <div style={{ padding: "10px 12px", borderTop: "1px solid #f4f5f7", marginBottom: "10px" }}>
-            <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
-            <div style={{ fontSize: "11px", color: "#8a92a3", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</div>
+          <div style={{ padding: "10px 12px", borderTop: "1px solid #1e293b", marginBottom: "10px" }}>
+            <div style={{ fontSize: "12.5px", fontWeight: 600, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis" }}>{user.name}</div>
+            <div style={{ fontSize: "11px", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</div>
           </div>
-          <button onClick={logout} style={{ padding: "10px 12px", background: "#ffffff", color: "#dc2626", border: "1px solid #fecaca", borderRadius: "10px", fontSize: "12.5px", fontWeight: 600, cursor: "pointer" }}>
+          <button onClick={logout} style={{ padding: "10px 12px", background: "#1e293b", color: "#fca5a5", border: "1px solid #334155", borderRadius: "10px", fontSize: "12.5px", fontWeight: 600, cursor: "pointer" }}>
             Log out
           </button>
         </div>
