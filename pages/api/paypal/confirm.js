@@ -30,7 +30,9 @@ export default async function handler(req, res) {
     const t = b.track && typeof b.track === "object" ? b.track : {};
     for (const k of [...TRACK_KEYS, "pg", "utm_medium"]) if (t[k]) track[k] = String(t[k]).slice(0, 300);
 
-    const order = await ensureOrderForPaypal(sub, { track, phone: String(b.phone || "").slice(0, 30) });
+    const clientIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+    const userAgent = String(req.headers["user-agent"] || "").slice(0, 450);
+    const order = await ensureOrderForPaypal(sub, { track, phone: String(b.phone || "").slice(0, 30), clientIp, userAgent });
     return res.status(200).json({ ok: true, order: order.name });
   } catch (e) {
     console.error("paypal/confirm:", e.message);
