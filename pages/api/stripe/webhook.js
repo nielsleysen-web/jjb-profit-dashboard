@@ -13,6 +13,7 @@ import Stripe from "stripe";
 import axios from "axios";
 import { BUNDLES, SHIPPING, PRODUCT_TITLE, MEMBERSHIP } from "../../../lib/checkout";
 import { syncNewMember, syncRenewal, syncCancel } from "../../../lib/klaviyo";
+import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
 
 export const config = { api: { bodyParser: false } }; // ruwe body nodig voor de handtekening
 
@@ -166,11 +167,19 @@ export default async function handler(req, res) {
         const order = await createShopifyOrder({ invoice: inv, subscription, customer, paymentIntent });
         // Ordernaam terugschrijven op het abonnement → handig in Stripe zelf
         if (subscription) await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name } }).catch(() => {});
-        // Abonnee → Klaviyo (lijst + event "Started Membership"); nooit blokkerend
         const md = { ...(subscription?.metadata || {}), ...(paymentIntent?.metadata || {}) };
         const qty = parseInt(md.qty || md.bundle || "3", 10);
         const addr = customer?.shipping?.address || customer?.address || {};
         const [fn, ...ln] = String(customer?.shipping?.name || customer?.name || "").split(" ");
+        // Meta CAPI: Purchase (server-side, gededupliceerd met de pixel op de bedankpagina via event_id)
+        await sendPurchase({
+          orderName: order.name, createdAt: inv.created * 1000, value: (inv.amount_paid || 0) / 100, currency: "EUR", provider: "stripe",
+          email: customer?.email || inv.customer_email, phone: customer?.shipping?.phone || customer?.phone,
+          firstName: fn, lastName: ln.join(" "), city: addr.city, zip: addr.postal_code, state: addr.state, country: addr.country || "IT",
+          clientIp: md.client_ip, userAgent: md.client_ua, fbc: md.jjb_fbc, fbp: md.jjb_fbp, vid: md.jjb_vid,
+          contents: [{ id: META_CONTENT_ID, quantity: qty }],
+        });
+        // Abonnee → Klaviyo (lijst + event "Started Membership"); nooit blokkerend
         await syncNewMember({
           email: customer?.email || inv.customer_email, firstName: fn, lastName: ln.join(" "),
           phone: itPhone(customer?.shipping?.phone || customer?.phone),
