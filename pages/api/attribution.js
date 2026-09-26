@@ -107,7 +107,7 @@ const sha = (v) => (v ? crypto.createHash("sha256").update(String(v).trim().toLo
 
 async function sendCapiPurchase(order, attrib) {
   const pixelId = process.env.META_PIXEL_ID;
-  const token = process.env.META_CAPI_TOKEN;
+  const token = process.env.META_CAPI_TOKEN || process.env.META_CAPI_ACCESS_TOKEN;
   if (!pixelId || !token) throw new Error("META_PIXEL_ID / META_CAPI_TOKEN not set");
 
   const addr = order.billingAddress || {};
@@ -253,6 +253,7 @@ async function runScan(force) {
           pageInfo { hasNextPage endCursor }
           nodes {
             name
+            tags
             createdAt
             email
             phone
@@ -298,7 +299,9 @@ async function runScan(force) {
       else result.unattributed++;
 
       // CAPI: alleen als de schakelaar aan staat (na de WeTracked-omschakeling)
-      if (process.env.CAPI_ENABLED === "1" && !store.capi[order.name]) {
+      // Membership-orders (checkout.getjustjenny.com) sturen hun Purchase al vanuit de Stripe/PayPal-webhook
+      const isMembership = (order.tags || []).includes("subscription-frontend");
+      if (process.env.CAPI_ENABLED === "1" && !store.capi[order.name] && !isMembership) {
         try {
           await sendCapiPurchase(order, { ...entry, lastUrl: "" });
           store.capi[order.name] = { at: new Date().toISOString() };
