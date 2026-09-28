@@ -108,7 +108,12 @@ export default function App({ Component, pageProps }) {
   const [busy, setBusy] = useState(false);
   const isMobile = useIsMobile();
 
+  // Klantpagina's (checkout, ledenportaal): geen dashboard-login, geen menu, meteen renderen (ook server-side)
+  const isCustomerPage = router.pathname === "/checkout" || router.pathname.startsWith("/checkout/")
+    || router.pathname === "/portal" || router.pathname.startsWith("/portal/");
+
   useEffect(() => {
+    if (isCustomerPage) return;
     fetch("/api/auth?action=me")
       .then((r) => (r.ok ? r.json() : null))
       .then((res) => {
@@ -167,14 +172,10 @@ export default function App({ Component, pageProps }) {
     });
   };
 
+  if (isCustomerPage) return <Component {...pageProps} />;
   if (!checked) return null;
 
   const requiresAuth = ALL_PROTECTED.includes(router.pathname);
-
-  // De checkout (checkout.getjustjenny.com) is een klantpagina: geen login, geen menu, eigen opmaak
-  if (router.pathname === "/checkout" || router.pathname.startsWith("/checkout/")) {
-    return <Component {...pageProps} />;
-  }
   const perm = requiredPerm(router.pathname);
 
   // Afgeleide rechten uit de rollen: elke Funnel Builder ziet Product Launching,

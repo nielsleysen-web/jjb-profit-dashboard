@@ -14,6 +14,7 @@ import axios from "axios";
 import { BUNDLES, SHIPPING, PRODUCT_TITLE, MEMBERSHIP } from "../../../lib/checkout";
 import { syncNewMember, syncRenewal, syncCancel } from "../../../lib/klaviyo";
 import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
+import { registerMember, markRenewed, markCancelled } from "../../../lib/portal-members";
 
 export const config = { api: { bodyParser: false } }; // ruwe body nodig voor de handtekening
 
@@ -179,16 +180,20 @@ export default async function handler(req, res) {
           clientIp: md.client_ip, userAgent: md.client_ua, fbc: md.jjb_fbc, fbp: md.jjb_fbp, vid: md.jjb_vid,
           contents: [{ id: META_CONTENT_ID, quantity: qty }],
         });
-        // Abonnee → Klaviyo (lijst + event "Started Membership"); nooit blokkerend
-        await syncNewMember({
+        // Ledenportaal: record aanmaken + welkomstlink (30 dagen) voor mail 1; nooit blokkerend
+        const memberInfo = {
           email: customer?.email || inv.customer_email, firstName: fn, lastName: ln.join(" "),
           phone: itPhone(customer?.shipping?.phone || customer?.phone),
-          address: { address1: addr.line1, city: addr.city, zip: addr.postal_code, province: addr.state },
-          provider: "stripe", subscriptionId: subscription?.id || subId, qty,
+          address: { address1: addr.line1, city: addr.city, zip: addr.postal_code, province: addr.state, country: addr.country || "IT" },
+          provider: "stripe", subscriptionId: subscription?.id || subId, stripeCustomerId: custId, qty,
           bundleLabel: (BUNDLES[qty] || BUNDLES[3]).label, shippingTitle: (SHIPPING[md.shipping] || SHIPPING.insured).title,
           amountPaid: (inv.amount_paid || 0) / 100, trialEnds: subscription?.trial_end ? subscription.trial_end * 1000 : null,
           orderName: order.name, membershipPrice: MEMBERSHIP.price / 100, intervalDays: MEMBERSHIP.intervalDays,
-        });
+          startedAt: inv.created * 1000, nextChargeAt: subscription?.current_period_end ? subscription.current_period_end * 1000 : null,
+        };
+        const portalLoginUrl = await registerMember(memberInfo);
+        // Abonnee → Klaviyo (lijst + event "Started Membership"); nooit blokkerend
+        await syncNewMember({ ...memberInfo, portalLoginUrl });
         return res.status(200).json({ received: true, order: order.name });
       }
       // Rebill (€49 elke 28 dagen) → alleen Klaviyo-event, geen Shopify-order
@@ -197,6 +202,7 @@ export default async function handler(req, res) {
         const sub = subId ? await stripe.subscriptions.retrieve(subId).catch(() => null) : null;
         await syncRenewal({ email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
           amountPaid: (inv.amount_paid || 0) / 100, nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
+        await markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: sub?.current_period_end ? sub.current_period_end * 1000 : null, amountPaid: (inv.amount_paid || 0) / 100 });
         return res.status(200).json({ received: true, renewal: true });
       }
     }
@@ -205,6 +211,7 @@ export default async function handler(req, res) {
       const custId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
       const customer = custId ? await stripe.customers.retrieve(custId).catch(() => null) : null;
       await syncCancel({ email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });
+      await markCancelled(customer?.email);
       return res.status(200).json({ received: true, cancelled: true });
     }
     return res.status(200).json({ received: true, ignored: event.type });
