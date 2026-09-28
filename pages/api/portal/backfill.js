@@ -5,6 +5,8 @@
 //   GET /api/portal/backfill?run=1           → leden aanmaken (bestaande records worden niet overschreven)
 //   GET /api/portal/backfill?link=<email>    → nieuwe welkomstlink (30 dagen) voor één lid, om te testen
 //                                              of om handmatig door te sturen
+//   GET /api/portal/backfill?test=<email>    → testlid aanmaken (of bijwerken) met dat e-mailadres + welkomstlink;
+//                                              optioneel &name=Voornaam. Gemarkeerd met test:true.
 //
 // Geannuleerde/terugbetaalde orders (testorders) worden overgeslagen.
 
@@ -31,6 +33,21 @@ export default async function handler(req, res) {
     const s = getSession(req);
     if (!s || !(s.finance || s.admin)) return res.status(401).json({ success: false, error: "No access" });
     if (!storeConfigured()) return res.status(400).json({ success: false, error: "UPSTASH_REDIS_REST_URL / _TOKEN ontbreekt" });
+
+    if (req.query.test) {
+      const email = normEmail(req.query.test);
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ success: false, error: "Ongeldig e-mailadres" });
+      const now = new Date();
+      await upsertMember({
+        email, firstName: String(req.query.name || "Test"), lastName: "Account", test: true,
+        address: { address1: "Via Roma 12", city: "Milano", zip: "20121", province: "MI", country: "IT" },
+        provider: "stripe", status: "trialing", startedAt: now.toISOString(),
+        trialEnds: new Date(now.getTime() + 7 * 86400000).toISOString(), nextChargeAt: new Date(now.getTime() + 7 * 86400000).toISOString(),
+        lastPaymentAt: now.toISOString(), lastPaymentAmount: 53.9, shopifyOrder: "#TEST", bundle: 3,
+      });
+      const url = await createLoginLink(email, { purpose: "welcome", ttlSec: 30 * 86400 });
+      return res.status(200).json({ success: true, test: true, email, loginUrl: url, validDays: 30 });
+    }
 
     if (req.query.link) {
       const email = normEmail(req.query.link);
