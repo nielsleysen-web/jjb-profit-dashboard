@@ -1,8 +1,7 @@
 // pages/portal/forgot.js — Wachtwoord vergeten → inloglink per mail, daarna nieuw wachtwoord kiezen.
 import { useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
-import AuthShell, { post, onEnter } from "../../components/portal/AuthShell";
+import AuthShell, { post, onEnter, P, go } from "../../components/portal/AuthShell";
 
 export default function Forgot() {
   const router = useRouter();
@@ -16,13 +15,13 @@ export default function Forgot() {
     setBusy(true);
     await post("/api/portal/auth/request-link", { email, purpose: "reset" });
     setBusy(false);
-    router.push(`/portal/link-sent?reset=1&e=${encodeURIComponent(email.trim())}`);
+    go(`/link-sent?reset=1&e=${encodeURIComponent(email.trim())}`);
   }
 
   return (
     <AuthShell title="Forgot your password?" heading="Forgot your password?"
       sub="No problem. Enter your email and we'll send you a link to log in and choose a new one."
-      below={<p className="help"><Link href="/portal/login">← Back to log in</Link></p>}>
+      below={<p className="help"><a href={P("/login")}>← Back to log in</a></p>}>
       <div>
         {err && <div className="err">{err}</div>}
         <label htmlFor="e">Email</label>

@@ -67,6 +67,11 @@ function AuthStyles() {
 // nooit "gewoon" herladen (oudere telefoons). Enter in een veld = zelfde als op de knop drukken.
 export const onEnter = (fn) => (e) => { if (e.key === "Enter") { e.preventDefault(); fn(e); } };
 
+// Paden: op members.getjustjenny.com zonder "/portal" (de middleware herschrijft), elders mét.
+export const P = (path) => (typeof window !== "undefined" && /^members\./i.test(window.location.host) ? path : `/portal${path === "/" ? "" : path}`);
+// Navigatie tussen de inlogschermen: gewone paginalading (simpel en betrouwbaar)
+export const go = (path) => { window.location.assign(P(path)); };
+
 // Kleine helper voor fetch-calls vanuit de schermen
 export async function post(url, body) {
   const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });

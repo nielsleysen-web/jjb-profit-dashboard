@@ -1,8 +1,7 @@
 // pages/portal/login.js — Inloggen: e-mail + wachtwoord, of een inloglink per mail.
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import Link from "next/link";
-import AuthShell, { post, onEnter } from "../../components/portal/AuthShell";
+import AuthShell, { post, onEnter, P, go } from "../../components/portal/AuthShell";
 
 export default function Login() {
   const router = useRouter();
@@ -22,7 +21,7 @@ export default function Login() {
     setBusy(true);
     const r = await post("/api/portal/auth/login", { email, password });
     setBusy(false);
-    if (r.ok) return router.replace("/portal");
+    if (r.ok) return go("/");
     if (r.error === "no_password") return setErr("You haven't chosen a password yet. Use \"Email me a login link\" below, then pick one.");
     if (r.error === "too_many") return setErr("Too many attempts. Please wait 15 minutes or use the email link.");
     setErr("That email and password don't match. Try again, or use the email link below.");
@@ -34,7 +33,7 @@ export default function Login() {
     setBusy(true);
     await post("/api/portal/auth/request-link", { email, purpose: "login" });
     setBusy(false);
-    router.push(`/portal/link-sent?e=${encodeURIComponent(email.trim())}`);
+    go(`/link-sent?e=${encodeURIComponent(email.trim())}`);
   }
 
   return (
@@ -44,7 +43,7 @@ export default function Login() {
         <label htmlFor="e">Email</label>
         <input id="e" type="email" placeholder="example@gmail.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={onEnter(login)} />
         <div className="gap" />
-        <div className="row"><label htmlFor="p">Password</label><Link href="/portal/forgot">Forgot password?</Link></div>
+        <div className="row"><label htmlFor="p">Password</label><a href={P("/forgot")}>Forgot password?</a></div>
         <input id="p" type="password" placeholder="Your password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={onEnter(login)} />
         <button className="btn" type="button" onClick={login} disabled={busy}>Log in →</button>
         <div className="or">or</div>

@@ -9,7 +9,7 @@
 
 import { NextResponse } from "next/server";
 
-export const config = { matcher: ["/((?!_next/|api/|favicon.ico|portal/|checkout/).*)"] };
+export const config = { matcher: ["/((?!_next/|api/|favicon.ico|checkout/).*)"] };
 
 export function middleware(req) {
   const host = (req.headers.get("host") || "").toLowerCase();
@@ -18,6 +18,12 @@ export function middleware(req) {
   const onMembersHost = host.startsWith("members.");
 
   if (onMembersHost) {
+    // Nette URL's: members.getjustjenny.com/login i.p.v. /portal/login
+    if (url.pathname === "/portal" || url.pathname.startsWith("/portal/")) {
+      const to = url.clone();
+      to.pathname = url.pathname.slice("/portal".length) || "/";
+      return NextResponse.redirect(to, 308);
+    }
     const to = url.clone();
     to.pathname = url.pathname === "/" ? "/portal" : `/portal${url.pathname}`;
     return NextResponse.rewrite(to);
