@@ -34,6 +34,26 @@ export default async function handler(req, res) {
     if (!s || !(s.finance || s.admin)) return res.status(401).json({ success: false, error: "No access" });
     if (!storeConfigured()) return res.status(400).json({ success: false, error: "UPSTASH_REDIS_REST_URL / _TOKEN ontbreekt" });
 
+    if (req.query.ping) {
+      // Diagnose: elk Redis-commando dat het portaal gebruikt één keer uitvoeren
+      const out = {};
+      const { redis } = await import("../../../lib/portal-store");
+      for (const [name, cmd] of [
+        ["set", ["SET", "portal:ping", "1"]],
+        ["set_ex", ["SET", "portal:ping:ex", "1", "EX", "60"]],
+        ["get", ["GET", "portal:ping"]],
+        ["del", ["DEL", "portal:ping"]],
+        ["incr", ["INCR", "portal:ping:n"]],
+        ["expire", ["EXPIRE", "portal:ping:n", "60"]],
+        ["sadd", ["SADD", "portal:ping:set", "a"]],
+        ["smembers", ["SMEMBERS", "portal:ping:set"]],
+        ["del2", ["DEL", "portal:ping:set"]],
+      ]) {
+        try { out[name] = { ok: true, result: await redis(cmd) }; } catch (e) { out[name] = { ok: false, error: e.message }; }
+      }
+      return res.status(200).json({ success: true, ping: out });
+    }
+
     if (req.query.test) {
       const email = normEmail(req.query.test);
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ success: false, error: "Ongeldig e-mailadres" });
