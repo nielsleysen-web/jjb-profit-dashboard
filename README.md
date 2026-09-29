@@ -86,3 +86,4 @@ SHOPIFY_CLIENT_ID=your_client_id
 ---
 
 **Ready to deploy?** Follow the Quick Start section above! 🚀
+
