@@ -4,7 +4,7 @@
 //   GET /api/portal/backfill                 → droog: wie zou toegevoegd worden
 //   GET /api/portal/backfill?run=1           → leden aanmaken (bestaande records worden niet overschreven)
 //   GET /api/portal/backfill?link=<email>    → nieuwe welkomstlink (30 dagen) voor één lid, om te testen
-//                                              of om handmatig door te sturen
+//                                              of om handmatig door te sturen; &reset=1 → nieuw wachtwoord kiezen
 //   GET /api/portal/backfill?test=<email>    → testlid aanmaken (of bijwerken) met dat e-mailadres + welkomstlink;
 //                                              optioneel &name=Voornaam. Gemarkeerd met test:true.
 //
@@ -73,8 +73,10 @@ export default async function handler(req, res) {
       const email = normEmail(req.query.link);
       const m = await getMember(email);
       if (!m) return res.status(404).json({ success: false, error: `Geen lid met e-mail ${email}` });
-      const url = await createLoginLink(email, { purpose: "welcome", ttlSec: 30 * 86400 });
-      return res.status(200).json({ success: true, email, firstName: m.firstName, loginUrl: url, validDays: 30 });
+      // &reset=1 → de link opent het scherm "Choose a new password" (wachtwoord vergeten)
+      const purpose = req.query.reset === "1" ? "reset" : "welcome";
+      const url = await createLoginLink(email, { purpose, ttlSec: 30 * 86400 });
+      return res.status(200).json({ success: true, email, firstName: m.firstName, purpose, loginUrl: url, validDays: 30 });
     }
 
     const run = req.query.run === "1";
