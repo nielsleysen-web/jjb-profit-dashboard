@@ -1,17 +1,17 @@
-// pages/portal/new-password.js — Na "wachtwoord vergeten": nieuw wachtwoord kiezen.
+// pages/portal/new-password.js — Na "password dimenticata": nieuw wachtwoord kiezen.
 import { useEffect } from "react";
-import { useRouter } from "next/router";
 import AuthShell, { go } from "../../components/portal/AuthShell";
 import PasswordForm from "../../components/portal/PasswordForm";
+import { useT } from "../../lib/portal-i18n";
 
 export default function NewPassword() {
-  const router = useRouter();
+  const { t } = useT();
   useEffect(() => {
     fetch("/api/portal/me").then((r) => r.json()).then((j) => { if (!j.ok) go("/login?expired=1"); }).catch(() => {});
   }, []);
   return (
-    <AuthShell title="Choose a new password" heading="Choose a new password" sub="You're logged in via your email link. Pick a new password for next time.">
-      <PasswordForm labels={{ first: "New password", second: "Repeat new password", button: "Save new password →" }} onDone={() => go("/")} />
+    <AuthShell title={t("newPwTitle")} heading={t("newPwTitle")} sub={t("newPwSub")} footer={t("footer")}>
+      <PasswordForm t={t} labels={{ first: t("newPw"), second: t("repeatNewPw"), button: t("saveNewPw") }} onDone={() => go("/")} />
     </AuthShell>
   );
 }

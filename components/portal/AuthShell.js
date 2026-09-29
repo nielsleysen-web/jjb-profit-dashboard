@@ -6,7 +6,7 @@ import Head from "next/head";
 export const LOGO = "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114";
 export const SUPPORT_EMAIL = "Hello@justjennybeauty.com";
 
-export default function AuthShell({ title, heading, sub, children, below }) {
+export default function AuthShell({ title, heading, sub, children, below, footer }) {
   return (
     <>
       <AuthStyles />
@@ -21,7 +21,7 @@ export default function AuthShell({ title, heading, sub, children, below }) {
         {sub && <p className="sub">{sub}</p>}
         <div className="card">{children}</div>
         {below}
-        <p className="foot">Health For Life Membership · Just Jenny<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
+        <p className="foot">{footer || "Health For Life Membership · Just Jenny"}<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
     </>
   );

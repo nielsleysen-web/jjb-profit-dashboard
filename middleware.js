@@ -9,7 +9,8 @@
 
 import { NextResponse } from "next/server";
 
-export const config = { matcher: ["/((?!_next/|api/|favicon.ico|checkout/).*)"] };
+// Bestanden met een extensie (foto's, pdf's, …) gaan altijd rechtstreeks naar public/
+export const config = { matcher: ["/((?!_next/|api/|favicon.ico|checkout/|.*\\..*).*)"] };
 
 export function middleware(req) {
   const host = (req.headers.get("host") || "").toLowerCase();

@@ -1,11 +1,11 @@
 // pages/portal/welcome.js — Eerste bezoek via de inloglink: wachtwoord kiezen of overslaan.
 import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
 import AuthShell, { go } from "../../components/portal/AuthShell";
 import PasswordForm from "../../components/portal/PasswordForm";
+import { useT } from "../../lib/portal-i18n";
 
 export default function Welcome() {
-  const router = useRouter();
+  const { t } = useT();
   const [name, setName] = useState("");
   useEffect(() => {
     fetch("/api/portal/me").then((r) => r.json()).then((j) => {
@@ -16,11 +16,9 @@ export default function Welcome() {
   }, []);
 
   return (
-    <AuthShell title="Welcome" heading={name ? `Welcome, ${name}!` : "Welcome!"}
-      sub="You're logged in. Choose a password so you can log in next time without a link.">
-      <PasswordForm labels={{ first: "Choose a password", second: "Repeat password", button: "Save password & continue →" }}
-        onDone={() => go("/")}
-        skip={{ label: "Skip for now, I'll use email links", onClick: () => go("/") }} />
+    <AuthShell title={t("choosePw")} heading={name ? t("welcomeTitle", { name }) : t("welcomeTitleNoName")} sub={t("welcomeSub")} footer={t("footer")}>
+      <PasswordForm t={t} labels={{ first: t("choosePw"), second: t("repeatPw"), button: t("savePwContinue") }}
+        onDone={() => go("/")} skip={{ label: t("skipPw"), onClick: () => go("/") }} />
     </AuthShell>
   );
 }
