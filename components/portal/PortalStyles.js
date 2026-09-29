@@ -6,14 +6,14 @@ export default function PortalStyles() {
       a{color:inherit}
       .app{display:flex;min-height:100vh}
       .side{width:250px;background:#fff;border-right:1px solid #eee;padding:22px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0}
-      .side img{height:28px;margin:4px 0 26px 10px;display:block;align-self:flex-start}
+      .side img{width:170px;max-width:100%;height:auto;margin:6px 0 28px 12px;display:block;align-self:flex-start}
       .side .nav{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:12px;text-decoration:none;font-size:16.5px;font-weight:600;color:#444;margin-bottom:4px;cursor:pointer;background:none;border:0;font-family:inherit;text-align:left;width:100%}
       .side .nav.on{background:#fdeee4;color:#1a1a1a}
       .side .nav .ic{width:24px;text-align:center;font-size:18px}
       .side .me{margin-top:auto;padding:14px 14px 4px;border-top:1px solid #eee;font-size:14px;color:#666;overflow-wrap:anywhere}.side .me b{display:block;color:#1a1a1a;font-size:15px}
       .side .me button{background:none;border:0;padding:0;margin:8px 0 0;font:inherit;font-size:14px;color:#df8455;font-weight:700;cursor:pointer}
       .mtop{display:none;background:#fff;border-bottom:1px solid #eee;padding:12px 16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
-      .mtop img{height:26px}.mtop button{background:none;border:1px solid #ddd;border-radius:10px;font-size:22px;padding:4px 10px;cursor:pointer}
+      .mtop img{width:150px;max-width:60%;height:auto;display:block}.mtop button{background:none;border:1px solid #ddd;border-radius:10px;font-size:22px;padding:4px 10px;cursor:pointer}
       .main{flex:1;min-width:0}
       .wrap{max-width:860px;margin:0 auto;padding:36px 28px 60px}
       h1{font-size:30px;font-weight:800;margin:0 0 6px}.sub{color:#444;margin:0 0 24px;font-size:19px;line-height:1.45}
