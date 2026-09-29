@@ -153,7 +153,7 @@ async function fetchOrdersPerProductPerDay(dateFrom, dateTo) {
   const storeUrl = process.env.SHOPIFY_STORE_URL;
   const token = await getShopifyToken(storeUrl);
   const endpoint = `https://${storeUrl}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
-  const searchQuery = `created_at:>='${dateFrom}T00:00:00+02:00' AND created_at:<='${dateTo}T23:59:59+02:00'`;
+  const searchQuery = `created_at:>='${dateFrom}T00:00:00+02:00' AND created_at:<='${dateTo}T23:59:59+02:00' AND -tag:membership-item`; // zonder portaalbestellingen
 
   // byProduct[genormaliseerde productnaam][dag] = { qty, revenue, cogs }
   const byProduct = {};

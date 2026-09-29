@@ -223,7 +223,7 @@ async function fetchOrdersByAd(from, to) {
   if (ordersCache.data && ordersCache.key === cacheKey && Date.now() - ordersCache.at < 60000) return ordersCache.data;
 
   const byAd = {};
-  const searchQuery = `created_at:>='${from}T00:00:00+02:00' AND created_at:<='${to}T23:59:59+02:00'`;
+  const searchQuery = `created_at:>='${from}T00:00:00+02:00' AND created_at:<='${to}T23:59:59+02:00' AND -tag:membership-item`; // zonder portaalbestellingen
   let after = null;
   for (let page = 0; page < 40; page++) {
     const d = await shopifyGraphql(ORDERS_QUERY, { first: 250, query: searchQuery, after });

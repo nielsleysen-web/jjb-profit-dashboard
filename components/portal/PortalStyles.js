@@ -70,6 +70,17 @@ export default function PortalStyles() {
       .two{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
       .help{margin-top:28px;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px}.help h3{margin:0 0 3px;font-size:18px}.help p{margin:0;color:#666;font-size:14.5px}.help a{background:#fdeee4;font-weight:700;padding:11px 16px;border-radius:999px;text-decoration:none;font-size:15px;white-space:nowrap}
       .note-s{color:#777;font-size:14.5px;margin:12px 4px 0;line-height:1.5}
+      .claim-err{background:#fdecec;color:#a33;border-radius:12px;padding:13px 16px;margin:0 0 14px;font-size:15.5px;line-height:1.5}
+      .btn.pp-btn{background:#ffc439;color:#003087}.btn.pp-btn:hover{background:#f2b927}
+      .crumb{font-size:14px;color:#888;margin-bottom:18px}.crumb .back{margin:0;color:#888;font-weight:600;font-size:14px}.crumb b{color:#1a1a1a}
+      .done-hd{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}.done-hd h1{margin:0}
+      .oc{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start;margin-top:8px}
+      .oc .blk{padding:20px 22px;margin-bottom:16px}.oc .blk h4{font-size:15px;font-weight:800;margin:0 0 14px}
+      .oc .it{display:grid;grid-template-columns:64px 1fr auto;gap:14px;align-items:center;padding:8px 0}
+      .oc .it .img{width:64px;height:64px;border-radius:10px;background:#fff;overflow:hidden}.oc .it .img img{width:100%;height:100%;object-fit:contain}
+      .oc .it .pr{font-weight:800;font-size:17px;color:#2d6b45;white-space:nowrap}.oc .it .pr s{color:#999;font-weight:400;font-size:14px;margin-right:6px}
+      .oc .tot{display:flex;justify-content:space-between;font-size:16px;padding:8px 0;border-bottom:1px solid #f1ece7}.oc .tot:last-of-type{border-bottom:0;font-weight:800;font-size:18px}
+      .oc .addr{font-size:16px;line-height:1.55;color:#333}
       .center{min-height:60vh;display:flex;align-items:center;justify-content:center;color:#777;text-align:center;padding:20px}
       .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:15}.ov.on{display:block}
       @media(max-width:800px){
@@ -79,6 +90,7 @@ export default function PortalStyles() {
         .cg{grid-template-columns:1fr}.two{grid-template-columns:1fr}.help{flex-direction:column;align-items:flex-start}
         .rows .r{flex-direction:column;gap:3px}.rows .r b{text-align:left}
         .claim .sum{grid-template-columns:1fr}.claim .sum .img{height:190px}
+        .oc{grid-template-columns:1fr}
         .ol{grid-template-columns:72px 1fr}.ol .st{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center;flex-wrap:wrap}
       }
     `}</style>

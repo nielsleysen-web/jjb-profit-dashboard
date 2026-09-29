@@ -50,7 +50,7 @@ async function getShopifyToken(storeUrl) {
 // Volledige query (met klantgegevens — vereist read_customers scope)
 const QUERY_FULL = `
   query LatestOrders($first: Int!) {
-    orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+    orders(first: $first, sortKey: CREATED_AT, reverse: true, query: "-tag:membership-item") {
       nodes {
         id
         name
@@ -76,7 +76,7 @@ const QUERY_FULL = `
 // Fallback zonder klantgegevens (werkt met alleen read_orders + read_products)
 const QUERY_BASIC = `
   query LatestOrdersBasic($first: Int!) {
-    orders(first: $first, sortKey: CREATED_AT, reverse: true) {
+    orders(first: $first, sortKey: CREATED_AT, reverse: true, query: "-tag:membership-item") {
       nodes {
         id
         name

@@ -265,7 +265,7 @@ async function runScan(force) {
           }
         }
       }`,
-      { first: 100, query: `created_at:>='${since}'`, after }
+      { first: 100, query: `created_at:>='${since}' AND -tag:membership-item`, after }
     );
     const conn = d.orders;
 

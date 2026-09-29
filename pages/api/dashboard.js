@@ -258,7 +258,7 @@ async function fetchShopifyOrders(dateFrom, dateTo) {
   const token = await getShopifyToken(storeUrl);
 
   const endpoint = `https://${storeUrl}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`;
-  const searchQuery = `created_at:>='${dateFrom}T00:00:00+02:00' AND created_at:<='${dateTo}T23:59:59+02:00'`;
+  const searchQuery = `created_at:>='${dateFrom}T00:00:00+02:00' AND created_at:<='${dateTo}T23:59:59+02:00' AND -tag:membership-item`; // portaalbestellingen (break-even) niet meetellen
 
   const orders = [];
   let after = null;

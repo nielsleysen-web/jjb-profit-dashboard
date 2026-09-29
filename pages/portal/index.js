@@ -3,7 +3,7 @@
 // #claim/<product>). Gegevens komen van /api/portal/overview. Design: design/portal/03-portal-en.html.
 //
 // Stap 2: alles tonen (producten + wat deze cyclus al besteld is, abonnement, bestellingen, instellingen).
-// Stap 3: de bevestigknop echt laten bestellen (S&H afrekenen via Stripe/PayPal + Shopify-order).
+// Stap 3: bestellen — S&H afrekenen via Stripe (opgeslagen kaart, 3D Secure) of PayPal + Shopify-order (lib/portal-claim.js).
 
 import { useEffect, useState, useCallback } from "react";
 import Head from "next/head";
@@ -52,14 +52,15 @@ export default function Portal() {
   const logout = async () => { await post("/api/portal/auth/logout"); go("/login"); };
 
   const [tab, arg] = route.split("/");
-  const activeTab = tab === "claim" ? "free" : tab;
+  const activeTab = tab === "claim" || tab === "done" ? "free" : tab;
   const m = data?.member;
 
   let content;
   if (error) content = <div className="center">{t("loadError")}</div>;
   else if (!data) content = <div className="center">{t("loading")}</div>;
   else if (data.ended) content = <Ended t={t} />;
-  else if (tab === "claim") content = <Claim t={t} lang={lang} data={data} slug={arg} nav={nav} />;
+  else if (tab === "claim") content = <Claim t={t} lang={lang} data={data} slug={arg} nav={nav} reload={load} />;
+  else if (tab === "done") content = <Done t={t} lang={lang} data={data} name={decodeURIComponent(arg || "")} nav={nav} />;
   else if (tab === "library") content = <Library t={t} lang={lang} data={data} />;
   else if (tab === "courses") content = <Courses t={t} lang={lang} data={data} />;
   else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} />;
@@ -67,7 +68,7 @@ export default function Portal() {
   else if (tab === "settings") content = <Settings t={t} data={data} reload={load} />;
   else content = <FreeItems t={t} lang={lang} data={data} nav={nav} />;
 
-  const showHelp = data && !data.ended && !["settings", "claim"].includes(tab);
+  const showHelp = data && !data.ended && !["settings", "claim", "done"].includes(tab);
 
   return (
     <>
@@ -131,12 +132,44 @@ function FreeItems({ t, lang, data, nav }) {
   );
 }
 
-// ---- Bevestigen (stap 3 maakt de knop actief) --------------------------------
-function Claim({ t, lang, data, slug, nav }) {
+// ---- Bevestigen en bestellen ---------------------------------------------------
+const CLAIM_ERR = { already_ordered: "errAlreadyOrdered", card_declined: "errCard", payment_failed: "errPayFailed", no_payment_method: "errNoPm",
+  no_address: "errNoAddress", busy: "errBusy", order_failed: "errOrderFailed", ended: "errEnded" };
+export const saveLastOrder = (r) => { try { sessionStorage.setItem("jj_last_order", JSON.stringify(r)); } catch {} };
+
+function Claim({ t, lang, data, slug, nav, reload }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
   const p = data.freeItems.find((x) => x.slug === slug);
-  if (!p || p.ordered) { if (typeof window !== "undefined") setTimeout(() => nav("free"), 0); return null; }
+  if (!p || p.ordered) { if (typeof window !== "undefined" && !busy) setTimeout(() => nav("free"), 0); return null; }
   const m = data.member, a = m.address || {};
   const pm = data.membership.paymentMethod;
+  const isPaypal = data.membership.provider === "paypal";
+  const errText = (code) => t(CLAIM_ERR[code] || "errPayFailed", { email: SUPPORT_EMAIL });
+
+  function done(result) { saveLastOrder(result); reload(); nav(`done/${encodeURIComponent(result.orderName)}`); }
+
+  async function confirm() {
+    setErr(""); setBusy(true);
+    try {
+      const r = await post("/api/portal/claim", { slug });
+      if (r.status === 401) return go("/login");
+      if (!r.ok) { setErr(errText(r.error)); setBusy(false); if (r.error === "already_ordered") reload(); return; }
+      if (r.action === "done") return done(r.result);
+      if (r.action === "redirect") { window.location.assign(r.url); return; }
+      if (r.action === "confirm") {
+        const { loadStripe } = await import("@stripe/stripe-js");
+        const stripe = await loadStripe(r.pk);
+        const res = await stripe.handleNextAction({ clientSecret: r.clientSecret });
+        if (res.error) { setErr(errText("card_declined")); setBusy(false); return; }
+        const c = await post("/api/portal/claim-complete", { paymentIntentId: r.paymentIntentId });
+        if (!c.ok) { setErr(errText(c.error)); setBusy(false); return; }
+        return done(c.result);
+      }
+      setErr(errText("payment_failed")); setBusy(false);
+    } catch { setErr(errText("payment_failed")); setBusy(false); }
+  }
+
   return (
     <>
       <button type="button" className="back" onClick={() => nav("free")}>{t("backToFree")}</button>
@@ -157,9 +190,52 @@ function Claim({ t, lang, data, slug, nav }) {
           <div className="tot"><span>{t("totalToday")}</span><span>{fmtMoney(lang, p.shipping)}</span></div>
         </div>
         <div className="card blk"><h4>{t("payment")}</h4><PayMethod t={t} pm={pm} provider={data.membership.provider} /></div>
-        <button type="button" className="btn big" disabled>{t("confirmBtn")}</button>
-        <p className="fine">{t("claimSoon")}</p>
+        {err && <div className="claim-err">{err}</div>}
+        {isPaypal
+          ? <button type="button" className="btn big pp-btn" onClick={confirm} disabled={busy}>{busy ? t("processing") : t("confirmPaypal")}</button>
+          : <button type="button" className="btn big" onClick={confirm} disabled={busy}>{busy ? t("processing") : t("confirmBtn")}</button>}
+        <p className="fine">{isPaypal ? t("paypalNote", { amount: fmtMoney(lang, p.shipping) }) : t("chargeNote", { amount: fmtMoney(lang, p.shipping) })}</p>
       </div>
+    </>
+  );
+}
+
+// ---- Bevestiging na bestellen --------------------------------------------------
+function Done({ t, lang, data, name, nav }) {
+  let r = null;
+  try { r = JSON.parse(sessionStorage.getItem("jj_last_order") || "null"); } catch {}
+  if (!r || r.orderName !== name) {
+    // Pagina opnieuw geladen zonder gegevens → naar "I miei ordini"
+    if (typeof window !== "undefined") setTimeout(() => nav("orders"), 0);
+    return null;
+  }
+  const p = data.freeItems.find((x) => x.slug === r.slug) || {};
+  const title = ptitle(lang, p);
+  const ad = r.address || {};
+  const addrLine = [ad.address1, [ad.zip, ad.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return (
+    <>
+      <div className="crumb"><button type="button" className="back" onClick={() => nav("free")}>{t("doneCrumb")}</button> › <b>{t("doneOrder")}</b></div>
+      <div className="done-hd"><h1>{t("doneTitle", { name: r.orderName })}</h1><span className="pill ok">{t("doneBadge")}</span></div>
+      <p className="sub" style={{ marginTop: 8 }}>{t("doneSub", { product: title, address: addrLine })}</p>
+      {r.availableAgain && <p className="note-s" style={{ margin: "0 0 18px" }}>{t("doneAgain", { date: fmtDate(lang, r.availableAgain, { day: "numeric", month: "long" }) })}</p>}
+      <div className="oc">
+        <div className="card blk"><h4>{t("doneItems")}</h4>
+          <div className="it"><div className="img"><img src={p.image} alt="" /></div><div><b>{title}</b><div style={{ color: "#888", fontSize: 14 }}>{t("qty1")}</div></div><div className="pr"><s>{fmtMoney(lang, p.compareAt)}</s> {fmtMoney(lang, 0)}</div></div>
+        </div>
+        <div>
+          <div className="card blk"><h4>{t("orderSummary")}</h4>
+            <div className="tot"><span>{t("shLine")}</span><span>{fmtMoney(lang, r.amount)}</span></div>
+            <div className="tot"><span>{t("totalLabel")}</span><span>{fmtMoney(lang, r.amount)}</span></div>
+            <div style={{ color: "#777", fontSize: 14.5, marginTop: 10 }}>{t("paidWith", { method: pmText(t, r.paymentMethod, r.provider), date: fmtDate(lang, r.createdAt, { day: "numeric", month: "short", year: "numeric" }) })}</div>
+          </div>
+          <div className="card blk"><h4>{t("doneShipping")}</h4>
+            <div className="addr">{ad.name}<br />{ad.address1}<br />{[ad.zip, ad.city].filter(Boolean).join(" ")}{ad.province ? ` (${ad.province})` : ""}<br />{t("italy")}</div>
+            <div style={{ color: "#777", fontSize: 14.5, marginTop: 10 }}>{t("trackInfo")}</div>
+          </div>
+        </div>
+      </div>
+      <p style={{ marginTop: 6 }}><button type="button" className="back" onClick={() => nav("free")}>{t("backToFree")}</button></p>
     </>
   );
 }
