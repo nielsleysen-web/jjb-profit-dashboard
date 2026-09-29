@@ -7,6 +7,8 @@
 //                                              of om handmatig door te sturen; &reset=1 → nieuw wachtwoord kiezen
 //   GET /api/portal/backfill?test=<email>    → testlid aanmaken (of bijwerken) met dat e-mailadres + welkomstlink;
 //                                              optioneel &name=Voornaam. Gemarkeerd met test:true.
+//   GET /api/portal/backfill?event=<email>   → voorbeeld-event "Portal Order Confirmed" naar Klaviyo (geen echte order),
+//                                              om de flow te bouwen en de bevestigingsmail te testen
 //
 // Geannuleerde/terugbetaalde orders (testorders) worden overgeslagen.
 
@@ -67,6 +69,28 @@ export default async function handler(req, res) {
       });
       const url = await createLoginLink(email, { purpose: "welcome", ttlSec: 30 * 86400 });
       return res.status(200).json({ success: true, test: true, email, loginUrl: url, validDays: 30 });
+    }
+
+    if (req.query.event) {
+      // Voorbeeld-event "Portal Order Confirmed" naar Klaviyo, zonder echte bestelling: zo bestaat de metric
+      // al om de flow op te bouwen, en na livegang kan je er de bevestigingsmail mee testen.
+      const { trackEvent, klaviyoConfigured } = await import("../../../lib/klaviyo");
+      const { PORTAL_URL } = await import("../../../lib/portal-auth");
+      const { PORTAL_PRODUCTS } = await import("../../../lib/portal-products");
+      if (!klaviyoConfigured()) return res.status(400).json({ success: false, error: "KLAVIYO_API_KEY ontbreekt" });
+      const email = normEmail(req.query.event);
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ success: false, error: "Ongeldig e-mailadres" });
+      const p = PORTAL_PRODUCTS[0];
+      const orderName = `#TEST-${Date.now().toString().slice(-5)}`;
+      const again = new Date(Date.now() + 28 * 86400000).toLocaleDateString("it-IT", { day: "numeric", month: "long" });
+      await trackEvent("Portal Order Confirmed", email, {
+        order_name: orderName, product_title: p.it?.title || p.title, product_image: `${PORTAL_URL}${p.image}`,
+        compare_at: (p.compareAt / 100).toFixed(2).replace(".", ","), shipping: (p.shipping / 100).toFixed(2).replace(".", ","),
+        total: (p.shipping / 100).toFixed(2).replace(".", ","),
+        ship_name: "Maria Rossi", ship_address1: "Via Roma 12", ship_city: "20121 Milano (MI)",
+        available_again: again, orders_url: `${PORTAL_URL}/#orders`, first_name: String(req.query.name || "Maria"), test: true,
+      }, { value: p.shipping / 100, uniqueId: `portal-test-${orderName}` });
+      return res.status(200).json({ success: true, event: "Portal Order Confirmed", email, orderName, note: "Voorbeeld-event verstuurd (geen echte bestelling)" });
     }
 
     if (req.query.link) {
