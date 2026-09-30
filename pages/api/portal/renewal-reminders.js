@@ -62,7 +62,7 @@ async function nextCharge(m) {
   return { renews, at, status, provider: sub.provider || m.provider, live: sub.live };
 }
 
-async function sendReminder(m, at, provider) {
+async function sendReminder(m, at, provider, { test = false } = {}) {
   const loginUrl = await createLoginLink(m.email, { purpose: "login", ttlSec: 7 * 86400 });
   const iso = new Date(at).toISOString().slice(0, 10);
   await trackEvent(EVENT, m.email, {
@@ -72,7 +72,7 @@ async function sendReminder(m, at, provider) {
     amount: eur(PRICE),
     login_url: loginUrl,
     provider: provider || "",
-  }, { uniqueId: `renewrem-${normEmail(m.email)}-${iso}` });
+  }, { uniqueId: `renewrem-${normEmail(m.email)}-${iso}${test ? `-test-${Date.now()}` : ""}` });
   return iso;
 }
 
@@ -89,7 +89,7 @@ export default async function handler(req, res) {
       if (!m) return res.status(404).json({ success: false, error: `Geen lid met e-mail ${normEmail(req.query.test)}` });
       const n = await nextCharge(m).catch(() => ({ at: null }));
       const at = n.at && n.at > Date.now() ? n.at : Date.now() + 3 * 86400000;
-      const iso = await sendReminder(m, at, n.provider);
+      const iso = await sendReminder(m, at, n.provider, { test: true });
       return res.status(200).json({ success: true, test: true, email: m.email, renewalDate: iso, note: "Testherinnering verstuurd" });
     }
 
