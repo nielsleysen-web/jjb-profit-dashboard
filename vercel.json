@@ -18,5 +18,11 @@
     "pages/api/attribution.js": {
       "maxDuration": 120
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/portal/renewal-reminders",
+      "schedule": "0 7 * * *"
+    }
+  ]
 }
