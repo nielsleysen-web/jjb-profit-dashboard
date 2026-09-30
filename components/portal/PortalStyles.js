@@ -1,4 +1,22 @@
 // components/portal/PortalStyles.js — opmaak van het ingelogde portaal (design/portal/03-portal-en.html)
+// Cadeau-banner (ook gebruikt op de welkomstpagina, zonder de rest van de portaal-opmaak)
+export const GIFT_CSS = `
+      .gift{position:relative;display:grid;grid-template-columns:84px 1fr;gap:18px;align-items:center;background:linear-gradient(135deg,#fffdfb,#fdf3ec);border:1px solid #f1d9c9;border-radius:16px;padding:18px 20px 18px 24px;margin:0 0 22px;box-shadow:0 8px 28px rgba(223,132,85,.12);overflow:hidden}
+      .gift:before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(#f2b58f,#df8455)}
+      .gift img{width:84px;height:112px;object-fit:cover;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.16)}
+      .gift .gk{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#c96f43;background:#fff;border:1px solid #f1d9c9;border-radius:999px;padding:4px 10px;margin-bottom:8px}
+      .gift b{display:block;font-size:16.5px;line-height:1.4;font-weight:700}
+      .gift .gt{display:flex;align-items:center;gap:12px;margin:10px 0 12px;flex-wrap:wrap}
+      .gift .clock{display:inline-flex;align-items:center;gap:8px;font-size:26px;font-weight:800;letter-spacing:1.5px;color:#1a1a1a;background:#fff;border:1px solid #f1d9c9;border-radius:12px;padding:6px 14px;font-variant-numeric:tabular-nums}
+      .gift .clock:before{content:"⏱";font-size:18px}
+      .gift .gl{font-size:13.5px;color:#777;margin:6px 0 12px}
+      .gift .btn{padding:13px 22px;font-size:16px}
+      .gift.ok{background:#eef6f0;border-color:#cfe3d5}.gift.ok:before{background:#87b995}.gift.exp{background:#fafafa;border-color:#e5e5e5}.gift.exp:before{background:#ddd}.gift.ok b,.gift.exp b{font-size:15.5px;color:#333;font-weight:600}
+      .btn{display:inline-block;background:#df8455;color:#fff;border:none;border-radius:12px;font:inherit;font-size:17px;font-weight:800;padding:15px 24px;cursor:pointer;text-decoration:none;white-space:nowrap;text-align:center}.btn[disabled]{opacity:.55;cursor:default}
+      .claim-err{background:#fdecec;color:#a33;border-radius:12px;padding:13px 16px;margin:0 0 14px;font-size:15.5px;line-height:1.5}
+`;
+export const GIFT_CSS_MOBILE = `.gift{grid-template-columns:64px 1fr;gap:14px;padding:14px 14px 14px 18px}.gift img{width:64px;height:86px}.gift .clock{font-size:22px}.gift b{font-size:15px}.gift .btn{width:100%}`;
+
 export default function PortalStyles() {
   return (
     <style jsx global>{`
@@ -83,7 +101,17 @@ export default function PortalStyles() {
       .oc .addr{font-size:16px;line-height:1.55;color:#333}
       .center{min-height:60vh;display:flex;align-items:center;justify-content:center;color:#777;text-align:center;padding:20px}
       .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:15}.ov.on{display:block}
+      ${GIFT_CSS}
+      .bg{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+      .bk{overflow:hidden;display:flex;flex-direction:column}
+      .bk .bcov{position:relative;background:#f3ede8;display:flex;justify-content:center;padding:18px 18px 0}.bk .bcov img{width:150px;height:200px;object-fit:cover;border-radius:8px 8px 0 0;box-shadow:0 -4px 16px rgba(0,0,0,.12)}
+      .bk .bdg{position:absolute;top:12px;left:12px;font-size:12.5px;font-weight:800;border-radius:999px;padding:5px 11px;background:#e6f2ea;color:#2d6b45;white-space:nowrap}.bk .bdg.gift{background:#fdeee4;color:#c96f43}
+      .bk .bbd{padding:18px 20px 20px;display:flex;flex-direction:column;flex:1}.bk h3{font-size:19px;margin:0 0 8px;line-height:1.3}.bk p{margin:0 0 10px;color:#555;font-size:15px;line-height:1.5;flex:1}
+      .bk .bm{font-size:13.5px;color:#888;margin-bottom:12px}.bk.locked .bcov img{opacity:.6;filter:grayscale(.4)}
+      .btn.sec{background:#fff;color:#df8455;border:2px solid #df8455}.btn.sec:hover{background:#fdf3ec}
       @media(max-width:800px){
+        ${GIFT_CSS_MOBILE}
+        .bg{grid-template-columns:1fr}
         .side{position:fixed;left:-270px;top:0;bottom:0;z-index:20;transition:left .2s;box-shadow:0 0 30px rgba(0,0,0,.15)}.side.open{left:0}
         .mtop{display:flex}.wrap{padding:22px 16px 50px}h1{font-size:25px}.sub{font-size:17px}
         .p{grid-template-columns:1fr;gap:12px}.p .img{height:220px}.btn{width:100%}

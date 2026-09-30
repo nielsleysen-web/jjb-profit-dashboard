@@ -10,6 +10,7 @@ import Head from "next/head";
 import PortalStyles from "../../components/portal/PortalStyles";
 import { LOGO, SUPPORT_EMAIL, post, go, onEnter } from "../../components/portal/AuthShell";
 import { useT, fmtDate, fmtMoney } from "../../lib/portal-i18n";
+import Library, { GiftBanner } from "../../components/portal/Library";
 
 const TABS = [
   { id: "free", icon: "🎁", label: "navFree" },
@@ -61,12 +62,12 @@ export default function Portal() {
   else if (data.ended) content = <Ended t={t} />;
   else if (tab === "claim") content = <Claim t={t} lang={lang} data={data} slug={arg} nav={nav} reload={load} />;
   else if (tab === "done") content = <Done t={t} lang={lang} data={data} name={decodeURIComponent(arg || "")} nav={nav} />;
-  else if (tab === "library") content = <Library t={t} lang={lang} data={data} />;
+  else if (tab === "library") content = <Library t={t} lang={lang} data={data} reload={load} />;
   else if (tab === "courses") content = <Courses t={t} lang={lang} data={data} />;
   else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} />;
   else if (tab === "orders") content = <Orders t={t} lang={lang} data={data} />;
   else if (tab === "settings") content = <Settings t={t} data={data} reload={load} />;
-  else content = <FreeItems t={t} lang={lang} data={data} nav={nav} />;
+  else content = <FreeItems t={t} lang={lang} data={data} nav={nav} reload={load} />;
 
   const showHelp = data && !data.ended && !["settings", "claim", "done"].includes(tab);
 
@@ -107,12 +108,13 @@ export default function Portal() {
 }
 
 // ---- Prodotti gratuiti ------------------------------------------------------
-function FreeItems({ t, lang, data, nav }) {
+function FreeItems({ t, lang, data, nav, reload }) {
   const name = data.member.firstName;
   return (
     <>
       <h1>{name ? t("homeTitle", { name }) : t("homeTitleNoName")}</h1>
       <p className="sub">{t("homeSub")}</p>
+      <GiftBanner t={t} lang={lang} data={data} reload={reload} />
       {data.freeItems.map((p) => (
         <div key={p.slug} className={`card p${p.ordered ? " ordered" : ""}`}>
           <div className="img"><img src={p.image} alt={ptitle(lang, p)} loading="lazy" /></div>
@@ -247,18 +249,6 @@ function PayMethod({ t, pm, provider }) {
 }
 const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 const pmText = (t, pm, provider) => (pm?.type === "card" ? `${cap(pm.brand)} •••• ${pm.last4}` : pm?.type === "paypal" || provider === "paypal" ? "PayPal" : t("unknown"));
-
-// ---- Library -----------------------------------------------------------------
-function Library({ t, lang, data }) {
-  const books = data.library.books;
-  return (
-    <>
-      <h1>{t("libTitle")}</h1>
-      <p className="sub">{t("libSub")}</p>
-      {books.length === 0 && <div className="card empty">📚<br />{t("libEmpty")}</div>}
-    </>
-  );
-}
 
 // ---- Corsi ---------------------------------------------------------------------
 function Courses({ t, lang, data }) {

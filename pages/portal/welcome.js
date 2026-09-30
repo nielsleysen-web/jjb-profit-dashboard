@@ -1,4 +1,4 @@
-// pages/portal/welcome.js — Eerste bezoek via de inloglink: wachtwoord kiezen of overslaan.
+// pages/portal/welcome.js — Eerste bezoek via de inloglink: wachtwoord kiezen of overslaan. (Het welkomstcadeau staat in het portaal zelf.)
 import { useEffect, useState } from "react";
 import AuthShell, { go } from "../../components/portal/AuthShell";
 import PasswordForm from "../../components/portal/PasswordForm";
@@ -16,9 +16,11 @@ export default function Welcome() {
   }, []);
 
   return (
-    <AuthShell title={t("choosePw")} heading={name ? t("welcomeTitle", { name }) : t("welcomeTitleNoName")} sub={t("welcomeSub")} footer={t("footer")}>
-      <PasswordForm t={t} labels={{ first: t("choosePw"), second: t("repeatPw"), button: t("savePwContinue") }}
-        onDone={() => go("/")} skip={{ label: t("skipPw"), onClick: () => go("/") }} />
-    </AuthShell>
+    <>
+      <AuthShell title={t("choosePw")} heading={name ? t("welcomeTitle", { name }) : t("welcomeTitleNoName")} sub={t("welcomeSub")} footer={t("footer")}>
+        <PasswordForm t={t} labels={{ first: t("choosePw"), second: t("repeatPw"), button: t("savePwContinue") }}
+          onDone={() => go("/")} skip={{ label: t("skipPw"), onClick: () => go("/") }} />
+      </AuthShell>
+    </>
   );
 }
