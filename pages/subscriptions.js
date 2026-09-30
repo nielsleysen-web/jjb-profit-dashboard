@@ -143,12 +143,12 @@ export default function Subscriptions() {
             <Tile label="Netto winst (incl. rebills)" value={eur(k.netProfit)} sub={`omzet ${eur(k.revenue)} − COGS − fees − ad spend ${eur(k.spend)}${k.spendConfigured ? "" : " (Meta niet gekoppeld)"}`} accent={k.netProfit >= 0 ? "#22c55e" : "#ef4444"} />
             <Tile label="Winstpercentage" value={pct(k.profitPct)} sub="(front-end + rebills − COGS − fees − ad spend) / omzet" accent={k.profitPct == null ? undefined : k.profitPct >= 0 ? "#22c55e" : "#ef4444"} />
             <Tile label={`Orders ${periodLabel.toLowerCase()} (incl. rebills)`} value={k.orders.count} sub={`${eur(k.orders.amount)} · ${k.orders.frontEnd} front-end + ${k.orders.rebills} rebills (Stripe + PayPal)`} />
-            <Tile label="Rebill-omzet totaal" value={eur(k.rebillRevenue.total)} sub={`${k.rebillRevenue.totalCount} afschrijvingen sinds start · ${eur(k.rebillRevenue.period)} ${periodLabel.toLowerCase()}`} />
+            <Tile label={`Rebill-omzet ${periodLabel.toLowerCase()}`} value={eur(k.rebillRevenue.period)} sub={`${k.rebillRevenue.count} afschrijvingen ${periodLabel.toLowerCase()} · sinds start ${eur(k.rebillRevenue.total)} (${k.rebillRevenue.totalCount})`} accent="#86efac" />
             <Tile label="Subscription ROAS" value={num(k.roas)} sub={`(front-end ${eur(k.orders.amount - k.rebillRevenue.period)} + rebills ${eur(k.rebillRevenue.period)}) / ad spend ${eur(k.spend)}`} accent="#4f6df5" />
           </Grid>
           <Section>{periodLabel} · rendement</Section>
           <Grid>
-            <Tile label="Dag 7 LTV" value={eur(k.ltv7)} sub={`omzet per nieuwe abonnee binnen 7 dagen · ${k.newMembers} geworven ${periodLabel.toLowerCase()} · ${k.ltv7Projected ? `rebill dag 7 = projectie op retentie ${pct(k.retention1, 0)}` : "gerealiseerd"}`} />
+            <Tile label="Dag 7 LTV" value={eur(k.day7.value)} sub={`${k.day7.count} nieuwe abonnees ${periodLabel.toLowerCase()} × ${eur(k.day7.price)} (rebill dag 7)`} accent="#86efac" />
             <Tile label="Churn" value={pct(k.churn)} sub={`${k.canceledTotal} opgezegd / ${k.started} gestart · Stripe + PayPal`} accent="#ef4444" />
             <Tile label="Mislukte rebills" value={`${k.failed.count} · ${pct(k.failed.rate, 0)}`} sub={`${eur(k.failed.amount)} · van ${k.failed.attempts} pogingen ${periodLabel.toLowerCase()}`} accent={k.failed.count ? "#ef4444" : undefined} />
             <Tile label="Opzeggingen" value={k.cancellations.period} sub={`${periodLabel.toLowerCase()} · ${k.cancellations.total} sinds start${k.cancellations.pending ? ` · ${k.cancellations.pending} stoppen na deze cyclus` : ""}`} />

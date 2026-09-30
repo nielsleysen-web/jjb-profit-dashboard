@@ -356,6 +356,7 @@ export default async function handler(req, res) {
       roas: roas == null ? null : r2(roas), roasRebill7: r2(rebill7.sum), roasRebill7Projected: rebill7.projected,
       revenue: r2(revenue), profitPct: profitPct == null ? null : r2(profitPct),
       ltv7: ltv7.value == null ? null : r2(ltv7.value), ltv7Projected: ltv7.projected,
+      day7: { value: r2(newMembers.length * PRICE), count: newMembers.length, price: PRICE }, // Dag 7 LTV: nieuwe abonnees in de periode × prijs per cyclus
       ltv28: ltv28.value == null ? null : r2(ltv28.value), ltv28Projected: ltv28.projected,
       profit7: ltv7.value == null || costPerCustomer == null ? null : r2(ltv7.value - costPerCustomer),
       profit28: ltv28.value == null || costPerCustomer == null ? null : r2(ltv28.value - costPerCustomer),
