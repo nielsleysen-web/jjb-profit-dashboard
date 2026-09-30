@@ -295,7 +295,10 @@ export default async function handler(req, res) {
       }
       return { sum, projected };
     })();
-    const roas = spend > 0 ? (feRevenue + rebill7.sum) / spend : null;
+    // ROAS: echte omzet van de periode (front-end + rebills) / ad spend van de periode — geen projectie
+    const roas = spend > 0 ? (feRevenue + rebillRevenue) / spend : null;
+    const revenue = feRevenue + rebillRevenue;
+    const profitPct = revenue > 0 ? netProfit / revenue : null;
 
     /* ---- stand van nu ---- */
     const count = (x) => members.filter((m) => m.status === x).length;
@@ -350,7 +353,8 @@ export default async function handler(req, res) {
       fees: r2(feFees + rebillFees),
       spend: r2(spend), spendConfigured: meta.configured, campaigns: meta.campaigns,
       cac: cac == null ? null : r2(cac), newMembers: newMembers.length,
-      roas: roas == null ? null : r2(roas), roasProjected: rebill7.projected, roasRebill7: r2(rebill7.sum),
+      roas: roas == null ? null : r2(roas), roasRebill7: r2(rebill7.sum), roasRebill7Projected: rebill7.projected,
+      revenue: r2(revenue), profitPct: profitPct == null ? null : r2(profitPct),
       ltv7: ltv7.value == null ? null : r2(ltv7.value), ltv7Projected: ltv7.projected,
       ltv28: ltv28.value == null ? null : r2(ltv28.value), ltv28Projected: ltv28.projected,
       profit7: ltv7.value == null || costPerCustomer == null ? null : r2(ltv7.value - costPerCustomer),
@@ -360,7 +364,8 @@ export default async function handler(req, res) {
       failed: { count: pFailed.length, amount: r2(pFailed.reduce((a, f) => a + f.amount, 0)), attempts, rate: attempts ? r2(pFailed.length / attempts) : null },
       cancellations: { period: pCancel.length, total: canceled, pending: members.filter((m) => m.cancelAtPeriodEnd && m.status !== "canceled").length },
       activeSubscribers: trial + active, trial, active, problem,
-      mrr: r2(active * PRICE * (30 / MEMBERSHIP.intervalDays)), recurring28d: r2(active * PRICE),
+      // MRR: alle actieve abonnees, proefleden meegerekend (zij rebillen na de proef)
+      mrr: r2((trial + active) * PRICE * (30 / MEMBERSHIP.intervalDays)), recurring28d: r2((trial + active) * PRICE),
     };
 
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");

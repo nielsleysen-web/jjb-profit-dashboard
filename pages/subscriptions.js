@@ -104,7 +104,6 @@ export default function Subscriptions() {
   const [range, setRange] = useState("today");
   const [data, setData] = useState(null);
   const [err, setErr] = useState("");
-  const [cogsMode, setCogsMode] = useState("fe");
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
 
@@ -141,25 +140,23 @@ export default function Subscriptions() {
         <>
           <Section>{periodLabel} · geld</Section>
           <Grid>
-            <Tile label="Netto winst (incl. rebills)" value={eur(k.netProfit)} sub={`omzet − COGS − fees − ad spend${k.spendConfigured ? "" : " (Meta niet gekoppeld)"}`} accent={k.netProfit >= 0 ? "#22c55e" : "#ef4444"} />
-            <Tile label={`Orders ${periodLabel.toLowerCase()} (incl. rebills)`} value={k.orders.count} sub={`${eur(k.orders.amount)} · ${k.orders.frontEnd} front-end + ${k.orders.rebills} rebills`} />
-            <Tile label="Rebill-omzet totaal" value={eur(k.rebillRevenue.total)} sub={`${k.rebillRevenue.totalCount} afschrijvingen sinds start · ${eur(k.rebillRevenue.period)} in deze periode`} />
-            <Tile label={cogsMode === "fe" ? "COGS front-end" : "COGS front-end + rebills"} value={eur(cogsMode === "fe" ? k.cogs.frontEnd : k.cogs.frontEnd + k.cogs.rebills)} sub={cogsMode === "fe" ? `klik: + rebills ${periodLabel.toLowerCase()} → ${eur(k.cogs.frontEnd + k.cogs.rebills)}` : `${eur(k.cogs.frontEnd)} front-end + ${eur(k.cogs.rebills)} rebills (${k.orders.rebills} × ${eur(k.cogs.rebillCogsEach)})`} hint="↻ toggle" onClick={() => setCogsMode(cogsMode === "fe" ? "all" : "fe")} />
-            <Tile label="CAC" value={eur(k.cac)} sub={`ad spend ${eur(k.spend)} / ${k.newMembers} nieuwe abonnees`} />
+            <Tile label="Netto winst (incl. rebills)" value={eur(k.netProfit)} sub={`omzet ${eur(k.revenue)} − COGS − fees − ad spend ${eur(k.spend)}${k.spendConfigured ? "" : " (Meta niet gekoppeld)"}`} accent={k.netProfit >= 0 ? "#22c55e" : "#ef4444"} />
+            <Tile label="Winstpercentage" value={pct(k.profitPct)} sub="(front-end + rebills − COGS − fees − ad spend) / omzet" accent={k.profitPct == null ? undefined : k.profitPct >= 0 ? "#22c55e" : "#ef4444"} />
+            <Tile label={`Orders ${periodLabel.toLowerCase()} (incl. rebills)`} value={k.orders.count} sub={`${eur(k.orders.amount)} · ${k.orders.frontEnd} front-end + ${k.orders.rebills} rebills (Stripe + PayPal)`} />
+            <Tile label="Rebill-omzet totaal" value={eur(k.rebillRevenue.total)} sub={`${k.rebillRevenue.totalCount} afschrijvingen sinds start · ${eur(k.rebillRevenue.period)} ${periodLabel.toLowerCase()}`} />
+            <Tile label="Subscription ROAS" value={num(k.roas)} sub={`(front-end ${eur(k.orders.amount - k.rebillRevenue.period)} + rebills ${eur(k.rebillRevenue.period)}) / ad spend ${eur(k.spend)}`} accent="#4f6df5" />
           </Grid>
           <Section>{periodLabel} · rendement</Section>
           <Grid>
-            <Tile label="Subscription ROAS" value={num(k.roas)} sub={`(front-end + rebills binnen 7 d${k.roasProjected ? ", deels projectie" : ""}) / ad spend`} accent="#4f6df5" />
-            <Tile label="Dag 7 LTV" value={eur(k.ltv7)} sub={`winst/klant ${eur(k.profit7)} · ${k.ltv7Projected ? "projectie op retentie cyclus 1" : "gerealiseerd"}`} />
-            <Tile label="Dag 28 LTV" value={eur(k.ltv28)} sub={`winst/klant ${eur(k.profit28)} · ${k.ltv28Projected ? "projectie op retentie cyclus 1" : "gerealiseerd"}`} />
+            <Tile label="Dag 7 LTV" value={eur(k.ltv7)} sub={`omzet per nieuwe abonnee binnen 7 dagen · ${k.newMembers} geworven ${periodLabel.toLowerCase()} · ${k.ltv7Projected ? `rebill dag 7 = projectie op retentie ${pct(k.retention1, 0)}` : "gerealiseerd"}`} />
             <Tile label="Churn" value={pct(k.churn)} sub={`${k.canceledTotal} opgezegd / ${k.started} gestart · Stripe + PayPal`} accent="#ef4444" />
-            <Tile label="Mislukte rebills" value={k.failed.count} sub={`${pct(k.failed.rate)} van ${k.failed.attempts} pogingen · ${eur(k.failed.amount)}`} accent={k.failed.count ? "#ef4444" : undefined} />
+            <Tile label="Mislukte rebills" value={`${k.failed.count} · ${pct(k.failed.rate, 0)}`} sub={`${eur(k.failed.amount)} · van ${k.failed.attempts} pogingen ${periodLabel.toLowerCase()}`} accent={k.failed.count ? "#ef4444" : undefined} />
+            <Tile label="Opzeggingen" value={k.cancellations.period} sub={`${periodLabel.toLowerCase()} · ${k.cancellations.total} sinds start${k.cancellations.pending ? ` · ${k.cancellations.pending} stoppen na deze cyclus` : ""}`} />
           </Grid>
           <Section>Stand van nu</Section>
           <Grid cols={3} mb={20}>
-            <Tile label="Actieve abonnees" value={k.activeSubscribers} sub={`${k.active} betalend · ${k.trial} in proef${k.problem ? ` · ${k.problem} met betaalprobleem` : ""}`} accent="#4f6df5" />
-            <Tile label="Actieve MRR" value={eur(k.mrr)} sub={`${k.active} × ${eur(data.price)} per 28 d (${eur(k.recurring28d)}) · genormaliseerd naar 30 dagen`} />
-            <Tile label="Opzeggingen" value={k.cancellations.period} sub={`${periodLabel.toLowerCase()} · ${k.cancellations.total} sinds start${k.cancellations.pending ? ` · ${k.cancellations.pending} stoppen na deze cyclus` : ""}`} />
+            <Tile label="Actieve abonnees" value={k.activeSubscribers} sub={`${k.active} betalend + ${k.trial} in proef${k.problem ? ` · ${k.problem} met betaalprobleem` : ""}`} accent="#4f6df5" />
+            <Tile label="Actieve MRR" value={eur(k.mrr)} sub={`${k.activeSubscribers} × ${eur(data.price)} per 28 d (${eur(k.recurring28d)}) · genormaliseerd naar 30 dagen · proef meegerekend`} />
           </Grid>
 
           <Cycles cycles={data.cycles} />
