@@ -12,10 +12,12 @@
 import Stripe from "stripe";
 import axios from "axios";
 import { BUNDLES, SHIPPING, PRODUCT_TITLE, MEMBERSHIP } from "../../../lib/checkout";
-import { syncNewMember, syncRenewal, syncCancel } from "../../../lib/klaviyo";
+import { syncNewMember, syncRenewal, syncCancel, trackEvent } from "../../../lib/klaviyo";
+import { PORTAL_URL } from "../../../lib/portal-auth";
 import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
 import { registerMember, markRenewed, markCancelled } from "../../../lib/portal-members";
 import { addUpsellToOrder } from "../../../lib/upsell";
+import { holdStartedMembership, releaseStartedMembership } from "../../../lib/upsell-gate";
 
 export const config = { api: { bodyParser: false } }; // ruwe body nodig voor de handtekening
 
@@ -155,6 +157,13 @@ export default async function handler(req, res) {
       const inv = await stripe.invoices.retrieve(event.data.object.id);
       // Alleen de eerste factuur van een abonnement bevat de front-end bundel → Shopify-order
       if (inv.billing_reason === "subscription_create" && inv.amount_paid > 0) {
+        // Heractivering vanuit het portaal (alleen membership) → geen Shopify-order, alleen Klaviyo-renewal
+        const subIdEarly = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
+        const subEarly = subIdEarly ? await stripe.subscriptions.retrieve(subIdEarly).catch(() => null) : null;
+        if (subEarly?.metadata?.kind === "reactivation") {
+          await markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: subEarly.current_period_end * 1000, amountPaid: (inv.amount_paid || 0) / 100 });
+          return res.status(200).json({ received: true, reactivation: true });
+        }
         const already = await orderExistsForInvoice(inv.id);
         if (already) return res.status(200).json({ received: true, order: already.name, dedupe: true });
 
@@ -170,12 +179,14 @@ export default async function handler(req, res) {
         // Ordernaam terugschrijven op het abonnement → handig in Stripe zelf
         if (subscription) await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name } }).catch(() => {});
         // Upsell (1+1 gratis) al betaald vóór deze order bestond (api/stripe/upsell) → nu alsnog op de order zetten
+        let upsellAppliedEarly = false;
         if (subscription?.metadata?.upsell_pi && subscription.metadata.upsell_order !== "1") {
           try {
             const upi = await stripe.paymentIntents.retrieve(subscription.metadata.upsell_pi);
             if (upi.status === "succeeded") {
-              await addUpsellToOrder({ ...order, tags: [] }, { reference: `Stripe ${upi.id}` });
+              await addUpsellToOrder({ ...order, tags: [], email: customer?.email || inv.customer_email, statusPageUrl: "" }, { reference: `Stripe ${upi.id}`, email: customer?.email || inv.customer_email || "", firstName: String(customer?.shipping?.name || customer?.name || "").split(" ")[0] || "" });
               await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name, upsell_order: "1" } }).catch(() => {});
+              upsellAppliedEarly = true;
             }
           } catch (e) { console.warn("stripe webhook upsell:", e.message); }
         }
@@ -204,7 +215,10 @@ export default async function handler(req, res) {
         };
         const portalLoginUrl = await registerMember(memberInfo);
         // Abonnee → Klaviyo (lijst + event "Started Membership"); nooit blokkerend
-        await syncNewMember({ ...memberInfo, portalLoginUrl });
+        await syncNewMember({ ...memberInfo, portalLoginUrl }); // profiel + lijst
+        // Mail 1 pas na de upsellpagina (ordertabel incl. offerta 1+1); vangnet: cron na 30 min
+        await holdStartedMembership(subscription?.id || subId, { ...memberInfo, portalLoginUrl }).catch((e) => console.warn("mail1 hold:", e.message));
+        if (upsellAppliedEarly) await releaseStartedMembership(subscription?.id || subId, { upsellAdded: true }).catch((e) => console.warn("mail1 release:", e.message));
         return res.status(200).json({ received: true, order: order.name });
       }
       // Rebill (€49 elke 28 dagen) → alleen Klaviyo-event, geen Shopify-order
@@ -216,6 +230,14 @@ export default async function handler(req, res) {
         await markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: sub?.current_period_end ? sub.current_period_end * 1000 : null, amountPaid: (inv.amount_paid || 0) / 100 });
         return res.status(200).json({ received: true, renewal: true });
       }
+    }
+    if (event.type === "invoice.payment_failed") {
+      // Mislukte rebill: het portaal deactiveert het lid (status live uit Stripe) → Klaviyo-event voor de herinneringsmail
+      const inv = event.data.object;
+      if (inv.customer_email && inv.billing_reason === "subscription_cycle") {
+        await trackEvent("Membership Payment Failed", inv.customer_email, { provider: "stripe", subscription_id: typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id || "", amount: ((inv.amount_due || 0) / 100).toFixed(2).replace(".", ","), portal_url: `${PORTAL_URL}/riattiva` }, { uniqueId: `payfail-${inv.id}` }).catch(() => {});
+      }
+      return res.status(200).json({ received: true, paymentFailed: true });
     }
     if (event.type === "customer.subscription.deleted") {
       const sub = event.data.object;

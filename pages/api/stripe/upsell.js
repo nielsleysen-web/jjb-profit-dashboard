@@ -11,6 +11,7 @@
 import Stripe from "stripe";
 import { UPSELL, PRODUCT_TITLE } from "../../../lib/checkout";
 import { waitForOrder, addUpsellToOrder } from "../../../lib/upsell";
+import { releaseStartedMembership } from "../../../lib/upsell-gate";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 export const config = { maxDuration: 60 };
@@ -23,7 +24,8 @@ async function attachToOrder(sub, pi) {
   if (!inv) return null;
   const order = await waitForOrder(invTag(inv.id));
   if (!order) return null;
-  const r = await addUpsellToOrder(order, { reference: `Stripe ${pi.id}` });
+  const r = await addUpsellToOrder(order, { reference: `Stripe ${pi.id}`, email: order.email || sub.customer?.email || "", firstName: order.customer?.firstName || "" });
+  await releaseStartedMembership(sub.id, { upsellAdded: true }).catch((e) => console.warn("mail1 release:", e.message));
   await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, upsell_pi: pi.id, upsell_qty: String(UPSELL.qty), upsell_order: "1" } }).catch(() => {});
   return r.order;
 }
@@ -63,6 +65,26 @@ export default async function handler(req, res) {
       customer?.invoice_settings?.default_payment_method ||
       null;
     if (!pmId) return res.status(409).json({ error: "Nessun metodo di pagamento salvato per questo ordine." });
+    const customerId = customer?.id || (typeof sub.customer === "string" ? sub.customer : null);
+
+    // Het betaalmiddel van de eerste betaling is soms nog niet aan de klant gekoppeld (Elements + save_default_payment_method
+    // gebeurt pas na de factuur) → koppelen, anders weigert Stripe de off-session afschrijving.
+    let pm;
+    try {
+      pm = await stripe.paymentMethods.retrieve(pmId);
+      if (!pm.customer && customerId) pm = await stripe.paymentMethods.attach(pmId, { customer: customerId });
+      else if (pm.customer && customerId && pm.customer !== customerId) return res.status(409).json({ error: "Metodo di pagamento non valido per questo ordine." });
+    } catch (e) {
+      console.warn("stripe/upsell pm:", e.code, e.message);
+      return res.status(409).json({ error: "Il metodo di pagamento non è riutilizzabile. Riprova dal portale membri." });
+    }
+
+    // Idempotency: dezelfde key herhaalt bij Stripe 24 uur lang ook een MISLUKT antwoord → per poging een
+    // nieuwe key (teller in de metadata), zodat "Riprova" na een weigering echt opnieuw probeert.
+    const attempt = Number(sub.metadata?.upsell_attempts || 0) + 1;
+    await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, upsell_attempts: String(attempt) } }).catch(() => {});
+    const card = pm.card || {};
+    const pmInfo = `${pm.type}${card.brand ? "/" + card.brand : ""}${card.funding ? "/" + card.funding : ""}${card.wallet?.type ? "/wallet:" + card.wallet.type : ""}${card.country ? "/" + card.country : ""}`;
 
     let pi;
     try {
@@ -70,15 +92,15 @@ export default async function handler(req, res) {
         {
           amount: UPSELL.price,
           currency: "eur",
-          customer: customer?.id || (typeof sub.customer === "string" ? sub.customer : undefined),
-          payment_method: pmId,
+          customer: customerId || undefined,
+          payment_method: pm.id,
           off_session: true,
           confirm: true,
           description: `${PRODUCT_TITLE} — ${UPSELL.label} (upsell post-acquisto)`,
           receipt_email: customer?.email || undefined,
           metadata: { source: "jjb-checkout", kind: "upsell", upsell: UPSELL.tag, qty: String(UPSELL.qty), subscription_id: sub.id, invoice_id: inv.id, shopify_order: sub.metadata?.shopify_order || "" },
         },
-        { idempotencyKey: `jjup_${sub.id}` }
+        { idempotencyKey: `jjup_${sub.id}_${attempt}` }
       );
     } catch (e) {
       // Bank wil een extra bevestiging → de pagina rondt het af met Stripe.js en roept ons daarna met ?pi= opnieuw aan
@@ -86,8 +108,9 @@ export default async function handler(req, res) {
         await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, upsell_pi: e.raw.payment_intent.id } }).catch(() => {});
         return res.status(200).json({ requires_action: true, client_secret: e.raw.payment_intent.client_secret, pi: e.raw.payment_intent.id });
       }
-      console.warn("stripe/upsell charge:", e.code, e.message);
-      return res.status(402).json({ error: e.type === "StripeCardError" ? "La tua carta non ha autorizzato l'addebito." : "Impossibile completare l'addebito. Riprova." });
+      console.error("stripe/upsell charge:", e.code, e.decline_code || "-", e.message, "| sub", sub.id, "pm", pm.id, pmInfo, "attempt", attempt);
+      const msg = e.type === "StripeCardError" ? "La tua carta non ha autorizzato l'addebito." : "Impossibile completare l'addebito. Riprova.";
+      return res.status(402).json({ error: msg, code: e.code || null });
     }
 
     if (pi.status === "requires_action" && pi.client_secret) {

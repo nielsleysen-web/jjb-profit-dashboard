@@ -6,7 +6,7 @@
 // abonnementen van de laatste 30 dagen.
 
 import Stripe from "stripe";
-import { BUNDLES, SHIPPING } from "../../../lib/checkout";
+import { BUNDLES, SHIPPING, UPSELL } from "../../../lib/checkout";
 import { findOrderForInvoice } from "../../../lib/shopify-admin";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     if (inv?.id && inv.status === "paid") {
       try {
         const o = await findOrderForInvoice(inv.id);
-        if (o) order = { name: o.name, statusPageUrl: o.statusPageUrl, tax: Math.round(parseFloat(o.totalTaxSet?.shopMoney?.amount || "0") * 100) };
+        if (o) order = { name: o.name, statusPageUrl: o.statusPageUrl, tax: Math.round(parseFloat(o.totalTaxSet?.shopMoney?.amount || "0") * 100), upsell: (o.tags || []).includes(UPSELL.tag) };
       } catch (e) {
         console.warn("stripe/order shopify:", e.message);
       }

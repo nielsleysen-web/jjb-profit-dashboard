@@ -126,6 +126,8 @@ export default function Offerta() {
 
   const grazie = (extra) => {
     if (!q) return;
+    // Zonder upsell doorgaan → mail 1 mag vertrekken (bij upsell doet de server dit zelf)
+    if (!extra && q.sub) { try { navigator.sendBeacon("/api/checkout/upsell-decline", new Blob([JSON.stringify({ ref: q.sub })], { type: "application/json" })); } catch {} }
     const u = new URL("/checkout/grazie", window.location.origin);
     u.search = q.search || "";
     if (extra) u.searchParams.set("up", "1");

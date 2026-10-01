@@ -9,6 +9,7 @@
 import { paypalConfigured, pp, ppTag } from "../../../lib/paypal";
 import { UPSELL, PRODUCT_TITLE } from "../../../lib/checkout";
 import { waitForOrder, addUpsellToOrder, findOrderByTag } from "../../../lib/upsell";
+import { releaseStartedMembership } from "../../../lib/upsell-gate";
 
 export const config = { maxDuration: 60 };
 const eur = (c) => (c / 100).toFixed(2);
@@ -63,7 +64,8 @@ export default async function handler(req, res) {
 
       const order = existing || (await waitForOrder(ppTag(id), { tries: 12 }));
       if (!order) return res.status(200).json({ ok: true, pending: true, capture: capture.id });
-      const r = await addUpsellToOrder(order, { reference: `PayPal ${capture.id}` });
+      const r = await addUpsellToOrder(order, { reference: `PayPal ${capture.id}`, email: order.email || sub.subscriber?.email_address || "", firstName: order.customer?.firstName || "" });
+      await releaseStartedMembership(id, { upsellAdded: true }).catch((e) => console.warn("mail1 release:", e.message));
       return res.status(200).json({ ok: true, order: r.order.name });
     }
 
