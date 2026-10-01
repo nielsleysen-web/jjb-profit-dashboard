@@ -192,7 +192,7 @@ export default function Grazie() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     // Stripe: ?sub=sub_…   PayPal: ?pp=I-…
-    setQ({ sub: p.get("sub") || p.get("pp") || "", paypal: !!p.get("pp"), b: p.get("b"), rs: p.get("redirect_status") || "" });
+    setQ({ sub: p.get("sub") || p.get("pp") || "", paypal: !!p.get("pp"), b: p.get("b"), rs: p.get("redirect_status") || "", up: p.get("up") === "1" });
   }, []);
 
   // Gegevens ophalen; zolang de Shopify-order er nog niet is (webhook), even opnieuw proberen
@@ -314,6 +314,14 @@ export default function Grazie() {
               </div>
               <a className="gz-outline" href={`/checkout?b=${bundle.qty}`}>Acquista di nuovo</a>
             </div>
+
+            {/* Upsell (1+1 gratis) net toegevoegd op /checkout/offerta */}
+            {q.up && (
+              <div className="gz-card" style={{ background: "#eef8f1", borderColor: "#cfe6d6", display: "flex", gap: "10px" }}>
+                <span style={{ fontSize: "16px", lineHeight: "20px", color: GREEN }}>✓</span>
+                <div style={{ fontSize: "14.5px" }}><b>Offerta 1+1 aggiunta:</b> 2 flaconi extra di NeuroTone (29,95 €) partono insieme a questo ordine.</div>
+              </div>
+            )}
 
             {/* Status */}
             <div className="gz-card">

@@ -9,7 +9,7 @@
 const CONFIG = {
   BRAND_NAME: 'Just Jenny',
   PRODUCT_NAME: 'Neurotone Drops',
-  SUCCESS_PATH: '/checkout/grazie',
+  SUCCESS_PATH: '/checkout/offerta', // post-purchase upsell (1+1 gratis); daarna /checkout/grazie
   TRIAL_DAYS: 7,             // moet gelijk zijn aan MEMBERSHIP.trialDays in lib/checkout.js
   CYCLE_DAYS: 28,            // idem intervalDays
   MEMBERSHIP_CENTS: 4900,    // idem price — enkel voor de tekst, Stripe rekent met STRIPE_PRICE_MEMBERSHIP

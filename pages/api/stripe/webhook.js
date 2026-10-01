@@ -15,6 +15,7 @@ import { BUNDLES, SHIPPING, PRODUCT_TITLE, MEMBERSHIP } from "../../../lib/check
 import { syncNewMember, syncRenewal, syncCancel } from "../../../lib/klaviyo";
 import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
 import { registerMember, markRenewed, markCancelled } from "../../../lib/portal-members";
+import { addUpsellToOrder } from "../../../lib/upsell";
 
 export const config = { api: { bodyParser: false } }; // ruwe body nodig voor de handtekening
 
@@ -168,6 +169,16 @@ export default async function handler(req, res) {
         const order = await createShopifyOrder({ invoice: inv, subscription, customer, paymentIntent });
         // Ordernaam terugschrijven op het abonnement → handig in Stripe zelf
         if (subscription) await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name } }).catch(() => {});
+        // Upsell (1+1 gratis) al betaald vóór deze order bestond (api/stripe/upsell) → nu alsnog op de order zetten
+        if (subscription?.metadata?.upsell_pi && subscription.metadata.upsell_order !== "1") {
+          try {
+            const upi = await stripe.paymentIntents.retrieve(subscription.metadata.upsell_pi);
+            if (upi.status === "succeeded") {
+              await addUpsellToOrder({ ...order, tags: [] }, { reference: `Stripe ${upi.id}` });
+              await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name, upsell_order: "1" } }).catch(() => {});
+            }
+          } catch (e) { console.warn("stripe webhook upsell:", e.message); }
+        }
         const md = { ...(subscription?.metadata || {}), ...(paymentIntent?.metadata || {}) };
         const qty = parseInt(md.qty || md.bundle || "3", 10);
         const addr = customer?.shipping?.address || customer?.address || {};
