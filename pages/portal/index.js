@@ -96,6 +96,11 @@ export default function Portal() {
         <div className="main">
           <div className="mtop"><img src={LOGO} alt="Just Jenny" /><button type="button" aria-label="Menu" onClick={() => setMenu(true)}>☰</button></div>
           <div className="wrap">
+            {tab !== "library" && data?.library?.left > 0 && (
+              <a className="ebb" href="#library" onClick={(e) => { e.preventDefault(); nav("library"); }}>
+                <span>{t("ebookBanner")}</span><b>{t("ebookBannerCta")} →</b>
+              </a>
+            )}
             {content}
             {showHelp && (
               <div className="card help"><div><h3>{t("helpTitle")}</h3><p>{t("helpSub")}</p></div><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></div>

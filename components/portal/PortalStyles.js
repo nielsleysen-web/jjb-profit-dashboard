@@ -34,6 +34,8 @@ export default function PortalStyles() {
       .mtop img{width:150px;max-width:60%;height:auto;display:block}.mtop button{background:none;border:1px solid #ddd;border-radius:10px;font-size:22px;padding:4px 10px;cursor:pointer}
       .main{flex:1;min-width:0}
       .wrap{max-width:860px;margin:0 auto;padding:36px 28px 60px}
+      .ebb{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-10px 0 22px;padding:11px 16px;border-radius:12px;background:linear-gradient(90deg,#fdeee4,#fff7f1);border:1px solid #f3d5c2;color:#1a1a1a;text-decoration:none;font-size:15px}
+      .ebb b{color:#c96f43;white-space:nowrap;font-weight:700}.ebb:hover{border-color:#df8455}
       h1{font-size:30px;font-weight:800;margin:0 0 6px}.sub{color:#444;margin:0 0 24px;font-size:19px;line-height:1.45}
       .card{background:#fff;border:1px solid #eae6e2;border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.04)}
       .p{display:grid;grid-template-columns:140px 1fr auto;gap:20px;align-items:center;padding:18px 22px 18px 18px;margin-bottom:14px}
@@ -113,7 +115,7 @@ export default function PortalStyles() {
         ${GIFT_CSS_MOBILE}
         .bg{grid-template-columns:1fr}
         .side{position:fixed;left:-270px;top:0;bottom:0;z-index:20;transition:left .2s;box-shadow:0 0 30px rgba(0,0,0,.15)}.side.open{left:0}
-        .mtop{display:flex}.wrap{padding:22px 16px 50px}h1{font-size:25px}.sub{font-size:17px}
+        .mtop{display:flex}.wrap{padding:22px 16px 50px}h1{font-size:25px}.sub{font-size:17px}.ebb{margin:0 0 16px;font-size:14px;padding:10px 12px}
         .p{grid-template-columns:1fr;gap:12px}.p .img{height:220px}.btn{width:100%}
         .cg{grid-template-columns:1fr}.two{grid-template-columns:1fr}.help{flex-direction:column;align-items:flex-start}
         .rows .r{flex-direction:column;gap:3px}.rows .r b{text-align:left}
