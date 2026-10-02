@@ -19,6 +19,7 @@ import { paypalConfigured, pp, reactivationPlan } from "../../../lib/paypal";
 import { MEMBERSHIP } from "../../../lib/checkout";
 import { trackEvent, klaviyoConfigured } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
+import { grantReactivationGift } from "../../../lib/portal-regift";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 export const config = { maxDuration: 30 };
@@ -33,15 +34,17 @@ async function membershipPriceId() {
   return price.id;
 }
 
-async function activate(member, { provider, subscriptionId, customerId, nextChargeAt, amount }) {
+async function activate(member, { provider, subscriptionId, customerId, nextChargeAt, amount, gift = false }) {
   const now = new Date();
+  // Regalo (mail "C'è un regalo ad aspettarti"): alleen na een MISLUKTE rebill, niet na een gewone opzegging
+  if (gift) await grantReactivationGift(member.email).catch((e) => console.warn("portal regift grant:", e.message));
   await upsertMember({
     email: member.email, status: "active", provider, subscriptionId, stripeCustomerId: customerId || member.stripeCustomerId,
     cancelledAt: null, reactivatedAt: now.toISOString(), lastPaymentAt: now.toISOString(), lastPaymentAmount: amount,
     nextChargeAt: nextChargeAt ? new Date(nextChargeAt).toISOString() : undefined,
   });
   if (klaviyoConfigured()) {
-    await trackEvent("Membership Reactivated", member.email, { first_name: member.firstName || "", provider, amount: amount.toFixed(2).replace(".", ","), portal_url: PORTAL_URL }, { value: amount, uniqueId: `reactivate-${subscriptionId}` }).catch(() => {});
+    await trackEvent("Membership Reactivated", member.email, { first_name: member.firstName || "", provider, amount: amount.toFixed(2).replace(".", ","), portal_url: PORTAL_URL, gift }, { value: amount, uniqueId: `reactivate-${subscriptionId}` }).catch(() => {});
   }
 }
 
@@ -99,7 +102,7 @@ export default async function handler(req, res) {
         }
         const fresh = await stripe.subscriptions.retrieve(sub.subscriptionId);
         if (!["active", "trialing"].includes(fresh.status)) return res.status(402).json({ ok: false, error: "payment_failed" });
-        await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId, nextChargeAt: fresh.current_period_end * 1000, amount: (inv?.amount_paid ?? MEMBERSHIP.price) / 100 });
+        await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId, nextChargeAt: fresh.current_period_end * 1000, amount: (inv?.amount_paid ?? MEMBERSHIP.price) / 100 , gift: pastDue });
         return res.status(200).json({ ok: true, reactivated: true });
       }
 
@@ -120,7 +123,7 @@ export default async function handler(req, res) {
         return res.status(402).json({ ok: false, error: e.type === "StripeCardError" ? "card_declined" : "payment_failed" });
       }
       const inv = created.latest_invoice;
-      await activate(member, { provider: "stripe", subscriptionId: created.id, customerId, nextChargeAt: created.current_period_end * 1000, amount: (inv?.amount_paid ?? MEMBERSHIP.price) / 100 });
+      await activate(member, { provider: "stripe", subscriptionId: created.id, customerId, nextChargeAt: created.current_period_end * 1000, amount: (inv?.amount_paid ?? MEMBERSHIP.price) / 100 , gift: pastDue });
       return res.status(200).json({ ok: true, reactivated: true });
     }
 
@@ -130,7 +133,7 @@ export default async function handler(req, res) {
       if (!subId.startsWith("sub_")) return res.status(400).json({ ok: false, error: "payment_failed" });
       const fresh = await stripe.subscriptions.retrieve(subId, { expand: ["latest_invoice"] });
       if (!["active", "trialing"].includes(fresh.status)) return res.status(402).json({ ok: false, error: "payment_failed" });
-      await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId: typeof fresh.customer === "string" ? fresh.customer : fresh.customer?.id, nextChargeAt: fresh.current_period_end * 1000, amount: (fresh.latest_invoice?.amount_paid ?? MEMBERSHIP.price) / 100 });
+      await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId: typeof fresh.customer === "string" ? fresh.customer : fresh.customer?.id, nextChargeAt: fresh.current_period_end * 1000, amount: (fresh.latest_invoice?.amount_paid ?? MEMBERSHIP.price) / 100 , gift: pastDue });
       return res.status(200).json({ ok: true, reactivated: true });
     }
 
@@ -162,7 +165,7 @@ export default async function handler(req, res) {
       if (!psub || psub.status !== "ACTIVE") return res.status(402).json({ ok: false, error: "payment_failed" });
       if (psub.custom_id !== `reactivate|${member.email}`.slice(0, 127)) return res.status(400).json({ ok: false, error: "payment_failed" });
       const next = psub.billing_info?.next_billing_time ? new Date(psub.billing_info.next_billing_time).getTime() : null;
-      await activate(member, { provider: "paypal", subscriptionId: psub.id, nextChargeAt: next, amount: MEMBERSHIP.price / 100 });
+      await activate(member, { provider: "paypal", subscriptionId: psub.id, nextChargeAt: next, amount: MEMBERSHIP.price / 100 , gift: pastDue });
       return res.status(200).json({ ok: true, reactivated: true });
     }
 

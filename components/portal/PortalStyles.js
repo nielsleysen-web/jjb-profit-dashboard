@@ -4,6 +4,10 @@ export const GIFT_CSS = `
       .gift{position:relative;display:grid;grid-template-columns:84px 1fr;gap:18px;align-items:center;background:linear-gradient(135deg,#fffdfb,#fdf3ec);border:1px solid #f1d9c9;border-radius:16px;padding:18px 20px 18px 24px;margin:0 0 22px;box-shadow:0 8px 28px rgba(223,132,85,.12);overflow:hidden}
       .gift:before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(#f2b58f,#df8455)}
       .gift img{width:84px;height:112px;object-fit:cover;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.16)}
+      .gift.rg{grid-template-columns:64px 1fr}
+      .rg-ic{width:64px;height:64px;border-radius:50%;background:#fff;border:1px solid #f1d9c9;display:flex;align-items:center;justify-content:center;font-size:30px}
+      .rg-list{margin:8px 0 0;padding-left:18px;font-size:14.5px;line-height:1.5}.rg-list li{margin-bottom:4px}.rg-list li.done{color:#999;text-decoration:line-through}
+      .rg-badge{display:inline-block;background:#e6f2ea;color:#2d6b45;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
       .gift .gk{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#c96f43;background:#fff;border:1px solid #f1d9c9;border-radius:999px;padding:4px 10px;margin-bottom:8px}
       .gift b{display:block;font-size:16.5px;line-height:1.4;font-weight:700}
       .gift .gt{display:flex;align-items:center;gap:12px;margin:10px 0 12px;flex-wrap:wrap}

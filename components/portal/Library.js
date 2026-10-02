@@ -60,6 +60,7 @@ export default function Library({ t, lang, data, reload }) {
       {lib.books.length > 0 && (
         <p className="note-s" style={{ margin: "0 0 14px" }}>
           {lib.left > 0 ? t("libLeft", { n: lib.left }) : t("libLeftNone", { date: fmtDate(lang, lib.cycleEnd, { day: "numeric", month: "long" }) })}
+          {lib.bonus > 0 && <> · <b>{t("libBonus")}</b></>}
         </p>
       )}
       {err && <div className="claim-err">{err}</div>}

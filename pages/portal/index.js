@@ -123,6 +123,7 @@ function FreeItems({ t, lang, data, nav, reload }) {
       <h1>{name ? t("homeTitle", { name }) : t("homeTitleNoName")}</h1>
       <p className="sub">{t("homeSub")}</p>
       <GiftBanner t={t} lang={lang} data={data} reload={reload} />
+      <RegiftBanner t={t} lang={lang} data={data} />
       {data.freeItems.map((p) => (
         <div key={p.slug} className={`card p${p.ordered ? " ordered" : ""}`}>
           <div className="img"><img src={p.image} alt={ptitle(lang, p)} loading="lazy" /></div>
@@ -131,7 +132,9 @@ function FreeItems({ t, lang, data, nav, reload }) {
             <h3>{ptitle(lang, p)}</h3>
             <p>{ptag(lang, p)}</p>
             <div className="price"><s>{fmtMoney(lang, p.compareAt)}</s><b>{fmtMoney(lang, 0)}</b><span className="in">{t("free")}</span></div>
-            <div className="sh">{t("shLabel")} <b>{fmtMoney(lang, p.shipping)}</b></div>
+            <div className="sh">{t("shLabel")} {p.shippingAfterGift != null
+              ? <><s style={{ color: "#999", marginRight: 6 }}>{fmtMoney(lang, p.shipping)}</s><b>{fmtMoney(lang, p.shippingAfterGift)}</b> <span className="rg-badge">{t("rgBadge")}</span></>
+              : <b>{fmtMoney(lang, p.shipping)}</b>}</div>
           </div>
           {p.ordered
             ? <span className="btn grey">{t("availableAgain", { date: fmtDate(lang, p.availableAgain, { day: "numeric", month: "long" }) })}</span>
@@ -151,6 +154,7 @@ function Claim({ t, lang, data, slug, nav, reload }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const p = data.freeItems.find((x) => x.slug === slug);
+  const feeToday = p ? (p.shippingAfterGift != null ? p.shippingAfterGift : p.shipping) : 0;
   if (!p || p.ordered) { if (typeof window !== "undefined" && !busy) setTimeout(() => nav("free"), 0); return null; }
   const m = data.member, a = m.address || {};
   const pm = data.membership.paymentMethod;
@@ -197,14 +201,15 @@ function Claim({ t, lang, data, slug, nav, reload }) {
         <div className="card blk"><h4>{t("summary")}</h4>
           <div className="tot"><span>{ptitle(lang, p)}</span><span><s>{fmtMoney(lang, p.compareAt)}</s><span className="g">{fmtMoney(lang, 0)}</span></span></div>
           <div className="tot"><span>{t("shLine")}</span><span>{fmtMoney(lang, p.shipping)}</span></div>
-          <div className="tot"><span>{t("totalToday")}</span><span>{fmtMoney(lang, p.shipping)}</span></div>
+          {p.shippingAfterGift != null && <div className="tot"><span>🎁 {t("rgLine")}</span><span className="g">−{fmtMoney(lang, p.shipping - p.shippingAfterGift)}</span></div>}
+          <div className="tot"><span>{t("totalToday")}</span><span>{fmtMoney(lang, feeToday)}</span></div>
         </div>
         <div className="card blk"><h4>{t("payment")}</h4><PayMethod t={t} pm={pm} provider={data.membership.provider} /></div>
         {err && <div className="claim-err">{err}</div>}
         {isPaypal
           ? <button type="button" className="btn big pp-btn" onClick={confirm} disabled={busy}>{busy ? t("processing") : t("confirmPaypal")}</button>
           : <button type="button" className="btn big" onClick={confirm} disabled={busy}>{busy ? t("processing") : t("confirmBtn")}</button>}
-        <p className="fine">{isPaypal ? t("paypalNote", { amount: fmtMoney(lang, p.shipping) }) : t("chargeNote", { amount: fmtMoney(lang, p.shipping) })}</p>
+        <p className="fine">{feeToday <= 0 ? t("rgFreeNote") : isPaypal ? t("paypalNote", { amount: fmtMoney(lang, feeToday) }) : t("chargeNote", { amount: fmtMoney(lang, feeToday) })}</p>
       </div>
     </>
   );
@@ -402,6 +407,25 @@ function Ended({ t }) {
     <div className="card empty" style={{ marginTop: 20 }}>
       <h1 style={{ fontSize: 24 }}>{t("endedTitle")}</h1>
       <p style={{ margin: "8px 0 0" }}>{t("endedSub", { email: SUPPORT_EMAIL })}</p>
+    </div>
+  );
+}
+
+// Regalo na heractivering (na een mislukte rebill): extra e-book + 9,95 € op één fee
+function RegiftBanner({ t, lang, data }) {
+  const g = data?.regift;
+  if (!g) return null;
+  return (
+    <div className="gift rg">
+      <div className="rg-ic">🎁</div>
+      <div className="gb">
+        <div className="gk">{t("rgTitle")}</div>
+        <b>{t("rgSub")}</b>
+        <ul className="rg-list">
+          <li className={g.ebookLeft ? "" : "done"}>{g.ebookLeft ? t("rgEbook") : t("rgEbookUsed")}</li>
+          <li className={g.creditCents ? "" : "done"}>{g.creditCents ? t("rgCredit", { amount: fmtMoney(lang, g.credit) }) : t("rgCreditUsed")}</li>
+        </ul>
+      </div>
     </div>
   );
 }
