@@ -177,7 +177,7 @@ export default async function handler(req, res) {
         ]);
         const order = await createShopifyOrder({ invoice: inv, subscription, customer, paymentIntent });
         // Ordernaam terugschrijven op het abonnement → handig in Stripe zelf
-        if (subscription) await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name } }).catch(() => {});
+        if (subscription) await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name, shopify_order_id: order.id } }).catch(() => {});
         // Upsell (1+1 gratis) al betaald vóór deze order bestond (api/stripe/upsell) → nu alsnog op de order zetten
         let upsellAppliedEarly = false;
         if (subscription?.metadata?.upsell_pi && subscription.metadata.upsell_order !== "1") {
@@ -185,7 +185,7 @@ export default async function handler(req, res) {
             const upi = await stripe.paymentIntents.retrieve(subscription.metadata.upsell_pi);
             if (upi.status === "succeeded") {
               await addUpsellToOrder({ ...order, tags: [], email: customer?.email || inv.customer_email, statusPageUrl: "" }, { reference: `Stripe ${upi.id}`, email: customer?.email || inv.customer_email || "", firstName: String(customer?.shipping?.name || customer?.name || "").split(" ")[0] || "" });
-              await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name, upsell_order: "1" } }).catch(() => {});
+              await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name, shopify_order_id: order.id, upsell_order: "1" } }).catch(() => {});
               upsellAppliedEarly = true;
             }
           } catch (e) { console.warn("stripe webhook upsell:", e.message); }

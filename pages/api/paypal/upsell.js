@@ -10,6 +10,7 @@ import { paypalConfigured, pp, ppTag } from "../../../lib/paypal";
 import { UPSELL, PRODUCT_TITLE } from "../../../lib/checkout";
 import { waitForOrder, addUpsellToOrder, findOrderByTag } from "../../../lib/upsell";
 import { releaseStartedMembership } from "../../../lib/upsell-gate";
+import { queueUpsell, dequeueUpsell } from "../../../lib/upsell-queue";
 
 export const config = { maxDuration: 60 };
 const eur = (c) => (c / 100).toFixed(2);
@@ -62,11 +63,20 @@ export default async function handler(req, res) {
       if (cap.status !== "COMPLETED" || !capture || capture.status !== "COMPLETED") return res.status(402).json({ error: "Pagamento PayPal non completato." });
       if (pu.custom_id !== `upsell:${id}` || capture.amount?.value !== eur(UPSELL.price)) return res.status(400).json({ error: "Riferimento non valido" });
 
-      const order = existing || (await waitForOrder(ppTag(id), { tries: 12 }));
-      if (!order) return res.status(200).json({ ok: true, pending: true, capture: capture.id });
-      const r = await addUpsellToOrder(order, { reference: `PayPal ${capture.id}`, email: order.email || sub.subscriber?.email_address || "", firstName: order.customer?.firstName || "" });
+      // Betaald → wachtrij + mail 1 (met upsellregel), daarna de order aanvullen; mislukt dat, dan doet de cron het later
+      const item = { provider: "paypal", ref: id, tag: ppTag(id), reference: `PayPal ${capture.id}`, email: sub.subscriber?.email_address || "", firstName: sub.subscriber?.name?.given_name || "" };
+      await queueUpsell(item).catch((e) => console.warn("upsell queue:", e.message));
       await releaseStartedMembership(id, { upsellAdded: true }).catch((e) => console.warn("mail1 release:", e.message));
-      return res.status(200).json({ ok: true, order: r.order.name });
+      try {
+        const order = existing || (await waitForOrder(ppTag(id), { tries: 12 }));
+        if (!order) { console.warn("paypal/upsell: order nog niet gevonden, in wachtrij", id); return res.status(200).json({ ok: true, pending: true, capture: capture.id }); }
+        const r = await addUpsellToOrder(order, { reference: item.reference, email: order.email || item.email, firstName: order.customer?.firstName || item.firstName });
+        await dequeueUpsell(id).catch(() => {});
+        return res.status(200).json({ ok: true, order: r.order.name });
+      } catch (e) {
+        console.error("paypal/upsell attach:", id, e.message);
+        return res.status(200).json({ ok: true, pending: true, capture: capture.id });
+      }
     }
 
     return res.status(400).json({ error: "Azione non valida" });
