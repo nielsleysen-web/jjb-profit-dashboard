@@ -11,6 +11,7 @@ import PortalStyles from "../../components/portal/PortalStyles";
 import { LOGO, SUPPORT_EMAIL, post, go, onEnter } from "../../components/portal/AuthShell";
 import { useT, fmtDate, fmtMoney } from "../../lib/portal-i18n";
 import Library, { GiftBanner } from "../../components/portal/Library";
+import Reactivate, { REACT_CSS } from "../../components/portal/Reactivate";
 
 const TABS = [
   { id: "free", icon: "🎁", label: "navFree" },
@@ -59,6 +60,7 @@ export default function Portal() {
   let content;
   if (error) content = <div className="center">{t("loadError")}</div>;
   else if (!data) content = <div className="center">{t("loading")}</div>;
+  else if (data.deactivated) content = <Reactivate t={t} lang={lang} data={data} reload={load} />;
   else if (data.ended) content = <Ended t={t} />;
   else if (tab === "claim") content = <Claim t={t} lang={lang} data={data} slug={arg} nav={nav} reload={load} />;
   else if (tab === "done") content = <Done t={t} lang={lang} data={data} name={decodeURIComponent(arg || "")} nav={nav} />;
@@ -79,10 +81,11 @@ export default function Portal() {
         <meta name="robots" content="noindex" />
       </Head>
       <PortalStyles />
+      <style dangerouslySetInnerHTML={{ __html: REACT_CSS }} />
       <div className="app">
         <aside className={`side${menu ? " open" : ""}`}>
           <img src={LOGO} alt="Just Jenny" />
-          {TABS.map((x) => (
+          {(data?.deactivated ? [] : TABS).map((x) => (
             <button key={x.id} type="button" className={`nav${activeTab === x.id ? " on" : ""}`} onClick={() => nav(x.id)}>
               <span className="ic">{x.icon}</span>{t(x.label)}
             </button>
@@ -96,7 +99,7 @@ export default function Portal() {
         <div className="main">
           <div className="mtop"><img src={LOGO} alt="Just Jenny" /><button type="button" aria-label="Menu" onClick={() => setMenu(true)}>☰</button></div>
           <div className="wrap">
-            {tab !== "library" && data?.library?.left > 0 && (
+            {!data?.deactivated && tab !== "library" && data?.library?.left > 0 && (
               <a className="ebb" href="#library" onClick={(e) => { e.preventDefault(); nav("library"); }}>
                 <span>{t("ebookBanner")}</span><b>{t("ebookBannerCta")} →</b>
               </a>

@@ -1,7 +1,7 @@
 // POST /api/portal/library/unlock { slug } → { ok, url, viaGift } | { ok:false, error:"limit"|"unknown", availableAgain }
 import { readSession } from "../../../../lib/portal-auth";
 import { getMember } from "../../../../lib/portal-members";
-import { getSubscriptionInfo } from "../../../../lib/portal-account";
+import { getSubscriptionInfo, isDeactivated } from "../../../../lib/portal-account";
 import { unlockBook, LibraryError } from "../../../../lib/portal-library";
 
 export default async function handler(req, res) {
@@ -13,8 +13,7 @@ export default async function handler(req, res) {
     const member = await getMember(s.email);
     if (!member) return res.status(401).json({ ok: false, error: "auth" });
     const sub = await getSubscriptionInfo(member);
-    const cycleEnd = sub.cycleEnd ? new Date(sub.cycleEnd).getTime() : Date.now();
-    if (sub.status === "cancelled" && cycleEnd < Date.now()) return res.status(403).json({ ok: false, error: "ended" });
+    if (isDeactivated(member, sub)) return res.status(403).json({ ok: false, error: "ended" });
     const r = await unlockBook(s.email, String(req.body?.slug || ""), sub.cycleStart || Date.now());
     return res.status(200).json({ ok: true, url: `/api/portal/library/file?slug=${encodeURIComponent(req.body.slug)}`, viaGift: r.viaGift });
   } catch (e) {
