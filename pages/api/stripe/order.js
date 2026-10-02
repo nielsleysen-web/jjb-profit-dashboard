@@ -8,6 +8,7 @@
 import Stripe from "stripe";
 import { BUNDLES, SHIPPING, UPSELL } from "../../../lib/checkout";
 import { findOrderForInvoice } from "../../../lib/shopify-admin";
+import { sweepIfDue } from "../../../lib/upsell-queue";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 
@@ -47,6 +48,7 @@ export default async function handler(req, res) {
     }
 
     const sh = cust.shipping || {};
+    await sweepIfDue(); // vangnet: eerdere upsells alsnog op hun order, max 1x per 5 min
     return res.status(200).json({
       paid: inv?.status === "paid",
       created: sub.created,

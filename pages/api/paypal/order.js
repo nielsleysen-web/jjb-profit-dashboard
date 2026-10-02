@@ -2,6 +2,7 @@
 // Gegevens voor de bedankpagina bij een PayPal-bestelling: GET /api/paypal/order?id=I-XXXX
 
 import { paypalConfigured, pp, unpackCustom, findOrderForPaypal } from "../../../lib/paypal";
+import { sweepIfDue } from "../../../lib/upsell-queue";
 import { BUNDLES, SHIPPING, UPSELL } from "../../../lib/checkout";
 
 export default async function handler(req, res) {
@@ -23,6 +24,7 @@ export default async function handler(req, res) {
       const o = await findOrderForPaypal(id);
       if (o) order = { name: o.name, statusPageUrl: o.statusPageUrl, tax: Math.round(parseFloat(o.totalTaxSet?.shopMoney?.amount || "0") * 100), upsell: (o.tags || []).includes(UPSELL.tag) };
     } catch (e) { console.warn("paypal/order shopify:", e.message); }
+    await sweepIfDue(); // vangnet: eerdere upsells alsnog op hun order, max 1x per 5 min
     return res.status(200).json({
       paid: sub.status === "ACTIVE",
       created,

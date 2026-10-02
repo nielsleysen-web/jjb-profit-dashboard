@@ -3,6 +3,7 @@
 // Bij een geslaagde upsell doet de server dit zelf (met upsell-regel) in /api/stripe/upsell en /api/paypal/upsell.
 // POST { ref: "sub_…" | "I-…" }  (sendBeacon vanaf /checkout/offerta)
 import { releaseStartedMembership } from "../../../lib/upsell-gate";
+import { sweepIfDue } from "../../../lib/upsell-queue";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -13,6 +14,7 @@ export default async function handler(req, res) {
   if (!/^(sub_[A-Za-z0-9]{8,}|I-[A-Z0-9]{6,})$/.test(ref)) return res.status(400).json({ ok: false });
   try {
     const r = await releaseStartedMembership(ref, { upsellAdded: false });
+    await sweepIfDue(); // vangnet voor eerdere upsells, max 1x per 5 min
     return res.status(200).json({ ok: true, ...r });
   } catch (e) {
     console.warn("upsell-decline:", ref, e.message);
