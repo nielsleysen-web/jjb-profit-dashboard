@@ -29,6 +29,7 @@ const CATEGORIES = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: "📊" },
       { href: "/subscriptions", label: "Membership", icon: "💚" },
+      { href: "/members", label: "Members", icon: "🧑‍🤝‍🧑" },
       { href: "/product-economics", label: "Product Economics", icon: "📦" },
     ],
   },

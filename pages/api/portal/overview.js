@@ -3,6 +3,7 @@
 import { readSession } from "../../../lib/portal-auth";
 import { getMember, publicMember } from "../../../lib/portal-members";
 import { getOverview } from "../../../lib/portal-account";
+import { touchSeen } from "../../../lib/portal-activity";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -12,6 +13,7 @@ export default async function handler(req, res) {
     const m = await getMember(s.email);
     if (!m) return res.status(401).json({ ok: false, error: "no_member" });
     const overview = await getOverview(m);
+    await touchSeen(s.email);
     return res.status(200).json({ ok: true, member: publicMember(m), ...overview });
   } catch (e) {
     console.error("portal overview:", s.email, e.message);

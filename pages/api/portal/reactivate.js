@@ -20,6 +20,7 @@ import { MEMBERSHIP } from "../../../lib/checkout";
 import { trackEvent, klaviyoConfigured } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
 import { grantReactivationGift } from "../../../lib/portal-regift";
+import { logEvent } from "../../../lib/portal-activity";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 export const config = { maxDuration: 30 };
@@ -38,6 +39,7 @@ async function activate(member, { provider, subscriptionId, customerId, nextChar
   const now = new Date();
   // Regalo (mail "C'è un regalo ad aspettarti"): alleen na een MISLUKTE rebill, niet na een gewone opzegging
   if (gift) await grantReactivationGift(member.email).catch((e) => console.warn("portal regift grant:", e.message));
+  await logEvent(member.email, "reactivated", { provider, amount, gift });
   await upsertMember({
     email: member.email, status: "active", provider, subscriptionId, stripeCustomerId: customerId || member.stripeCustomerId,
     cancelledAt: null, reactivatedAt: now.toISOString(), lastPaymentAt: now.toISOString(), lastPaymentAmount: amount,
