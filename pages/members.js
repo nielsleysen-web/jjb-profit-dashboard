@@ -113,6 +113,8 @@ export default function Members() {
 
   const load = () => { setData(null); setErr(""); fetch("/api/members").then((r) => r.json()).then((d) => (d.success ? setData(d) : setErr(d.error || "Fout"))).catch((e) => setErr(e.message)); };
   useEffect(load, []);
+  // Deep link vanuit het Membership Dashboard: /members?email=… opent meteen de tijdlijn van dat lid
+  useEffect(() => { const e = new URLSearchParams(window.location.search).get("email"); if (e) { setOpen(e.toLowerCase()); setQ(e); } }, []);
 
   const rows = useMemo(() => {
     if (!data) return [];

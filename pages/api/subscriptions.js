@@ -7,6 +7,8 @@
 //   Meta     → ad spend van de campagnes achter die orders (jjb_campaign_id) + optionele keywords
 //
 // GET ?range=today|yesterday|7|28|all   (dagen in Europe/Brussels)
+// Levert: kpis, compare (dag ervoor), chart (per uur bij één dag, anders per dag), cycleRows (rebills per cyclus),
+// events (geslaagd/mislukt/gepland), cohorten en de ledenlijst.
 // Env (allemaal al aanwezig): STRIPE_SECRET_KEY, PAYPAL_*, SHOPIFY_*, META_ACCESS_TOKEN, META_AD_ACCOUNT_IDS
 // Optioneel: SUB_CAMPAIGN_KEYWORDS="neurodrops,membership"  (extra campagnes meetellen op naam)
 //            MEMBERSHIP_REBILL_COGS="0"  (kostprijs per rebill, bv. gratis portaalproduct + verzending)
@@ -138,12 +140,14 @@ async function stripeData() {
   }
   const rebills = [], failed = [];
   n = 0;
-  for await (const inv of stripe.invoices.list({ limit: 100 })) {
+  for await (const inv of stripe.invoices.list({ limit: 100, expand: ["data.payment_intent"] })) {
     if (++n > 8000) break;
     if (inv.billing_reason !== "subscription_cycle") continue;
     const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
-    if (inv.status === "paid" && inv.amount_paid) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: inv.amount_paid / 100, provider: "stripe" });
-    else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe" });
+    const pi = typeof inv.payment_intent === "object" ? inv.payment_intent : null;
+    const err = pi?.last_payment_error;
+    if (inv.status === "paid" && inv.amount_paid) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: inv.amount_paid / 100, provider: "stripe", recovered: (inv.attempt_count || 1) > 1 });
+    else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
   }
   return { members, rebills, failed };
 }
@@ -242,7 +246,7 @@ export default async function handler(req, res) {
     // Stripe-rebills aan leden hangen
     const bySub = {};
     for (const r of st.rebills) (bySub[r.subId] = bySub[r.subId] || []).push(r);
-    for (const m of st.members) { const list = (bySub[m.id] || []).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); m.cycles = list.length; m.membershipRevenue = list.reduce((a, r) => a + r.amount, 0); m.rebillAt = list.map((r) => r.at); }
+    for (const m of st.members) { const list = (bySub[m.id] || []).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); m.cycles = list.length; m.membershipRevenue = list.reduce((a, r) => a + r.amount, 0); m.rebillAt = list.map((r) => r.at); m.rebillAmt = list.map((r) => r.amount); }
 
     const members = [...st.members, ...py.members].map((m) => {
       const o = orders[m.id];
@@ -339,11 +343,72 @@ export default async function handler(req, res) {
 
     /* ---- dagreeks voor de periode ---- */
     const days = {};
-    for (let ms = pStart; ms < pEnd; ms += DAY) { const d = dayStr(ms); days[d] = { d, new: 0, rebills: 0, rebillAmount: 0, canceled: 0, failed: 0, spend: r2(meta.daily[d] || 0) }; }
-    for (const m of newMembers) { const d = dayStr(Date.parse(m.startedAt)); if (days[d]) days[d].new++; }
+    for (let ms = pStart; ms < pEnd; ms += DAY) { const d = dayStr(ms); days[d] = { d, new: 0, feAmount: 0, rebills: 0, rebillAmount: 0, canceled: 0, failed: 0, spend: r2(meta.daily[d] || 0) }; }
+    for (const m of newMembers) { const d = dayStr(Date.parse(m.startedAt)); if (days[d]) { days[d].new++; days[d].feAmount += m.order?.net || 0; } }
     for (const r of pRebills) { const d = dayStr(Date.parse(r.at)); if (days[d]) { days[d].rebills++; days[d].rebillAmount += r.amount; } }
     for (const m of pCancel) { const d = dayStr(Date.parse(m.canceledAt)); if (days[d]) days[d].canceled++; }
     for (const f of pFailed) { const d = dayStr(Date.parse(f.at)); if (days[d]) days[d].failed++; }
+
+    /* ---- grafiek: per uur bij één dag (met de dag ervoor als vergelijking), anders per dag ---- */
+    const byId = Object.fromEntries(members.map((m) => [m.id, m]));
+    const hourOf = (t) => parseInt(new Date(t).toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", hourCycle: "h23" }), 10);
+    const between = (t, a, b) => { const ms = typeof t === "number" ? t : Date.parse(t || 0); return ms >= a && ms < b; };
+    // te innen: actieve/proef-leden met een geplande afschrijving (opzeggers aan het einde van de cyclus worden niet meer geïnd)
+    const billable = members.filter((m) => m.nextBilling && (m.status === "active" || m.status === "trial") && !m.cancelAtPeriodEnd);
+    function hourly(dStart, dEnd) {
+      const pts = Array.from({ length: 24 }, (_, h) => ({ label: `${String(h).padStart(2, "0")}:00`, total: 0, rebills: 0, rebillCount: 0, frontEnd: 0, orders: 0, scheduled: 0, scheduledAmount: 0 }));
+      for (const m of members) if (m.order && between(m.order.at, dStart, dEnd)) { const p = pts[hourOf(m.order.at)]; p.total += m.order.net; p.frontEnd += m.order.net; p.orders++; }
+      for (const r of rebills) if (between(r.at, dStart, dEnd)) { const p = pts[hourOf(r.at)]; p.total += r.amount; p.rebills += r.amount; p.rebillCount++; p.orders++; }
+      for (const m of billable) if (between(m.nextBilling, Math.max(now, dStart), dEnd)) { const p = pts[hourOf(m.nextBilling)]; p.scheduled++; p.scheduledAmount += PRICE; }
+      return pts.map((p) => ({ ...p, total: r2(p.total), rebills: r2(p.rebills), frontEnd: r2(p.frontEnd), scheduledAmount: r2(p.scheduledAmount) }));
+    }
+    const singleDay = from === to;
+    const chart = singleDay
+      ? { granularity: "hour", points: hourly(pStart, pEnd), compare: hourly(pStart - DAY, pEnd - DAY) }
+      : { granularity: "day", points: Object.values(days).map((d) => ({ label: d.d, total: r2(d.feAmount + d.rebillAmount), rebills: r2(d.rebillAmount), rebillCount: d.rebills, frontEnd: r2(d.feAmount), orders: d.new + d.rebills, scheduled: 0, scheduledAmount: 0 })) };
+
+    // vergelijking met de dag ervoor: vandaag tot nu toe (zelfde tijdstip), gisteren de hele dag ervoor
+    let compare = null;
+    if (singleDay) {
+      const cEnd = range === "today" ? now - DAY : pEnd - DAY, cStart = pStart - DAY;
+      const cRebills = rebills.filter((r) => between(r.at, cStart, cEnd));
+      const cFe = members.filter((m) => m.order && between(m.order.at, cStart, cEnd)).reduce((a, m) => a + m.order.net, 0);
+      compare = { sameTime: range === "today", rebills: cRebills.length, rebillRevenue: r2(cRebills.reduce((a, r) => a + r.amount, 0)), revenue: r2(cFe + cRebills.reduce((a, r) => a + r.amount, 0)) };
+    }
+
+    /* ---- te innen: nog openstaande afschrijvingen in de periode en de komende 7 dagen ---- */
+    const openInPeriod = billable.filter((m) => between(m.nextBilling, Math.max(now, pStart), pEnd));
+    const next7 = billable.filter((m) => between(m.nextBilling, now, now + 7 * DAY));
+    const byProvider = (list) => ({ stripe: list.filter((m) => m.provider === "stripe").length, paypal: list.filter((m) => m.provider === "paypal").length });
+    const recoveredInPeriod = pRebills.filter((r) => r.recovered).length;
+    const rebillNet = rebillRevenue - rebillFees - rebillCogs;
+
+    /* ---- rebills per cyclus (cyclus k = rebill k, verschuldigd op dag 7 + (k−1)·28) — voor de leden van wie die afschrijving in de periode viel ---- */
+    const cycleRows = [];
+    for (let k = 1; k <= Math.min(maxCycle + 1, 12); k++) {
+      const list = members.filter((m) => inPeriod(cycleEnd(m, k - 1)));
+      const paid = list.filter((m) => m.cycles >= k);
+      const canceledBefore = list.filter((m) => m.status === "canceled" && m.cycles < k);
+      const failedK = list.filter((m) => m.status === "problem" && m.cycles < k);
+      const open = list.length - paid.length - canceledBefore.length - failedK.length;
+      const rev = paid.reduce((a, m) => a + (m.rebillAmt?.[k - 1] ?? PRICE), 0);
+      const fees = paid.reduce((a, m) => a + (m.rebillAmt?.[k - 1] ?? PRICE) * REBILL_FEE_PCT + REBILL_FEE_FIXED, 0);
+      const decided = paid.length + failedK.length;
+      cycleRows.push({ k, label: `Rebill ${k}`, day: MEMBERSHIP.trialDays + (k - 1) * MEMBERSHIP.intervalDays, due: list.length, paid: paid.length, failed: failedK.length,
+        recovered: paid.filter((m) => rebills.find((r) => r.subId === m.id && r.recovered && m.rebillAt[k - 1] === r.at)).length,
+        canceledBefore: canceledBefore.length, open, successRate: decided ? r2(paid.length / decided) : null, revenue: r2(rev), net: r2(rev - fees - paid.length * REBILL_COGS) });
+      if (list.length === 0 && k > 3) { cycleRows.pop(); break; }
+    }
+
+    /* ---- rebill-gebeurtenissen in de periode: geslaagd, mislukt, nog gepland ---- */
+    const who = (m) => ({ id: m.id, name: m.name, email: m.email, provider: m.provider, order: m.order?.name || "", orderId: m.order?.id || "", status: m.status });
+    const events = [];
+    for (const r of pRebills) { const m = byId[r.subId]; if (!m) continue; events.push({ type: "paid", at: r.at, amount: r2(r.amount), cycle: m.rebillAt.indexOf(r.at) + 1 || m.cycles, next: m.nextBilling, recovered: !!r.recovered, member: who(m) }); }
+    for (const f of pFailed) { const m = byId[f.subId]; if (!m) continue; events.push({ type: "failed", at: f.at, amount: r2(f.amount), cycle: m.cycles + 1, reason: f.reason || null, attempts: f.attempts || 1, nextAttempt: f.nextAttempt || null, inRecovery: m.status === "problem", member: who(m) }); }
+    for (const m of openInPeriod) events.push({ type: "scheduled", at: m.nextBilling, amount: PRICE, cycle: m.cycles + 1, member: who(m) });
+    events.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    const eventsTotal = events.length;
+    events.splice(150);
 
     const kpis = {
       netProfit: r2(netProfit),
@@ -362,7 +427,11 @@ export default async function handler(req, res) {
       profit28: ltv28.value == null || costPerCustomer == null ? null : r2(ltv28.value - costPerCustomer),
       retention1: ret1 == null ? null : r2(ret1),
       churn: members.length ? r2(canceled / members.length) : null, canceledTotal: canceled, started: members.length,
-      failed: { count: pFailed.length, amount: r2(pFailed.reduce((a, f) => a + f.amount, 0)), attempts, rate: attempts ? r2(pFailed.length / attempts) : null },
+      failed: { count: pFailed.length, amount: r2(pFailed.reduce((a, f) => a + f.amount, 0)), attempts, rate: attempts ? r2(pFailed.length / attempts) : null, inRecovery: problem, recovered: recoveredInPeriod },
+      rebillNet: r2(rebillNet), rebillFees: r2(rebillFees), rebillCogs: r2(rebillCogs), rebillMargin: rebillRevenue > 0 ? r2(rebillNet / rebillRevenue) : null,
+      frontEnd: { revenue: r2(feRevenue), cogs: r2(feCogs), fees: r2(feFees), count: feOrders.length },
+      due: { open: openInPeriod.length, openAmount: r2(openInPeriod.length * PRICE), total: pRebills.length + pFailed.length + openInPeriod.length, ...byProvider(openInPeriod) },
+      next7: { count: next7.length, amount: r2(next7.length * PRICE), ...byProvider(next7), firstDay: next7.length ? dayStr(Math.min(...next7.map((m) => Date.parse(m.nextBilling)))) : null },
       cancellations: { period: pCancel.length, total: canceled, pending: members.filter((m) => m.cancelAtPeriodEnd && m.status !== "canceled").length },
       activeSubscribers: trial + active, trial, active, problem,
       // MRR: alle actieve abonnees, proefleden meegerekend (zij rebillen na de proef)
@@ -370,7 +439,7 @@ export default async function handler(req, res) {
     };
 
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });
