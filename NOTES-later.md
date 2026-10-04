@@ -80,3 +80,8 @@
 - API: invoices.list met expand payment_intent (decline_code), `recovered` = betaald na >1 poging; nieuwe velden compare, chart, cycleRows, events, kpis.due/next7/rebillNet/frontEnd.
 - Vervallen tegels (Winstpercentage, Orders, Subscription ROAS, Dag 7 LTV, Churn, Opzeggingen, Actieve abonnees) zitten deels in de subteksten; terugzetten kan als gewenst.
 - /members?email=… opent meteen de tijdlijn van dat lid (link vanuit de rebill-lijst).
+
+## Membership Dashboard: nieuwe subscribers, projectie 7 dagen, opzeggingen (4 okt)
+- Nieuwe rij tegels: Nieuwe subscribers (periode, met vergelijking gisteren zelfde tijd), Projectie komende 7 dagen, Opzeggingen.
+- Projectie = alle geplande afschrijvingen van nu t/m einde dag+7 (Brussel): bestaande rebills + de nieuwe subscribers van vandaag (hun rebill valt op dag 7), × €49. "Realistisch" = proefleden × huidige proef→betaald-conversie + betalende leden × huidige slaagkans volgende rebills. Opzeggers aan het einde van de cyclus tellen niet mee. Tegel "Komende 7 dagen" vervangen door deze projectie.
+- Tabel "Opzeggingen": alle opgezegde leden sinds start + wie stopt na de huidige cyclus; filters (periode, tijdens proef, na rebill, stoppen na cyclus); reden uit Stripe cancellation_details (zelf opgezegd / betaling mislukt / chargeback).

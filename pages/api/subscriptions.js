@@ -135,6 +135,7 @@ async function stripeData() {
       startedAt: iso(s.created * 1000), trialEnd: iso((s.trial_end || s.created + MEMBERSHIP.trialDays * 86400) * 1000),
       nextBilling: s.status === "canceled" ? null : iso((s.current_period_end || 0) * 1000),
       cancelAtPeriodEnd: !!s.cancel_at_period_end, canceledAt: iso((s.canceled_at || s.ended_at || 0) * 1000),
+      cancelReason: s.cancellation_details?.reason || null, cancelFeedback: s.cancellation_details?.feedback || null, cancelAt: iso((s.cancel_at || 0) * 1000),
       email: c.email || "", name: c.shipping?.name || c.name || "", cycles: 0, membershipRevenue: 0, rebillAt: [],
     });
   }
@@ -175,7 +176,7 @@ async function paypalData(ids) {
         id: s.id, provider: "paypal", status: inTrial ? "trial" : statusMap[s.status] || s.status.toLowerCase(), rawStatus: s.status,
         startedAt: iso(Date.parse(s.create_time)), trialEnd: iso(start + TRIAL_MS),
         nextBilling: ended ? null : bi.next_billing_time || null, cancelAtPeriodEnd: false,
-        canceledAt: ended ? s.status_update_time || null : null,
+        canceledAt: ended ? s.status_update_time || null : null, cancelReason: ended ? (s.status === "EXPIRED" ? "expired" : s.status_change_note ? "note" : "cancellation_requested") : null, cancelFeedback: s.status_change_note || null,
         email: s.subscriber?.email_address || "", name: [s.subscriber?.name?.given_name, s.subscriber?.name?.surname].filter(Boolean).join(" "),
         cycles, membershipRevenue: cycles * PRICE, rebillAt,
       });
@@ -373,7 +374,8 @@ export default async function handler(req, res) {
       const cEnd = range === "today" ? now - DAY : pEnd - DAY, cStart = pStart - DAY;
       const cRebills = rebills.filter((r) => between(r.at, cStart, cEnd));
       const cFe = members.filter((m) => m.order && between(m.order.at, cStart, cEnd)).reduce((a, m) => a + m.order.net, 0);
-      compare = { sameTime: range === "today", rebills: cRebills.length, rebillRevenue: r2(cRebills.reduce((a, r) => a + r.amount, 0)), revenue: r2(cFe + cRebills.reduce((a, r) => a + r.amount, 0)) };
+      const cNew = members.filter((m) => between(m.startedAt, cStart, cEnd)).length;
+      compare = { sameTime: range === "today", newMembers: cNew, rebills: cRebills.length, rebillRevenue: r2(cRebills.reduce((a, r) => a + r.amount, 0)), revenue: r2(cFe + cRebills.reduce((a, r) => a + r.amount, 0)) };
     }
 
     /* ---- te innen: nog openstaande afschrijvingen in de periode en de komende 7 dagen ---- */
@@ -400,8 +402,48 @@ export default async function handler(req, res) {
       if (list.length === 0 && k > 3) { cycleRows.pop(); break; }
     }
 
-    /* ---- rebill-gebeurtenissen in de periode: geslaagd, mislukt, nog gepland ---- */
     const who = (m) => ({ id: m.id, name: m.name, email: m.email, provider: m.provider, order: m.order?.name || "", orderId: m.order?.id || "", status: m.status });
+    /* ---- projectie komende 7 dagen: rebills die al gepland staan + de nieuwe subscribers van vandaag ----
+       venster = nu t/m het einde van dag 7 (Brussel), zodat de proef van wie vandaag instapte (rebill op dag 7) er volledig in valt */
+    const todayStr = dayStr(now);
+    const { end: winEnd } = dayBounds(todayStr, dayStr(now + 7 * DAY));
+    const startedToday = (m) => dayStr(Date.parse(m.startedAt)) === todayStr;
+    const inWin = billable.filter((m) => between(m.nextBilling, now, winEnd));
+    const projNew = inWin.filter(startedToday), projExisting = inWin.filter((m) => !startedToday(m));
+    const projTrial = projExisting.filter((m) => m.status === "trial"), projActive = projExisting.filter((m) => m.status === "active");
+    // historische kans dat een geplande afschrijving lukt: proef → rebill 1 (ret1) en rebill k≥2 (betaalde rebills / verschuldigde rebills k≥2)
+    let dueK = 0, paidK = 0;
+    for (const m of members) for (let k = 2; k <= m.cycles + 1; k++) if (now >= cycleEnd(m, k - 1)) { dueK++; if (m.cycles >= k) paidK++; }
+    const retK = dueK ? paidK / dueK : null;
+    const pTrial = ret1 ?? 0, pActive = retK ?? ret1 ?? 0;
+    const newToday = members.filter(startedToday);
+    const projection = {
+      until: dayStr(now + 7 * DAY),
+      count: inWin.length, amount: r2(inWin.length * PRICE),
+      existing: { count: projExisting.length, amount: r2(projExisting.length * PRICE), trial: projTrial.length, active: projActive.length },
+      newToday: { count: projNew.length, amount: r2(projNew.length * PRICE), signups: newToday.length },
+      expected: r2((projTrial.length + projNew.length) * PRICE * pTrial + projActive.length * PRICE * pActive),
+      trialRate: ret1 == null ? null : r2(ret1), rebillRate: retK == null ? null : r2(retK),
+    };
+
+    /* ---- alle opzeggingen (sinds start) + wie stopt na de huidige cyclus ---- */
+    const cancelList = members.filter((m) => m.status === "canceled" || m.cancelAtPeriodEnd).map((m) => {
+      const at = m.canceledAt || null;
+      const startMs = Date.parse(m.startedAt), atMs = at ? Date.parse(at) : now;
+      return { ...who(m), at, stopsAt: m.status === "canceled" ? null : m.cancelAt || m.nextBilling, pending: m.status !== "canceled",
+        startedAt: m.startedAt, days: Math.max(0, Math.floor((atMs - startMs) / DAY)), inTrial: m.cycles === 0 && atMs < Date.parse(m.trialEnd),
+        cycles: m.cycles, paid: r2(m.membershipRevenue), frontEnd: m.order ? r2(m.order.net) : null, bundle: m.order?.bundle || "",
+        reason: m.cancelReason || null, feedback: m.cancelFeedback || null, inPeriod: !!(at && inPeriod(at)) };
+    }).sort((a, b) => Date.parse(b.at || b.stopsAt || 0) - Date.parse(a.at || a.stopsAt || 0));
+    const cancelStats = {
+      total: canceled, period: pCancel.length, pending: cancelList.filter((c) => c.pending).length,
+      inTrial: cancelList.filter((c) => !c.pending && c.inTrial).length,
+      afterRebill: cancelList.filter((c) => !c.pending && c.cycles > 0).length,
+      paymentFailed: cancelList.filter((c) => c.reason === "payment_failed").length,
+      avgDays: cancelList.filter((c) => !c.pending).length ? r2(cancelList.filter((c) => !c.pending).reduce((a, c) => a + c.days, 0) / cancelList.filter((c) => !c.pending).length) : null,
+    };
+
+    /* ---- rebill-gebeurtenissen in de periode: geslaagd, mislukt, nog gepland ---- */
     const events = [];
     for (const r of pRebills) { const m = byId[r.subId]; if (!m) continue; events.push({ type: "paid", at: r.at, amount: r2(r.amount), cycle: m.rebillAt.indexOf(r.at) + 1 || m.cycles, next: m.nextBilling, recovered: !!r.recovered, member: who(m) }); }
     for (const f of pFailed) { const m = byId[f.subId]; if (!m) continue; events.push({ type: "failed", at: f.at, amount: r2(f.amount), cycle: m.cycles + 1, reason: f.reason || null, attempts: f.attempts || 1, nextAttempt: f.nextAttempt || null, inRecovery: m.status === "problem", member: who(m) }); }
@@ -432,14 +474,16 @@ export default async function handler(req, res) {
       frontEnd: { revenue: r2(feRevenue), cogs: r2(feCogs), fees: r2(feFees), count: feOrders.length },
       due: { open: openInPeriod.length, openAmount: r2(openInPeriod.length * PRICE), total: pRebills.length + pFailed.length + openInPeriod.length, ...byProvider(openInPeriod) },
       next7: { count: next7.length, amount: r2(next7.length * PRICE), ...byProvider(next7), firstDay: next7.length ? dayStr(Math.min(...next7.map((m) => Date.parse(m.nextBilling)))) : null },
-      cancellations: { period: pCancel.length, total: canceled, pending: members.filter((m) => m.cancelAtPeriodEnd && m.status !== "canceled").length },
+      cancellations: cancelStats,
+      newSubscribers: { period: newMembers.length, today: newToday.length, trialNow: trial },
+      projection,
       activeSubscribers: trial + active, trial, active, problem,
       // MRR: alle actieve abonnees, proefleden meegerekend (zij rebillen na de proef)
       mrr: r2((trial + active) * PRICE * (30 / MEMBERSHIP.intervalDays)), recurring28d: r2((trial + active) * PRICE),
     };
 
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, cancellations: cancelList.slice(0, 500), series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });
