@@ -278,7 +278,7 @@ export default function Home({ t, lang, data, nav, reload }) {
       {h.activity.length > 0 && (
         <>
           <div className="sect"><h3>{t("actTitle")}</h3><button type="button" className="lnk" onClick={() => nav("orders")}>{t("actAll")}</button></div>
-          <div className="card acts">
+          <div className="card acts" style={{ gridTemplateColumns: `repeat(${Math.max(1, h.activity.length)}, minmax(0, 1fr))` }}>
             {h.activity.map((a, k) => {
               const p = findProduct(data, a.slug), b = findBookV(data, a.slug);
               let ic = "🎁", g = false, title = "", sub = null;

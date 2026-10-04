@@ -83,8 +83,8 @@ export const HOME_CSS = `
       /* activiteit */
       .acts{display:grid;grid-template-columns:repeat(4,1fr);padding:4px 6px}
       .ac{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;padding:12px 14px;border-left:1px solid #f1ece7;min-width:0}.ac:first-child{border-left:0}
-      .aico{width:34px;height:34px;border-radius:9px;background:#fdf3ec;display:flex;align-items:center;justify-content:center;font-size:16px}.aico.g{background:#e6f2ea}
-      .ac b{display:block;font-size:14px;line-height:1.3}.ac span{font-size:12.5px;color:#888;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.ac em{font-style:normal;font-size:11.5px;color:#aaa;align-self:start;margin-top:2px;white-space:nowrap}
+      .aico{width:34px;height:34px;flex-shrink:0;line-height:1;border-radius:9px;background:#fdf3ec;display:flex;align-items:center;justify-content:center;font-size:16px}.aico.g{background:#e6f2ea}.ac .lnk{font-size:12.5px}
+      .ac b{display:block;font-size:14px;line-height:1.3}.ac div>span{font-size:12.5px;color:#888;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.ac em{font-style:normal;font-size:11.5px;color:#aaa;align-self:start;margin-top:2px;white-space:nowrap}
       /* dove trovare tutto */
       .grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
       .tile{padding:16px 14px;text-align:left;font:inherit;color:inherit;cursor:pointer;display:block}
@@ -125,7 +125,7 @@ export const HOME_CSS_MOBILE = `
         .welcome{grid-template-columns:minmax(0,1fr);padding:18px 18px 16px}.wg{grid-template-columns:1fr 1fr}
         .val{grid-template-columns:minmax(0,1fr);gap:16px;padding:20px}.vitems{grid-template-columns:minmax(0,1fr)}.vbig{font-size:44px}
         .streak{grid-template-columns:minmax(0,1fr);gap:14px;padding:16px}.sr{text-align:left;align-items:flex-start}.marks span:nth-child(1),.marks span:nth-child(3){display:none}
-        .acts{grid-template-columns:minmax(0,1fr)}.ac{border-left:0;border-top:1px solid #f1ece7}.ac:first-child{border-top:0}
+        .acts{grid-template-columns:minmax(0,1fr)!important}.ac{border-left:0;border-top:1px solid #f1ece7}.ac:first-child{border-top:0}
         .grid6{grid-template-columns:1fr 1fr}
         .ready{flex-wrap:wrap}.ready .btn{width:100%}
         .remrow{flex-direction:column;align-items:flex-start}
