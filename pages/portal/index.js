@@ -1,6 +1,7 @@
 // pages/portal/index.js — Het ledenportaal (members.getjustjenny.com).
-// Eén pagina met zijbalk; tabbladen via de URL-hash (#free, #library, #courses, #membership, #orders, #settings,
-// #claim/<product>). Gegevens komen van /api/portal/overview. Design: design/portal/03-portal-en.html.
+// Eén pagina met zijbalk; tabbladen via de URL-hash (#home, #free, #library, #courses, #membership, #orders, #settings,
+// #claim/<product>). Gegevens komen van /api/portal/overview. Design: design/portal/03-portal-en.html;
+// Home, menu en bel: design/portal/home/mock-*-v3.html (components/portal/Home.js).
 //
 // Stap 2: alles tonen (producten + wat deze cyclus al besteld is, abonnement, bestellingen, instellingen).
 // Stap 3: bestellen — S&H afrekenen via Stripe (opgeslagen kaart, 3D Secure) of PayPal + Shopify-order (lib/portal-claim.js).
@@ -12,17 +13,20 @@ import { LOGO, SUPPORT_EMAIL, post, go, onEnter } from "../../components/portal/
 import { useT, fmtDate, fmtMoney } from "../../lib/portal-i18n";
 import Library, { GiftBanner } from "../../components/portal/Library";
 import Reactivate, { REACT_CSS } from "../../components/portal/Reactivate";
+import Home, { Bell, SuggestLink } from "../../components/portal/Home";
+import { IcHome, IcGift, IcBooks, IcCap, IcHeart, IcBox, IcCog, IcLogout } from "../../components/portal/Icons";
 
 const TABS = [
-  { id: "free", icon: "🎁", label: "navFree" },
-  { id: "library", icon: "📚", label: "navLibrary" },
-  { id: "courses", icon: "🎓", label: "navCourses" },
-  { id: "membership", icon: "💚", label: "navMember" },
-  { id: "orders", icon: "📦", label: "navOrders" },
-  { id: "settings", icon: "⚙️", label: "navSettings" },
+  { id: "home", Icon: IcHome, label: "navHome" },
+  { id: "free", Icon: IcGift, label: "navFree", group: "grpBenefits" },
+  { id: "library", Icon: IcBooks, label: "navLibrary" },
+  { id: "courses", Icon: IcCap, label: "navCourses" },
+  { id: "membership", Icon: IcHeart, label: "navMember", group: "grpAccount" },
+  { id: "orders", Icon: IcBox, label: "navOrders" },
+  { id: "settings", Icon: IcCog, label: "navSettings" },
 ];
 
-const readHash = () => (typeof window === "undefined" ? "free" : (window.location.hash || "#free").slice(1) || "free");
+const readHash = () => (typeof window === "undefined" ? "home" : (window.location.hash || "#home").slice(1) || "home");
 const ptitle = (lang, p) => (lang === "it" && p.it ? p.it.title : p.title);
 const ptag = (lang, p) => (lang === "it" && p.it ? p.it.tagline : p.tagline);
 
@@ -30,7 +34,7 @@ export default function Portal() {
   const { lang, t } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
-  const [route, setRoute] = useState("free");
+  const [route, setRoute] = useState("home");
   const [menu, setMenu] = useState(false);
 
   const load = useCallback(() => {
@@ -68,15 +72,18 @@ export default function Portal() {
   else if (tab === "courses") content = <Courses t={t} lang={lang} data={data} />;
   else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} />;
   else if (tab === "orders") content = <Orders t={t} lang={lang} data={data} />;
-  else if (tab === "settings") content = <Settings t={t} data={data} reload={load} />;
-  else content = <FreeItems t={t} lang={lang} data={data} nav={nav} reload={load} />;
+  else if (tab === "settings") content = <Settings t={t} lang={lang} data={data} reload={load} />;
+  else if (tab === "free") content = <FreeItems t={t} lang={lang} data={data} nav={nav} reload={load} />;
+  else content = data.home ? <Home t={t} lang={lang} data={data} nav={nav} reload={load} /> : <FreeItems t={t} lang={lang} data={data} nav={nav} reload={load} />;
 
+  const isHome = !["free", "library", "courses", "membership", "orders", "settings", "claim", "done"].includes(tab);
   const showHelp = data && !data.ended && !["settings", "claim", "done"].includes(tab);
+  const counts = data && !data.deactivated ? { free: (data.freeItems || []).filter((p) => !p.ordered).length, library: data.library?.left || 0 } : {};
 
   return (
     <>
       <Head>
-        <title>{`${t(TABS.find((x) => x.id === activeTab)?.label || "navFree")} — Just Jenny`}</title>
+        <title>{`${t(TABS.find((x) => x.id === activeTab)?.label || "navHome")} — Just Jenny`}</title>
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <meta name="robots" content="noindex" />
       </Head>
@@ -85,21 +92,31 @@ export default function Portal() {
       <div className="app">
         <aside className={`side${menu ? " open" : ""}`}>
           <img src={LOGO} alt="Just Jenny" />
+          {m && !data?.deactivated && (
+            <div className="mcard"><div className="mc-k">Health For Life</div><div className="mc-n">{t("mcMember")}</div>
+              <div className="mc-s">{t("mcSince", { date: fmtDate(lang, data.membership?.since || m.startedAt, { day: "numeric", month: "long", year: "numeric" }) })}</div><span className="mc-dot" /></div>
+          )}
           {(data?.deactivated ? [] : TABS).map((x) => (
-            <button key={x.id} type="button" className={`nav${activeTab === x.id ? " on" : ""}`} onClick={() => nav(x.id)}>
-              <span className="ic">{x.icon}</span>{t(x.label)}
-            </button>
+            <div key={x.id}>
+              {x.group && <div className="grp">{t(x.group)}</div>}
+              <button type="button" className={`nav${(isHome ? "home" : activeTab) === x.id ? " on" : ""}`} onClick={() => nav(x.id)}>
+                <span className="ni"><x.Icon /></span>{t(x.label)}{counts[x.id] > 0 && <span className="cnt">{counts[x.id]}</span>}
+              </button>
+            </div>
           ))}
           <div className="me">
-            {m && <><b>{[m.firstName, m.lastName].filter(Boolean).join(" ")}</b>{m.email}<br /></>}
-            <button type="button" onClick={logout}>{t("logout")}</button>
+            {m && <><span className="av">{(m.firstName || m.email || "?").charAt(0).toUpperCase()}</span><span className="mt"><b>{[m.firstName, m.lastName].filter(Boolean).join(" ") || m.email}</b>{m.email}</span></>}
+            <button type="button" className="lo" onClick={logout} title={t("logout")} aria-label={t("logout")}><IcLogout /></button>
           </div>
         </aside>
         <div className={`ov${menu ? " on" : ""}`} onClick={() => setMenu(false)} />
         <div className="main">
-          <div className="mtop"><img src={LOGO} alt="Just Jenny" /><button type="button" aria-label="Menu" onClick={() => setMenu(true)}>☰</button></div>
-          <div className="wrap">
-            {!data?.deactivated && tab !== "library" && data?.library?.left > 0 && (
+          <div className="mtop"><img src={LOGO} alt="Just Jenny" /><span className="mr">{data && !data.deactivated && <Bell t={t} lang={lang} data={data} nav={nav} />}<button type="button" aria-label="Menu" onClick={() => setMenu(true)}>☰</button></span></div>
+          {data && !data.deactivated && (
+            <div className="topbar"><h1>{isHome ? t("navHome") : ""}</h1><Bell t={t} lang={lang} data={data} nav={nav} /></div>
+          )}
+          <div className={`wrap${isHome && data?.home ? " wide" : ""}`}>
+            {!data?.deactivated && !isHome && tab !== "library" && data?.library?.left > 0 && (
               <a className="ebb" href="#library" onClick={(e) => { e.preventDefault(); nav("library"); }}>
                 <span>{t("ebookBanner")}</span><b>{t("ebookBannerCta")} →</b>
               </a>
@@ -108,6 +125,7 @@ export default function Portal() {
             {showHelp && (
               <div className="card help"><div><h3>{t("helpTitle")}</h3><p>{t("helpSub")}</p></div><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></div>
             )}
+            {data && !data.deactivated && !data.ended && <SuggestLink t={t} page={isHome ? "home" : tab} />}
           </div>
         </div>
       </div>
@@ -347,10 +365,17 @@ function Orders({ t, lang, data }) {
 }
 
 // ---- Impostazioni -------------------------------------------------------------------
-function Settings({ t, data, reload }) {
+const MONTHS = (lang) => Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString(lang === "en" ? "en-GB" : "it-IT", { month: "long" }));
+
+function Settings({ t, lang, data, reload }) {
   const m = data.member;
   const [fn, setFn] = useState(m.firstName || "");
   const [ln, setLn] = useState(m.lastName || "");
+  const [bm, bd] = String(m.birthday || "").split("-");
+  const [bDay, setBDay] = useState(bd ? String(parseInt(bd, 10)) : "");
+  const [bMonth, setBMonth] = useState(bm ? String(parseInt(bm, 10)) : "");
+  const [rem, setRem] = useState(!!m.streakReminder);
+  const [remBusy, setRemBusy] = useState(false);
   const [nameMsg, setNameMsg] = useState(null);
   const [cur, setCur] = useState(""), [p1, setP1] = useState(""), [p2, setP2] = useState("");
   const [pwMsg, setPwMsg] = useState(null);
@@ -361,8 +386,16 @@ function Settings({ t, data, reload }) {
     if (!fn.trim()) return setNameMsg({ err: true, text: t("errGeneric") });
     setBusy(true);
     const r = await post("/api/portal/settings", { action: "name", firstName: fn, lastName: ln });
+    const bdOld = m.birthday || "", bdNew = bDay && bMonth ? `${String(bMonth).padStart(2, "0")}-${String(bDay).padStart(2, "0")}` : "";
+    const r2 = bdOld !== bdNew && ((bDay && bMonth) || (!bDay && !bMonth)) ? await post("/api/portal/home", { action: "birthday", day: bDay, month: bMonth }) : { ok: true };
     setBusy(false);
-    if (r.ok) { setNameMsg({ text: t("saved") }); reload(); } else setNameMsg({ err: true, text: t("errGeneric") });
+    if (r.ok && r2.ok) { setNameMsg({ text: t("saved") }); reload(); } else setNameMsg({ err: true, text: t("errGeneric") });
+  }
+  async function toggleRem() {
+    setRemBusy(true);
+    const r = await post("/api/portal/home", { action: "reminder", on: !rem });
+    setRemBusy(false);
+    if (r.ok) { setRem(!rem); reload(); }
   }
   async function savePw() {
     setPwMsg(null);
@@ -387,7 +420,19 @@ function Settings({ t, data, reload }) {
         </div>
         <label htmlFor="em">{t("emailAddress")}</label><input id="em" value={m.email} readOnly />
         <p className="note">{t("emailNote")}</p>
+        <label htmlFor="bd">{t("bdLabel")} <span className="opt">{t("optional")}</span></label>
+        <div className="bday">
+          <select id="bd" value={bDay} onChange={(e) => setBDay(e.target.value)}><option value="">{t("bdDay")}</option>{Array.from({ length: 31 }, (_, i) => <option key={i + 1} value={String(i + 1)}>{i + 1}</option>)}</select>
+          <select aria-label={t("bdMonth")} value={bMonth} onChange={(e) => setBMonth(e.target.value)}><option value="">{t("bdMonth")}</option>{MONTHS(lang).map((mn, i) => <option key={i + 1} value={String(i + 1)}>{mn}</option>)}</select>
+        </div>
+        <p className="bnote">{t("bdNote")}</p>
         <button type="button" className="btn" onClick={saveName} disabled={busy}>{t("saveChanges")}</button>
+      </div>
+      <div style={{ height: 16 }} />
+      <div className="card form"><h3>{t("remTitle")}<span className={`rem-st${rem ? " on" : ""}`}>{rem ? t("remOn") : t("remOff")}</span></h3>
+        <div className="remrow"><p>{t("remSub")}</p>
+          <button type="button" className={`btn${rem ? " ghost" : ""}`} style={{ width: "auto", fontSize: 15, padding: "10px 18px" }} onClick={toggleRem} disabled={remBusy}>{rem ? t("remTurnOff") : t("remTurnOn")}</button>
+        </div>
       </div>
       <div style={{ height: 16 }} />
       <div className="card form"><h3>{t("changePw")}</h3>

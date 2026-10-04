@@ -1,4 +1,5 @@
-// components/portal/PortalStyles.js — opmaak van het ingelogde portaal (design/portal/03-portal-en.html)
+// components/portal/PortalStyles.js — opmaak van het ingelogde portaal (design/portal/03-portal-en.html, Home: design/portal/home)
+import { SIDE_CSS, HOME_CSS, HOME_CSS_MOBILE } from "./HomeStyles";
 // Cadeau-banner (ook gebruikt op de welkomstpagina, zonder de rest van de portaal-opmaak)
 export const GIFT_CSS = `
       .gift{position:relative;display:grid;grid-template-columns:84px 1fr;gap:18px;align-items:center;background:linear-gradient(135deg,#fffdfb,#fdf3ec);border:1px solid #f1d9c9;border-radius:16px;padding:18px 20px 18px 24px;margin:0 0 22px;box-shadow:0 8px 28px rgba(223,132,85,.12);overflow:hidden}
@@ -27,13 +28,7 @@ export default function PortalStyles() {
       *{box-sizing:border-box}body{margin:0;background:#faf8f6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;font-size:17px}
       a{color:inherit}
       .app{display:flex;min-height:100vh}
-      .side{width:250px;background:#fff;border-right:1px solid #eee;padding:22px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;flex-shrink:0}
-      .side img{width:170px;max-width:100%;height:auto;margin:6px 0 28px 12px;display:block;align-self:flex-start}
-      .side .nav{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:12px;text-decoration:none;font-size:16.5px;font-weight:600;color:#444;margin-bottom:4px;cursor:pointer;background:none;border:0;font-family:inherit;text-align:left;width:100%}
-      .side .nav.on{background:#fdeee4;color:#1a1a1a}
-      .side .nav .ic{width:24px;text-align:center;font-size:18px}
-      .side .me{margin-top:auto;padding:14px 14px 4px;border-top:1px solid #eee;font-size:14px;color:#666;overflow-wrap:anywhere}.side .me b{display:block;color:#1a1a1a;font-size:15px}
-      .side .me button{background:none;border:0;padding:0;margin:8px 0 0;font:inherit;font-size:14px;color:#df8455;font-weight:700;cursor:pointer}
+      ${SIDE_CSS}
       .mtop{display:none;background:#fff;border-bottom:1px solid #eee;padding:12px 16px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
       .mtop img{width:150px;max-width:60%;height:auto;display:block}.mtop button{background:none;border:1px solid #ddd;border-radius:10px;font-size:22px;padding:4px 10px;cursor:pointer}
       .main{flex:1;min-width:0}
@@ -108,6 +103,7 @@ export default function PortalStyles() {
       .center{min-height:60vh;display:flex;align-items:center;justify-content:center;color:#777;text-align:center;padding:20px}
       .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:15}.ov.on{display:block}
       ${GIFT_CSS}
+      ${HOME_CSS}
       .bg{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
       .bk{overflow:hidden;display:flex;flex-direction:column}
       .bk .bcov{position:relative;background:#f3ede8;display:flex;justify-content:center;padding:18px 18px 0}.bk .bcov img{width:150px;height:200px;object-fit:cover;border-radius:8px 8px 0 0;box-shadow:0 -4px 16px rgba(0,0,0,.12)}
@@ -117,6 +113,7 @@ export default function PortalStyles() {
       .btn.sec{background:#fff;color:#df8455;border:2px solid #df8455}.btn.sec:hover{background:#fdf3ec}
       @media(max-width:800px){
         ${GIFT_CSS_MOBILE}
+        ${HOME_CSS_MOBILE}
         .bg{grid-template-columns:1fr}
         .side{position:fixed;left:-270px;top:0;bottom:0;z-index:20;transition:left .2s;box-shadow:0 0 30px rgba(0,0,0,.15)}.side.open{left:0}
         .mtop{display:flex}.wrap{padding:22px 16px 50px}h1{font-size:25px}.sub{font-size:17px}.ebb{margin:0 0 16px;font-size:14px;padding:10px 12px}

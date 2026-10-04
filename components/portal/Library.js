@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { post } from "./AuthShell";
 import { fmtDate } from "../../lib/portal-i18n";
+import { Confetti } from "./Home";
 
 const btitle = (lang, b) => (lang === "it" ? b.it : b.en || b.it).title;
 const bdesc = (lang, b) => (lang === "it" ? b.it : b.en || b.it).desc;
@@ -29,18 +30,20 @@ export function GiftBanner({ t, lang, data, reload }) {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
-  if (!g || g.claimed || done) return null;
+  const [party, setParty] = useState(false); // confetti bij het eerste downloaden van het cadeau
+  if (!g || done || (g.claimed && !party)) return null;
   const book = data.library?.books?.find((b) => b.slug === g.slug);
-  if (!book || book.unlocked) return null;
+  if (!book || (book.unlocked && !party)) return null;
   const title = btitle(lang, book);
   return (
     <div className="gift">
+      {party && <Confetti />}
       <img src={book.cover} alt={title} />
       <div className="gb">
         <div className="gk">🎁 {t("giftTitle")}</div>
         <b>{t("giftSub", { title })}</b>
         <div className="gl">{t("giftNote")}</div>
-        <button type="button" className="btn" disabled={!!busy} onClick={async () => { const ok = await openBook(g.slug, t, lang, setErr, setBusy); if (ok) { setDone(true); reload && reload(); } }}>{busy ? t("libOpening") : t("giftBtn")}</button>
+        <button type="button" className="btn" disabled={!!busy} onClick={async () => { const ok = await openBook(g.slug, t, lang, setErr, setBusy); if (ok) { setParty(true); setTimeout(() => { setDone(true); reload && reload(); }, 5000); } }}>{busy ? t("libOpening") : t("giftBtn")}</button>
         {err && <div className="claim-err" style={{ marginTop: 10 }}>{err}</div>}
       </div>
     </div>

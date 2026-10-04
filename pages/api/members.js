@@ -2,6 +2,7 @@
 //
 // GET /api/members            → { success, members: [...], summary, generatedAt }
 // GET /api/members?email=…    → { success, member, log }   (detail + tijdlijn)
+// GET /api/members?suggestions=1 → { success, suggestions }  (ideeën van leden uit het portaal)
 //
 // Bronnen: ledenrecords in Redis (portal) · live abonnementen uit /api/subscriptions (Stripe + PayPal) ·
 // Shopify-orders met tag portal-order (gratis producten) en upsell-1plus1.
@@ -9,6 +10,7 @@ import crypto from "crypto";
 import { listMemberEmails, getMember } from "../../lib/portal-members";
 import { getLog } from "../../lib/portal-activity";
 import { getRegift, regiftView } from "../../lib/portal-regift";
+import { listSuggestions, getStreak } from "../../lib/portal-home";
 import { redis, getJson, storeConfigured } from "../../lib/portal-store";
 import { shopifyGraphql } from "../../lib/shopify-admin";
 import { normEmail } from "../../lib/portal-auth";
@@ -82,16 +84,19 @@ export default async function handler(req, res) {
   const now = Date.now();
 
   try {
+    // ---- ideeën van leden ----
+    if (req.query.suggestions) return res.status(200).json({ success: true, suggestions: await listSuggestions(200) });
+
     // ---- detail ----
     if (req.query.email) {
       const email = normEmail(req.query.email);
       const m = await getMember(email);
       if (!m) return res.status(404).json({ success: false, error: "Not found" });
       const { password, ...rest } = m;
-      const [log, lib, gift, regift] = await Promise.all([
-        getLog(email), redis(["SMEMBERS", `portal:lib:${email}`]).catch(() => []), getJson(`portal:gift:${email}`).catch(() => null), getRegift(email).catch(() => null),
+      const [log, lib, gift, regift, streak] = await Promise.all([
+        getLog(email), redis(["SMEMBERS", `portal:lib:${email}`]).catch(() => []), getJson(`portal:gift:${email}`).catch(() => null), getRegift(email).catch(() => null), getStreak(email).catch(() => null),
       ]);
-      return res.status(200).json({ success: true, member: { ...rest, hasPassword: !!password?.hash, ebooks: lib || [], giftClaimedAt: gift?.claimedAt || null, regift: regift || null }, log: log.sort((a, b) => (a.at < b.at ? 1 : -1)) });
+      return res.status(200).json({ success: true, member: { ...rest, hasPassword: !!password?.hash, ebooks: lib || [], giftClaimedAt: gift?.claimedAt || null, regift: regift || null, streak: streak ? { current: streak.current, best: streak.best, lastDay: streak.lastDay } : null }, log: log.sort((a, b) => (a.at < b.at ? 1 : -1)) });
     }
 
     // ---- lijst ----

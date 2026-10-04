@@ -57,7 +57,7 @@ function toCsv(rows) {
   return [head.join(","), ...lines].join("\n");
 }
 
-const EVENT_LABEL = { registered: "Aangemeld (eerste betaling)", login: "Ingelogd", password_set: "Wachtwoord gekozen", claim: "Gratis product besteld", ebook: "E-book ontgrendeld", rebill: "Rebill betaald", cancelled: "Opgezegd", reactivated: "Membership hervat" };
+const EVENT_LABEL = { registered: "Aangemeld (eerste betaling)", login: "Ingelogd", password_set: "Wachtwoord gekozen", claim: "Gratis product besteld", ebook: "E-book ontgrendeld", rebill: "Rebill betaald", cancelled: "Opgezegd", reactivated: "Membership hervat", streak_reward: "Streak-cadeau klaargezet", streak_saver: "Streak saver gebruikt", birthday_gift: "Verjaardagscadeau klaargezet", suggestion: "Idee ingestuurd" };
 
 function Detail({ email, onClose }) {
   const [d, setD] = useState(null);
@@ -81,7 +81,7 @@ function Detail({ email, onClose }) {
               <div><b>Laatste betaling:</b> {fmtDT(m.lastPaymentAt)} {m.lastPaymentAmount != null ? `(${eur(m.lastPaymentAmount)})` : ""} · <b>rebills:</b> {m.rebills || 0} · <b>totaal rebills:</b> {eur(m.totalPaid || 0)}</div>
               <div><b>Adres:</b> {m.address ? `${m.address.address1 || ""}, ${m.address.zip || ""} ${m.address.city || ""}${m.address.province ? ` (${m.address.province})` : ""}` : "—"} · <b>tel:</b> {m.phone || "—"}</div>
               <div><b>Welkomstlink geopend:</b> {fmtDT(m.welcomeOpenedAt)} · <b>wachtwoord:</b> {m.hasPassword ? `ja (${fmtDT(m.passwordSetAt)})` : "nee"}</div>
-              <div><b>Eerste login:</b> {fmtDT(m.firstLoginAt)} · <b>laatste:</b> {fmtDT(m.lastLoginAt)} · <b>logins:</b> {m.loginCount || 0} · <b>laatst actief:</b> {fmtDT(m.lastSeenAt)}</div>
+              <div><b>Eerste login:</b> {fmtDT(m.firstLoginAt)} · <b>laatste:</b> {fmtDT(m.lastLoginAt)} · <b>logins:</b> {m.loginCount || 0} · <b>laatst actief:</b> {fmtDT(m.lastSeenAt)}{m.streak ? <> · <b>login-streak:</b> {m.streak.current} (beste {m.streak.best})</> : null}{m.birthday ? <> · <b>verjaardag:</b> {m.birthday.split("-").reverse().join("/")}</> : null}</div>
               <div><b>E-books ontgrendeld:</b> {m.ebooks?.length ? m.ebooks.join(", ") : "geen"} · <b>welkomstcadeau:</b> {m.giftClaimedAt ? fmtDT(m.giftClaimedAt) : "niet opgehaald"}</div>
               {m.regift && <div><b>Regalo heractivering:</b> toegekend {fmtDT(m.regift.grantedAt)} · e-book {m.regift.ebookUsedAt ? `gebruikt (${m.regift.ebookSlug})` : "nog open"} · tegoed {m.regift.creditUsedAt ? `gebruikt op ${m.regift.creditFor} (${m.regift.creditOrder})` : "nog open"}</div>}
             </div>
@@ -187,7 +187,28 @@ export default function Members() {
           </div>
         </>
       )}
+      <Suggestions />
       {open && <Detail email={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+// Ideeën/verzoeken die leden via "Hai un'idea…?" in het portaal insturen
+function Suggestions() {
+  const [list, setList] = useState(null);
+  useEffect(() => { fetch("/api/members?suggestions=1").then((r) => r.json()).then((d) => setList(d.success ? d.suggestions : [])).catch(() => setList([])); }, []);
+  return (
+    <div style={{ ...ui.card, padding: "18px 22px", marginTop: "20px" }}>
+      <div style={{ fontWeight: 800, fontSize: "15px" }}>💡 Ideeën van leden</div>
+      <div style={{ fontSize: "12px", color: "#8a92a3", marginBottom: "10px" }}>ingestuurd via "Hai un'idea per la tua area membri?" onderaan het portaal · nieuwste eerst</div>
+      {list === null && <div style={{ color: "#b6bdc9", fontSize: "13px" }}>Laden…</div>}
+      {list && list.length === 0 && <div style={{ color: "#8a92a3", fontSize: "13px" }}>Nog geen ideeën ingestuurd.</div>}
+      {list && list.map((s, i) => (
+        <div key={i} style={{ padding: "10px 0", borderTop: i ? "1px solid #f1f3f6" : "none", fontSize: "13.5px" }}>
+          <div style={{ color: "#8a92a3", fontSize: "12px", marginBottom: "3px" }}>{new Date(s.at).toLocaleString("nl-BE", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })} · <b style={{ color: "#0f172a" }}>{s.name || s.email}</b> · {s.email}{s.page ? ` · ${s.page}` : ""}</div>
+          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{s.text}</div>
+        </div>
+      ))}
     </div>
   );
 }
