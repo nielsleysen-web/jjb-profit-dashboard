@@ -190,42 +190,6 @@ function EventsTable({ events, total, storeHandle, periodLabel }) {
   );
 }
 
-const REASON = { cancellation_requested: "zelf opgezegd", payment_failed: "betaling mislukt", payment_disputed: "chargeback", expired: "verlopen", note: "opgezegd via PayPal" };
-function CancelTable({ rows, stats, periodLabel, storeHandle }) {
-  const [view, setView] = useState("all");
-  const list = rows.filter((r) => view === "all" || (view === "period" ? r.inPeriod : view === "pending" ? r.pending : view === "trial" ? !r.pending && r.inTrial : !r.pending && r.cycles > 0));
-  const tabs = [["all", `Alle ${rows.length}`], ["period", `${periodLabel} ${rows.filter((r) => r.inPeriod).length}`], ["trial", `Tijdens proef ${stats.inTrial}`], ["rebill", `Na rebill ${stats.afterRebill}`], ["pending", `Stoppen na cyclus ${stats.pending}`]];
-  return (
-    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
-        <div><div style={{ fontWeight: 800, fontSize: "15px" }}>Opzeggingen</div><div style={{ fontSize: "12px", color: "#8a92a3" }}>alle opgezegde leden sinds start (Stripe + PayPal), plus wie al opzegde maar nog tot het einde van de cyclus loopt</div></div>
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>{tabs.map(([key, l]) => <button key={key} style={ui.btn(view === key)} onClick={() => setView(key)}>{l}</button>)}</div>
-      </div>
-      <div style={{ overflowX: "auto", maxHeight: "520px", overflowY: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ position: "sticky", top: 0, background: "#fff" }}><tr>{["Opgezegd op", "Lid", "Via", "Gestart", "Na", "Reden", "Membership betaald", "Front-end order"].map((h, i) => <th key={h} style={{ ...ui.th, textAlign: i === 6 ? "right" : "left" }}>{h}</th>)}</tr></thead>
-          <tbody>
-            {list.map((r) => (
-              <tr key={r.id} style={r.inPeriod ? { background: "#fff7f7" } : undefined}>
-                <td style={ui.td}>{r.pending ? <><Chip tone="amber">stopt {fmtD(r.stopsAt)}</Chip></> : fmtDT(r.at)}</td>
-                <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "180px" }}><a href={`/members?email=${encodeURIComponent(r.email)}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{r.name || r.email || "—"}</a> <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.email}</span></td>
-                <td style={ui.td}>{r.provider === "paypal" ? "PayPal" : "Stripe"}</td>
-                <td style={ui.td}>{fmtDY(r.startedAt)}</td>
-                <td style={ui.td}>{r.inTrial ? <Chip tone="gray">proef · dag {r.days}</Chip> : <>{r.cycles} rebill{r.cycles === 1 ? "" : "s"} · dag {r.days}</>}</td>
-                <td style={{ ...ui.td, whiteSpace: "normal" }}>{r.reason ? <Chip tone={r.reason === "payment_failed" || r.reason === "payment_disputed" ? "red" : "gray"}>{REASON[r.reason] || r.reason}</Chip> : <span style={{ color: "#c3c9d3" }}>—</span>}{r.feedback ? <div style={{ fontSize: "11px", color: "#8a92a3", marginTop: "2px" }}>{r.feedback}</div> : null}</td>
-                <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(r.paid)}</td>
-                <td style={ui.td}>{r.order ? <><a href={`https://admin.shopify.com/store/${storeHandle}/orders/${r.orderId}`} target="_blank" rel="noreferrer" style={{ color: "#4f6df5", fontWeight: 700, textDecoration: "none" }}>{r.order}</a> <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.bundle}{r.frontEnd != null ? ` · ${eur(r.frontEnd)}` : ""}</span></> : <span style={{ color: "#b6bdc9" }}>—</span>}</td>
-              </tr>
-            ))}
-            {list.length === 0 && <tr><td colSpan={8} style={{ ...ui.td, color: "#8a92a3" }}>Geen opzeggingen in deze selectie.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "10px" }}>Rood gemarkeerd = opgezegd in de gekozen periode ({periodLabel.toLowerCase()}). Reden komt uit Stripe (zelf opgezegd / betaling mislukt / chargeback); bij PayPal enkel de status.</div>
-    </div>
-  );
-}
-
 function Cohorts({ week, month }) {
   const [mode, setMode] = useState("week");
   const rows = mode === "week" ? week : month;
@@ -362,7 +326,6 @@ export default function Subscriptions() {
 
           <CycleTable rows={data.cycleRows || []} periodLabel={periodLabel} />
           <EventsTable events={data.events || []} total={data.eventsTotal || 0} storeHandle={data.storeHandle} periodLabel={periodLabel} />
-          <CancelTable rows={data.cancellations || []} stats={k.cancellations} periodLabel={periodLabel} storeHandle={data.storeHandle} />
 
           <Cohorts week={data.cohortsWeek} month={data.cohortsMonth} />
 

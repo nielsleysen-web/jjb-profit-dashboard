@@ -129,6 +129,9 @@ async function stripeData() {
   let n = 0;
   for await (const s of stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer"] })) {
     if (++n > 5000) break;
+    // Front-end betaling nooit gelukt (kaart geweigerd op de checkout) → nooit klant geworden: niet meetellen.
+    // Mislukte rebills hebben status past_due/unpaid en blijven wel staan.
+    if (s.status === "incomplete" || s.status === "incomplete_expired") continue;
     const c = typeof s.customer === "object" ? s.customer : {};
     members.push({
       id: s.id, provider: "stripe", status: statusMap[s.status] || s.status, rawStatus: s.status,
@@ -162,6 +165,7 @@ async function paypalData(ids) {
     const batch = await Promise.all(ids.slice(i, i + 8).map((id) => pp("get", `/v1/billing/subscriptions/${id}`).catch(() => null)));
     for (const s of batch) {
       if (!s) continue;
+      if (s.status === "APPROVAL_PENDING") continue; // PayPal-checkout nooit afgerond (front-end niet betaald)
       const bi = s.billing_info || {};
       const regular = (bi.cycle_executions || []).find((c) => c.tenure_type === "REGULAR");
       const cycles = regular?.cycles_completed || 0;
@@ -426,7 +430,7 @@ export default async function handler(req, res) {
       trialRate: ret1 == null ? null : r2(ret1), rebillRate: retK == null ? null : r2(retK),
     };
 
-    /* ---- alle opzeggingen (sinds start) + wie stopt na de huidige cyclus ---- */
+    /* ---- opzeggingen (voor de tegel): opgezegd sinds start + wie stopt na de huidige cyclus ---- */
     const cancelList = members.filter((m) => m.status === "canceled" || m.cancelAtPeriodEnd).map((m) => {
       const at = m.canceledAt || null;
       const startMs = Date.parse(m.startedAt), atMs = at ? Date.parse(at) : now;
@@ -483,7 +487,7 @@ export default async function handler(req, res) {
     };
 
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, cancellations: cancelList.slice(0, 500), series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });
