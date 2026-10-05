@@ -27,7 +27,7 @@ export const REACT_CSS = `
 `;
 
 export default function Reactivate({ t, lang, data, reload }) {
-  const reason = data.deactivatedReason; // "payment_failed" | "cancelled"
+  const reason = data.deactivatedReason; // "payment_failed" | "cancelled" | "paused"
   const provider = data.membership?.provider;
   const [cfg, setCfg] = useState(null);
   const [mode, setMode] = useState(provider === "paypal" ? "paypal" : "card"); // card | paypal
@@ -98,6 +98,19 @@ export default function Reactivate({ t, lang, data, reload }) {
     const r = await post("/api/portal/reactivate", { action: "paypal" });
     if (r.ok && r.url) { window.location.href = r.url; return; }
     setErr(t(errKey(r.error))); setBusy(false);
+  }
+
+  // Gepauzeerd door customer service: geen betaalscherm, alleen uitleg + einddatum
+  if (reason === "paused") {
+    const until = data.pausedUntil ? new Date(data.pausedUntil).toLocaleDateString(lang === "it" ? "it-IT" : "en-GB", { day: "numeric", month: "long", year: "numeric" }) : "";
+    return (
+      <div className="rx">
+        <div className="badge">⏸ {t("rxBadge")}</div>
+        <h1>{t("rxTitlePaused")}</h1>
+        <p className="why">{t("rxWhyPaused", { date: until })}</p>
+        <p className="fine" style={{ textAlign: "left" }}>{t("rxPausedHelp", { email: SUPPORT_EMAIL })}</p>
+      </div>
+    );
   }
 
   if (done) {

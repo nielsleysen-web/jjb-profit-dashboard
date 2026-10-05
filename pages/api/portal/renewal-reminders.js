@@ -22,6 +22,7 @@ import { createLoginLink, normEmail } from "../../../lib/portal-auth";
 import { redis, storeConfigured } from "../../../lib/portal-store";
 import { trackEvent, klaviyoConfigured } from "../../../lib/klaviyo";
 import { MEMBERSHIP } from "../../../lib/checkout";
+import { resumeDuePauses } from "../../../lib/membership-actions";
 
 export const config = { maxDuration: 60 };
 
@@ -80,6 +81,8 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (!authorized(req)) return res.status(401).json({ success: false, error: "No access" });
   if (!storeConfigured()) return res.status(400).json({ success: false, error: "UPSTASH_REDIS_REST_URL / _TOKEN ontbreekt" });
+  // Pauzes van customer service die vandaag aflopen: PayPal weer activeren (Stripe hervat zelf)
+  const resumed = req.query.dry === "1" || req.query.test ? [] : await resumeDuePauses().catch((e) => { console.warn("resume pauses:", e.message); return []; });
   if (!klaviyoConfigured()) return res.status(400).json({ success: false, error: "KLAVIYO_PRIVATE_KEY ontbreekt" });
 
   try {
@@ -107,6 +110,7 @@ export default async function handler(req, res) {
           const m = await getMember(email);
           if (!m) continue;
           if (m.test) { skipped.push({ email, reason: "testlid" }); continue; }
+          if (m.pausedUntil && Date.parse(m.pausedUntil) > now) { skipped.push({ email, reason: "gepauzeerd" }); continue; }
           const n = await nextCharge(m);
           if (!n.renews) { skipped.push({ email, reason: `geen verlenging (${n.status || "onbekend"})` }); continue; }
           if (!n.at) { skipped.push({ email, reason: "datum onbekend" }); continue; }
@@ -130,7 +134,7 @@ export default async function handler(req, res) {
     await Promise.all(Array.from({ length: 4 }, worker));
 
     console.log(`portal renewal-reminders: ${dry ? "dry " : ""}${dry ? due.length : sent.length} due, ${errors.length} errors`);
-    return res.status(200).json({ success: true, dryRun: dry, members: emails.length, window: `${MIN_H}-${MAX_H}u`, ...(dry ? { due } : { sent }), skipped, errors });
+    return res.status(200).json({ success: true, dryRun: dry, resumedPauses: resumed, members: emails.length, window: `${MIN_H}-${MAX_H}u`, ...(dry ? { due } : { sent }), skipped, errors });
   } catch (e) {
     console.error("portal renewal-reminders:", e.message);
     return res.status(500).json({ success: false, error: e.message });

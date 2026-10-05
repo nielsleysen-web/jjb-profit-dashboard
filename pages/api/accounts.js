@@ -16,7 +16,7 @@ import crypto from "crypto";
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 
-const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor", "Media Buyer"];
+const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor", "Media Buyer", "Membership CS Rep"];
 
 /* ---------------- sessie check ---------------- */
 function getSession(req) {

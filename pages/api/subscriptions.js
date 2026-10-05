@@ -19,6 +19,8 @@ import Stripe from "stripe";
 import { MEMBERSHIP } from "../../lib/checkout";
 import { shopifyGraphql } from "../../lib/shopify-admin";
 import { pp, paypalConfigured } from "../../lib/paypal";
+import { canMembership } from "../../lib/dashboard-session";
+import { getPauses, getCancellations } from "../../lib/membership-actions";
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 function getSession(req) {
@@ -134,7 +136,8 @@ async function stripeData() {
     if (s.status === "incomplete" || s.status === "incomplete_expired") continue;
     const c = typeof s.customer === "object" ? s.customer : {};
     members.push({
-      id: s.id, provider: "stripe", status: statusMap[s.status] || s.status, rawStatus: s.status,
+      id: s.id, provider: "stripe", status: s.pause_collection && s.status !== "canceled" ? "paused" : statusMap[s.status] || s.status, rawStatus: s.status,
+      pausedUntil: s.pause_collection?.resumes_at ? iso(s.pause_collection.resumes_at * 1000) : null,
       startedAt: iso(s.created * 1000), trialEnd: iso((s.trial_end || s.created + MEMBERSHIP.trialDays * 86400) * 1000),
       nextBilling: s.status === "canceled" ? null : iso((s.current_period_end || 0) * 1000),
       cancelAtPeriodEnd: !!s.cancel_at_period_end, canceledAt: iso((s.canceled_at || s.ended_at || 0) * 1000),
@@ -234,7 +237,7 @@ export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   try {
     const s = getSession(req);
-    if (!s || !(s.finance || s.admin)) return res.status(401).json({ success: false, error: "No access" });
+    if (!canMembership(s)) return res.status(401).json({ success: false, error: "No access" });
 
     const range = String(req.query.range || "today");
     const { from, to } = period(range);
@@ -253,8 +256,16 @@ export default async function handler(req, res) {
     for (const r of st.rebills) (bySub[r.subId] = bySub[r.subId] || []).push(r);
     for (const m of st.members) { const list = (bySub[m.id] || []).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); m.cycles = list.length; m.membershipRevenue = list.reduce((a, r) => a + r.amount, 0); m.rebillAt = list.map((r) => r.at); m.rebillAmt = list.map((r) => r.amount); }
 
+    // CS-acties: pauzes (PayPal: SUSPENDED door ons = gepauzeerd) en opzeggingsgegevens
+    const [pauses, csCancels] = await Promise.all([getPauses().catch(() => ({})), getCancellations().catch(() => ({}))]);
+    for (const m of py.members) {
+      const p = pauses[m.id];
+      if (p && m.rawStatus === "SUSPENDED") { m.status = "paused"; m.pausedUntil = p.until; }
+    }
     const members = [...st.members, ...py.members].map((m) => {
       const o = orders[m.id];
+      if (pauses[m.id] && m.status === "paused") m.pauseDays = pauses[m.id].days;
+      if (csCancels[m.id]) m.csCancellation = csCancels[m.id];
       return { ...m, email: m.email || o?.email || "", name: m.name || o?.name || "", order: o ? { name: o.orderName, id: o.orderId, at: o.orderAt, net: r2(o.net), gross: r2(o.gross), refunded: r2(o.refunded), fees: r2(o.fees), cogs: r2(o.cogs), bundle: o.bundle, city: o.city, campaign: o.campaign } : null };
     }).sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
     const rebills = [...st.rebills, ...py.rebills];
@@ -320,7 +331,7 @@ export default async function handler(req, res) {
       const started = members.filter((m) => m.cycles >= k);
       const ended = started.filter((m) => now >= cycleEnd(m, k) || droppedAt(m, now) === k);
       const dropped = ended.filter((m) => m.cycles < k + 1);
-      cyclesOut.push({ k, label: k === 0 ? `Proef (dag 0–${MEMBERSHIP.trialDays})` : `Cyclus ${k} (dag ${MEMBERSHIP.trialDays + (k - 1) * MEMBERSHIP.intervalDays}–${MEMBERSHIP.trialDays + k * MEMBERSHIP.intervalDays})`,
+      cyclesOut.push({ k, label: k === 0 ? `Trial (day 0–${MEMBERSHIP.trialDays})` : `Cycle ${k} (day ${MEMBERSHIP.trialDays + (k - 1) * MEMBERSHIP.intervalDays}–${MEMBERSHIP.trialDays + k * MEMBERSHIP.intervalDays})`,
         started: started.length, ended: ended.length, dropped: dropped.length, dropRate: ended.length ? dropped.length / ended.length : null,
         continued: members.filter((m) => m.cycles >= k + 1).length, pending: started.length - ended.length });
       if (started.length === 0) break;

@@ -15,6 +15,7 @@ import { redis, getJson, storeConfigured } from "../../lib/portal-store";
 import { shopifyGraphql } from "../../lib/shopify-admin";
 import { normEmail } from "../../lib/portal-auth";
 import { BUNDLES, MEMBERSHIP } from "../../lib/checkout";
+import { canMembership } from "../../lib/dashboard-session";
 
 export const config = { maxDuration: 60 };
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
@@ -79,7 +80,7 @@ function tenure(m, now) {
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   const s = getSession(req);
-  if (!s || !(s.admin || s.finance)) return res.status(401).json({ success: false, error: "No access" });
+  if (!canMembership(s)) return res.status(401).json({ success: false, error: "No access" });
   if (!storeConfigured()) return res.status(500).json({ success: false, error: "Portal store not configured" });
   const now = Date.now();
 
@@ -123,6 +124,7 @@ export default async function handler(req, res) {
           email: e, name: [m.firstName, m.lastName].filter(Boolean).join(" "), provider: L?.provider || m.provider || "",
           bundle: m.bundle || null, bundleLabel: BUNDLES[m.bundle]?.label || "", firstOrder: m.shopifyOrder || "",
           startedAt: t.startedAt, days: t.days, cycle: t.cycle, trialEnd, nextBilling: L?.nextBilling || m.nextChargeAt || null,
+          subscriptionId: L?.id || m.subscriptionId || "", pausedUntil: L?.pausedUntil || (m.pausedUntil && Date.parse(m.pausedUntil) > now ? m.pausedUntil : null), csCancellation: L?.csCancellation || m.csCancellation || null,
           status, cancelAtPeriodEnd: !!L?.cancelAtPeriodEnd, canceledAt: L?.canceledAt || m.cancelledAt || null, reactivatedAt: m.reactivatedAt || null,
           rebills: L?.cycles ?? m.rebills ?? 0, membershipRevenue: L?.membershipRevenue ?? m.totalPaid ?? 0, firstAmount: m.lastPaymentAmount && !m.rebills ? m.lastPaymentAmount : null,
           welcomeOpenedAt: m.welcomeOpenedAt || null, hasPassword: !!m.password?.hash, passwordSetAt: m.passwordSetAt || null,
@@ -145,6 +147,7 @@ export default async function handler(req, res) {
       trial: inTrial.length,
       canceled: members.filter((m) => m.status === "canceled").length,
       problem: members.filter((m) => m.status === "problem").length,
+      paused: members.filter((m) => m.status === "paused").length,
       withClaim: members.filter((m) => m.claims > 0).length,
       withEbook: members.filter((m) => m.ebooks > 0).length,
       withUpsell: members.filter((m) => !!m.upsell).length,

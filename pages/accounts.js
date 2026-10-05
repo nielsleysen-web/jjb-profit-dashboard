@@ -34,7 +34,7 @@ const STATUS_STYLE = {
   disabled: { text: "Blocked", color: "#991b1b", bg: "#fee2e2" },
 };
 
-const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor", "Media Buyer"];
+const ROLES = ["Funnel Builder", "Creative Strategist", "Graphic Designer", "Store Manager", "Video Editor", "Media Buyer", "Membership CS Rep"];
 
 // Uitnodiging versturen vanuit je eigen mailprogramma (Gmail/Outlook/Mail).
 // Geen mailservice nodig: dit opent een klaargeschreven mail, jij klikt Verzenden.

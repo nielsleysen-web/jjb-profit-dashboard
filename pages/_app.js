@@ -33,7 +33,7 @@ const CATEGORIES = [
   },
   {
     name: "Membership",
-    perm: "finance",
+    perm: "membership",
     items: [
       { href: "/subscriptions", label: "Membership Dashboard", icon: "💚" },
       { href: "/members", label: "Members", icon: "🧑‍🤝‍🧑" },
@@ -196,6 +196,8 @@ export default function App({ Component, pageProps }) {
         // wordt per asset bepaald (toegangsbeheer in de Assets-pagina zelf)
         assets: true,
         mediabuying: user.admin || userRoles.includes("Media Buyer"),
+        // Membership (dashboard + members): admin/finance of de rol Membership CS Rep
+        membership: user.admin || user.finance || userRoles.includes("Membership CS Rep"),
         creatives:
           user.admin ||
           userRoles.includes("Creative Strategist") ||
