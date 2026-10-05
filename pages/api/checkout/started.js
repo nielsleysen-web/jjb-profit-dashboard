@@ -1,9 +1,11 @@
 // pages/api/checkout/started.js — Abandoned checkout: het e-mailadres zodra de klant het op de checkout invult.
 //
-// POST { email, pack, first_name?, track?, gift?, code? }
+// POST { email, pack, first_name?, track?, gift?, bonus? }
 //   → Klaviyo-event "Started Checkout" met twee persoonlijke terugkeerlinks:
 //       checkout_url        terug naar de checkout (zelfde bundel, e-mail ingevuld, oorspronkelijke advertentie-tracking)
-//       checkout_url_gift   idem + kortingscode (automatisch toegepast) + "secret gift" (gratis e-book), voor mail 2
+//       checkout_url_gift   idem + kortingscode (automatisch toegepast) + "secret gift" (gratis e-book), voor mail 1
+//       checkout_url_bonus  idem + 1 flacone in omaggio + "secret gift" (zonder kortingscode), voor mail 2
+//   bonus: true → bij de order komt er een gratis 1x NeuroTone bij (lib/checkout-bonus.js)
 //   De Klaviyo-flow (trigger "Started Checkout") stuurt mail 1 na 5 min en mail 2 na 1 uur, en stopt zodra
 //   "Checkout Completed" binnenkomt (zie lib/klaviyo.js → syncNewMember).
 //   gift: true → de klant kwam terug via mail 2; bij de aankoop krijgt het lid een willekeurig e-book in het portaal
@@ -39,9 +41,12 @@ export default async function handler(req, res) {
       if ((await bump(`checkout:rl:em:${email}`, 3600)) > 4) return res.status(200).json({ ok: true });
     }
     // Terug via mail 2: alleen het cadeau onthouden (geen nieuw event, anders start de flow opnieuw)
-    if (b.gift) {
-      if (storeConfigured()) await redis(["SET", `checkout:gift:${email}`, "1", "EX", String(30 * 86400)]);
-      return res.status(200).json({ ok: true, gift: true });
+    if (b.gift || b.bonus) {
+      if (storeConfigured()) {
+        if (b.gift) await redis(["SET", `checkout:gift:${email}`, "1", "EX", String(30 * 86400)]);
+        if (b.bonus) await redis(["SET", `checkout:bonus:${email}`, "1", "EX", String(30 * 86400)]);
+      }
+      return res.status(200).json({ ok: true, gift: !!b.gift, bonus: !!b.bonus });
     }
     if (!klaviyoConfigured()) return res.status(200).json({ ok: true });
 
@@ -55,6 +60,10 @@ export default async function handler(req, res) {
     const gift = new URL(url);
     gift.searchParams.set("code", RECOVERY_CODE);
     gift.searchParams.set("gift", "1");
+    // Mail 2: 1 flacone in omaggio + regalo segreto (geen kortingscode)
+    const bonus = new URL(url);
+    bonus.searchParams.set("bonus", "1");
+    bonus.searchParams.set("gift", "1");
 
     // Eén event per adres per half uur (dubbele invoer/verversen telt niet opnieuw)
     const slot = Math.floor(Date.now() / (30 * 60000));
@@ -68,6 +77,7 @@ export default async function handler(req, res) {
       image_url: IMG + PACK_IMG[pack],
       checkout_url: url.toString(),
       checkout_url_gift: gift.toString(),
+      checkout_url_bonus: bonus.toString(),
       discount_code: RECOVERY_CODE,
     }, { value: bundle.price / 100, uniqueId: `checkout-${email}-${slot}` });
     return res.status(200).json({ ok: true });

@@ -18,6 +18,7 @@ import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
 import { registerMember, markRenewed, markCancelled } from "../../../lib/portal-members";
 import { addUpsellToOrder } from "../../../lib/upsell";
 import { holdStartedMembership, releaseStartedMembership } from "../../../lib/upsell-gate";
+import { hasCheckoutBonus, clearCheckoutBonus, bonusLineItem } from "../../../lib/checkout-bonus";
 
 export const config = { api: { bodyParser: false } }; // ruwe body nodig voor de handtekening
 
@@ -123,6 +124,10 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
     order.discountCode = { itemFixedDiscountCode: { code: md.promo_code || "STRIPE", amountSet: { shopMoney: { amount: (discountCents / 100).toFixed(2), currencyCode: "EUR" } } } };
   }
 
+  // Abandoned-checkout-mail 2: 1 flacone in omaggio
+  const bonus = await hasCheckoutBonus(order.email);
+  if (bonus) { order.lineItems.push(bonusLineItem()); order.tags.push("abandon-bonus"); order.note += " + 1x NeuroTone in omaggio (abandoned checkout)"; }
+
   const d = await shopifyGraphql(
     `mutation Create($order: OrderCreateOrderInput!, $options: OrderCreateOptionsInput) {
       orderCreate(order: $order, options: $options) {
@@ -134,6 +139,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   );
   const errs = d.orderCreate?.userErrors || [];
   if (errs.length) throw new Error("Shopify orderCreate: " + errs.map((e) => `${(e.field || []).join(".")} ${e.message}`).join("; "));
+  if (bonus) await clearCheckoutBonus(order.email);
   return d.orderCreate.order;
 }
 

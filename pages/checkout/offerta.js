@@ -121,7 +121,7 @@ export default function Offerta() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const sub = p.get("sub") || p.get("pp") || "";
-    setQ({ sub, paypal: !!p.get("pp"), search: window.location.search, failed: p.get("redirect_status") === "failed" });
+    setQ({ sub, paypal: !!p.get("pp"), search: window.location.search, failed: p.get("redirect_status") === "failed", skip: p.get("skip") === "1" });
   }, []);
 
   const grazie = (extra) => {
@@ -135,7 +135,8 @@ export default function Offerta() {
   };
 
   // Mislukte betaling → meteen door naar de bedankpagina (die toont de juiste status)
-  useEffect(() => { if (q?.failed) grazie(false); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Mislukte betaling, of klant uit abandoned-checkout-mail 2 (skip=1, geen upsell) → meteen naar de bedankpagina
+  useEffect(() => { if (q?.failed || q?.skip) grazie(false); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Order-info (betaald? naam?) + publieke config
   useEffect(() => {
@@ -213,6 +214,7 @@ export default function Offerta() {
   }, [q, cfg, info]);
 
   const preview = q && !q.sub;
+  if (q?.skip) return <div style={{ minHeight: "100vh", background: "#fff" }} />;
   const ready = preview || !!info?.paid;
   const last4 = info?.payment?.last4;
 

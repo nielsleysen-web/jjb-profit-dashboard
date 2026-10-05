@@ -105,7 +105,8 @@ function renewalCents() {
   return M;
 }
 function successUrl(subId) {
-  return new URL(CONFIG.SUCCESS_PATH + '?sub=' + encodeURIComponent(subId || '') + '&b=' + pack, location.origin).href;
+  // Mail 2 (?bonus=1): geen upsellpagina, meteen door naar de bedankpagina (skip=1)
+  return new URL(CONFIG.SUCCESS_PATH + '?sub=' + encodeURIComponent(subId || '') + '&b=' + pack + (BONUS ? '&skip=1' : ''), location.origin).href;
 }
 
 /* ---------- Render order summary into both slots ---------- */
@@ -681,7 +682,7 @@ function initPayPal() {
           });
         } catch (e) { logClient('paypal_confirm', e && e.message, 'paypal'); }
         try { sessionStorage.setItem('checkout_purchase_fired', id); } catch (e) {}
-        location.href = new URL(CONFIG.SUCCESS_PATH + '?pp=' + encodeURIComponent(id) + '&b=' + pack, location.origin).href;
+        location.href = new URL(CONFIG.SUCCESS_PATH + '?pp=' + encodeURIComponent(id) + '&b=' + pack + (BONUS ? '&skip=1' : ''), location.origin).href;
       },
       onError: (err) => { showError('PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.'); logClient('paypal_error', err && err.message, 'paypal'); },
     });
@@ -1210,8 +1211,13 @@ const COPY_GIFT = {
   value: 2995,          // centen, doorgestreept naast GRATIS
   free: 'GRATIS',
   timerMin: 10,         // korte countdown naast het cadeau (blijft doorlopen bij verversen)
+  // Mail 2 (?bonus=1): blok "inclusi gratis" met 1 flacone in omaggio + het regalo segreto
+  perksTitle: 'Inclusi gratis nel tuo ordine',
+  bonusName: '1x Neurotone Drops',
+  bonusVariant: 'In omaggio',
 };
 const GIFT = params.get('gift') === '1';
+const BONUS = params.get('bonus') === '1'; // mail 2: 1 flacone in omaggio (+ regalo segreto)
 const _sentEmails = new Set();
 function sendStartedCheckout() {
   try {
@@ -1220,11 +1226,12 @@ function sendStartedCheckout() {
     _sentEmails.add(em);
     fetch('/api/checkout/started', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
-      body: JSON.stringify({ email: em, pack, first_name: ($('#first-name') && $('#first-name').value.trim()) || '', track: attribution(), gift: GIFT }),
+      body: JSON.stringify({ email: em, pack, first_name: ($('#first-name') && $('#first-name').value.trim()) || '', track: attribution(), gift: GIFT, bonus: BONUS }),
     }).catch(() => {});
   } catch (e) {}
 }
 function showGift() {
+  if (BONUS) return showPerks();
   if (!GIFT) return;
   if (!document.getElementById('jj-gift-style')) {
     const st = document.createElement('style');
@@ -1245,6 +1252,36 @@ function showGift() {
     prod.parentNode.insertBefore(row, prod.nextSibling);
   });
   startGiftTimer();
+}
+// Mail 2: een zacht omkaderd blok onder het product met beide omaggi
+function showPerks() {
+  if (!document.getElementById('jj-perks-style')) {
+    const st = document.createElement('style');
+    st.id = 'jj-perks-style';
+    st.textContent = '.jj-perks{margin-top:14px;border:1px dashed #9cc7aa;background:#f3faf5;border-radius:12px;padding:10px 12px 12px}'
+      + '.jj-perks-h{font-size:11.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#2d6b45;margin:0 0 8px}'
+      + '.jj-perk{display:flex;align-items:center;gap:12px}.jj-perk+.jj-perk{margin-top:10px}'
+      + '.jj-perk .pt{width:46px;height:46px;flex:none;border-radius:9px;border:1px solid #dfe9e2;background:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden}'
+      + '.jj-perk .pt img{width:100%;height:100%;object-fit:cover}'
+      + '.jj-perk .pi{flex:1;min-width:0}.jj-perk .pn{font-size:13.5px;font-weight:600;color:#1a1a1a}.jj-perk .pv{font-size:12px;color:#5b6b60;margin-top:1px}'
+      + '.jj-perk .pp{text-align:right;white-space:nowrap}.jj-perk .pp s{display:block;font-size:11.5px;color:#8a948d}.jj-perk .pp b{font-size:13px;color:#2d6b45}'
+      + '.jj-perk .tm{display:inline-block;margin-left:6px;background:#fdecea;color:#b3261e;border-radius:999px;padding:0 7px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}';
+    document.head.appendChild(st);
+  }
+  const p1 = PACKS[1] || P;
+  $$('.js-summary-slot').forEach(slot => {
+    const prod = slot.querySelector('.prod-row');
+    if (!prod || slot.querySelector('.jj-perks')) return;
+    const box = document.createElement('div');
+    box.className = 'jj-perks';
+    box.innerHTML = '<div class="jj-perks-h">' + COPY_GIFT.perksTitle + '</div>'
+      + '<div class="jj-perk"><div class="pt"><img src="' + p1.img + '" alt=""></div><div class="pi"><div class="pn">' + COPY_GIFT.bonusName + '</div><div class="pv">' + COPY_GIFT.bonusVariant + '</div></div>'
+      + '<div class="pp"><s>' + money(p1.compare) + '</s><b>' + COPY_GIFT.free + '</b></div></div>'
+      + (GIFT ? '<div class="jj-perk"><div class="pt">🎁</div><div class="pi"><div class="pn">' + COPY_GIFT.name + '</div><div class="pv">' + COPY_GIFT.variant + '<span class="tm">⏱ <span class="jj-gift-clock">' + COPY_GIFT.timerMin + ':00</span></span></div></div>'
+      + '<div class="pp"><s>' + money(COPY_GIFT.value) + '</s><b>' + COPY_GIFT.free + '</b></div></div>' : '');
+    prod.parentNode.insertBefore(box, prod.nextSibling);
+  });
+  if (GIFT) startGiftTimer();
 }
 function startGiftTimer() {
   let end = 0;
@@ -1272,7 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
       em.addEventListener('blur', sendStartedCheckout);
     }
     // Terug via mail 2: cadeau onthouden voor dit e-mailadres (ook als het al ingevuld was)
-    if (GIFT && em && em.value) sendStartedCheckout();
+    if ((GIFT || BONUS) && em && em.value) sendStartedCheckout();
     // Het overzicht (prijzen, kortingsveld) wordt asynchroon opgebouwd: wachten tot het er staat
     const t1 = Date.now();
     const wait = setInterval(() => {
