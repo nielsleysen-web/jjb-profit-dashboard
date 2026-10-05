@@ -4,6 +4,7 @@
 // activity log & chat with @mentions.
 
 import { useState, useEffect, useRef } from "react";
+import CreativesList from "../components/creatives/CreativesList";
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(false);
@@ -158,14 +159,6 @@ export default function GraphicDesigner() {
   const [error, setError] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
   const [creating, setCreating] = useState(false);
-  const [dragId, setDragId] = useState(null);
-  const [dragOver, setDragOver] = useState(null);
-  const [menuId, setMenuId] = useState(null);
-  // Filters
-  const [fAssignee, setFAssignee] = useState("");
-  const [fStrategist, setFStrategist] = useState("");
-  const [fDeadline, setFDeadline] = useState("");
-  const [fProduct, setFProduct] = useState("");
   const isMobile = useIsMobile();
 
   const load = () =>
@@ -213,25 +206,21 @@ export default function GraphicDesigner() {
 
   // Snel dupliceren voor kleine iteraties (⋯-menu op de kaart)
   const duplicateTask = async (taskId) => {
-    setMenuId(null);
     const res = await post({ action: "duplicate", taskId });
     if (res?.createdId) setOpenTaskId(res.createdId);
   };
   const deleteTask = async (taskId) => {
-    setMenuId(null);
     if (!confirm("Delete this task? This cannot be undone.")) return;
     await post({ action: "delete", taskId });
   };
 
 
-  const onDropTask = async (status) => {
-    setDragOver(null);
-    if (!dragId) return;
-    const task = tasks.find((x) => x.id === dragId);
-    setDragId(null);
+  // Status wijzigen (slepen naar een andere groep of via het ⋯-menu)
+  const changeStatus = async (taskId, status) => {
+    const task = tasks.find((x) => x.id === taskId);
     if (!task || task.status === status) return;
-    setTasks((prev) => prev.map((x) => (x.id === task.id ? { ...x, status } : x)));
-    await post({ action: "status", taskId: task.id, status });
+    setTasks((prev) => prev.map((x) => (x.id === taskId ? { ...x, status } : x)));
+    await post({ action: "status", taskId, status });
   };
 
   if (loading)
@@ -249,187 +238,23 @@ export default function GraphicDesigner() {
 
   const openTask = tasks.find((t) => t.id === openTaskId) || null;
 
-  // Filters toepassen
-  const hasFilters = fAssignee || fStrategist || fDeadline || fProduct;
-  const filtered = tasks.filter(
-    (t) =>
-      (!fAssignee || t.assigneeEmail === fAssignee) &&
-      (!fStrategist || t.strategistEmail === fStrategist) &&
-      (!fDeadline || (t.deadline && new Date(t.deadline) <= new Date(`${fDeadline}T23:59:59`))) &&
-      (!fProduct || t.product?.title === fProduct)
-  );
-  const productOptions = [...new Set(tasks.map((t) => t.product?.title).filter(Boolean))].sort();
-  const filterStyle = { ...ui.input, width: "auto", padding: "7px 10px", fontSize: "12px" };
-
   return (
-    <div style={{ ...ui.page, padding: isMobile ? "16px 12px" : ui.page.padding }}>
-      {/* Header */}
-      <div style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "24px", fontWeight: 700, letterSpacing: "-0.5px" }}>🎨 Graphic Designer</h1>
-          <p style={{ margin: "3px 0 0 0", fontSize: "12px", color: "#8a92a3" }}>
-            Marketing Creatives — {filtered.filter((t) => t.status !== "Launched").length} active tasks{hasFilters ? " (filtered)" : ""}
-          </p>
-        </div>
-        {me?.canEdit && (
-          <button onClick={() => createTask("Task Start")} disabled={creating} style={btnPrimary}>
-            {creating ? "Creating…" : "+ New task"}
-          </button>
-        )}
-      </div>
-
-      {/* Filterbalk */}
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center", marginBottom: "16px" }}>
-        <select value={fAssignee} onChange={(e) => setFAssignee(e.target.value)} style={filterStyle}>
-          <option value="">All designers</option>
-          {editors.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}
-        </select>
-        <select value={fStrategist} onChange={(e) => setFStrategist(e.target.value)} style={filterStyle}>
-          <option value="">All strategists</option>
-          {strategists.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}
-        </select>
-        <select value={fProduct} onChange={(e) => setFProduct(e.target.value)} style={filterStyle}>
-          <option value="">All products</option>
-          {productOptions.map((p) => <option key={p}>{p}</option>)}
-        </select>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-          <span style={{ fontSize: "11px", fontWeight: 600, color: "#8a92a3" }}>Due by</span>
-          <input type="date" value={fDeadline} onChange={(e) => setFDeadline(e.target.value)} style={filterStyle} />
-        </span>
-        {hasFilters && (
-          <button
-            onClick={() => { setFAssignee(""); setFStrategist(""); setFDeadline(""); setFProduct(""); }}
-            style={{ ...btnGhost, padding: "7px 12px", fontSize: "11.5px", color: "#dc2626", borderColor: "#fecaca" }}
-          >
-            ✕ Clear filters
-          </button>
-        )}
-      </div>
-
-      {/* Klik buiten het ⋯-menu = sluiten */}
-      {menuId && <div onClick={() => setMenuId(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />}
-
-      {/* Kanban */}
-      <div style={{ display: "flex", gap: "12px", overflowX: "auto", alignItems: "flex-start", paddingBottom: "16px", WebkitOverflowScrolling: "touch" }}>
-        {BOARD_STATUSES.map((status) => {
-          const meta = STATUS_META[status];
-          const columnTasks = filtered
-            .filter((t) => t.status === status)
-            .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
-          return (
-            <div
-              key={status}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (dragOver !== status) setDragOver(status);
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                onDropTask(status);
-              }}
-              style={{
-                minWidth: isMobile ? "250px" : "280px",
-                width: isMobile ? "250px" : "280px",
-                flexShrink: 0,
-                borderRadius: "14px",
-                padding: "4px",
-                background: dragOver === status && dragId ? meta.bg : "transparent",
-                outline: dragOver === status && dragId ? `2px dashed ${meta.color}` : "2px dashed transparent",
-                transition: "background 0.15s, outline 0.15s",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", padding: "0 2px" }}>
-                <span style={{ fontSize: "11px", fontWeight: 700, color: meta.color, background: meta.bg, padding: "4px 10px", borderRadius: "999px", textTransform: "uppercase", letterSpacing: "0.3px" }}>
-                  {status}
-                </span>
-                <span style={{ fontSize: "12.5px", fontWeight: 700, color: "#64748b" }}>{columnTasks.length}</span>
-              </div>
-
-              <div style={{ display: "grid", gap: "8px", minHeight: "40px" }}>
-                {columnTasks.map((t) => (
-                  <div
-                    key={t.id}
-                    draggable={!!me?.canStatus}
-                    onDragStart={(e) => {
-                      setDragId(t.id);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onDragEnd={() => {
-                      setDragId(null);
-                      setDragOver(null);
-                    }}
-                    onClick={() => setOpenTaskId(t.id)}
-                    style={{ ...ui.card, padding: "12px 14px", cursor: me?.canStatus ? "grab" : "pointer", opacity: dragId === t.id ? 0.4 : 1, position: "relative" }}
-                  >
-                    {me?.canEdit && (
-                      <>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuId(menuId === t.id ? null : t.id);
-                          }}
-                          style={{ position: "absolute", top: "6px", right: "6px", background: "none", border: "none", color: "#94a3b8", fontSize: "16px", cursor: "pointer", lineHeight: 1, padding: "2px 5px" }}
-                        >
-                          ⋯
-                        </button>
-                        {menuId === t.id && (
-                          <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", top: "26px", right: "6px", background: "#fff", border: "1px solid #eceef2", borderRadius: "10px", boxShadow: "0 10px 26px rgba(15,23,42,0.16)", zIndex: 50, overflow: "hidden" }}>
-                            <button onClick={() => duplicateTask(t.id)} style={{ display: "block", width: "100%", padding: "9px 16px", background: "none", border: "none", fontSize: "12px", fontWeight: 600, color: "#334155", cursor: "pointer", textAlign: "left", whiteSpace: "nowrap" }}>
-                              ⧉ Duplicate task
-                            </button>
-                            {<button onClick={() => deleteTask(t.id)} style={{ display: "block", width: "100%", padding: "9px 16px", background: "none", border: "none", fontSize: "12px", fontWeight: 600, color: "#dc2626", cursor: "pointer", textAlign: "left", whiteSpace: "nowrap", borderTop: "1px solid #f1f5f9" }}>
-                              🗑 Delete task
-                            </button>}
-                          </div>
-                        )}
-                      </>
-                    )}
-                    <div style={{ display: "flex", gap: "10px", alignItems: "flex-start", paddingRight: "18px" }}>
-                      {t.product?.image && (
-                        <img src={t.product.image} alt="" style={{ width: "34px", height: "34px", borderRadius: "8px", objectFit: "cover", border: "1px solid #eceef2", flexShrink: 0 }} />
-                      )}
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: "12.5px", fontWeight: 700, lineHeight: 1.45, wordBreak: "break-word" }}>{taskTitle(t)}</div>
-                        {t.batchType && (
-                          <div style={{ fontSize: "11px", color: "#8a92a3", marginTop: "2px" }}>{t.batchType}{t.iterationType ? ` · ${t.iterationType}` : ""}</div>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", flexWrap: "wrap" }}>
-                      {t.assigneeName && (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 600, color: "#475569" }}>
-                          <span style={{ width: "18px", height: "18px", borderRadius: "999px", background: personColor(t.assigneeEmail), color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "9.5px", fontWeight: 700 }}>
-                            {t.assigneeName.charAt(0).toUpperCase()}
-                          </span>
-                          {firstName(t.assigneeName)}
-                        </span>
-                      )}
-                      {t.deadline && (
-                        <span style={{ fontSize: "10.5px", fontWeight: 700, color: deadlineColor(t.deadline, t.status), marginLeft: "auto" }}>
-                          {fmtDeadline(t.deadline)}{isOverdue(t.deadline, t.status) ? " ⚠" : ""}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {me?.canEdit && (
-                  <button
-                    onClick={() => createTask(status)}
-                    disabled={creating}
-                    style={{ padding: "9px", background: "transparent", border: "1px dashed #d7dce3", borderRadius: "10px", color: "#8a92a3", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
-                  >
-                    + Add Task
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
+    <CreativesList
+      kind="design"
+      title="Graphic Designer"
+      personLabel="designers"
+      tasks={tasks}
+      people={editors}
+      strategists={strategists}
+      me={me}
+      creating={creating}
+      onCreate={createTask}
+      onOpen={setOpenTaskId}
+      onStatus={changeStatus}
+      onDuplicate={duplicateTask}
+      onDelete={deleteTask}
+      namingFor={namingConvention}
+    >
       {openTask && (
         <TaskModal
           t={openTask}
@@ -446,7 +271,7 @@ export default function GraphicDesigner() {
           isMobile={isMobile}
         />
       )}
-    </div>
+    </CreativesList>
   );
 }
 
