@@ -53,13 +53,14 @@ export function RewardModal({ t, lang, data, reward, onClose }) {
   const book = state.slug ? findBookV(data, state.slug) : null;
   const name = data.member?.firstName;
   const bday = reward.kind === "birthday";
+  const secret = reward.kind === "secret";
   return (
     <div className="rw-ov" role="dialog" aria-modal="true">
       {!state.busy && !state.err && <Confetti />}
       <div className="rw">
-        <div className="rw-k">{bday ? t("rwKBday") : t("rwK", { n: reward.days })}</div>
-        <h2>{bday ? (name ? t("rwHBday", { name }) : t("rwHBdayNoName")) : (name ? t("rwH", { name }) : t("rwHNoName"))}</h2>
-        <p className="rw-s">{bday ? t("rwSubBday") : t("rwSub1")}<br />{t("rwSub2")}</p>
+        <div className="rw-k">{secret ? t("rwKSecret") : bday ? t("rwKBday") : t("rwK", { n: reward.days })}</div>
+        <h2>{secret ? (name ? t("rwHSecret", { name }) : t("rwHSecretNoName")) : bday ? (name ? t("rwHBday", { name }) : t("rwHBdayNoName")) : (name ? t("rwH", { name }) : t("rwHNoName"))}</h2>
+        <p className="rw-s">{secret ? t("rwSubSecret") : bday ? t("rwSubBday") : t("rwSub1")}<br />{t("rwSub2")}</p>
         {state.busy && <p className="rw-s">{t("rwOpening")}</p>}
         {state.err && <div className="claim-err">{state.err}</div>}
         {book && (
@@ -79,13 +80,14 @@ export function RewardModal({ t, lang, data, reward, onClose }) {
 }
 
 // ---- notificaties ---------------------------------------------------------------------
-const N_ICON = { reward: "🎁", birthday: "🎂", free: "🎁", guide: "📚", streak: "🔥", saver: "🛟", shipped: "📦" };
-const N_ROUTE = { reward: "home", birthday: "home", free: "free", guide: "library", streak: "home", saver: "home", shipped: "orders" };
+const N_ICON = { reward: "🎁", secret: "🎁", birthday: "🎂", free: "🎁", guide: "📚", streak: "🔥", saver: "🛟", shipped: "📦" };
+const N_ROUTE = { reward: "home", secret: "home", birthday: "home", free: "free", guide: "library", streak: "home", saver: "home", shipped: "orders" };
 
 function notifText(t, lang, data, n) {
   switch (n.type) {
     case "reward": return [t("nReward"), t("nRewardSub", { n: n.days })];
     case "birthday": return [t("nBirthday"), t("nBirthdaySub")];
+    case "secret": return [t("nSecret"), t("nSecretSub")];
     case "free": return [t("nFree"), t("nFreeSub")];
     case "guide": return [t("nGuide"), t("nGuideSub")];
     case "streak": return [t("nStreak", { n: n.streak }), n.daysToGift ? t("nStreakSub", { d: n.daysToGift }) : t("nStreakSubDone")];
@@ -221,7 +223,7 @@ export default function Home({ t, lang, data, nav, reload }) {
       {ready.map((r) => (
         <div key={r.id} className="card ready">
           <span className="rd-g">{r.kind === "birthday" ? "🎂" : "🎁"}</span>
-          <div className="rd-t"><b>{r.kind === "birthday" ? t("bdReady") : t("stReady")}</b><span>{r.kind === "birthday" ? t("bdReadySub") : t("stReadySub", { n: r.days })}</span></div>
+          <div className="rd-t"><b>{r.kind === "birthday" ? t("bdReady") : r.kind === "secret" ? t("secReady") : t("stReady")}</b><span>{r.kind === "birthday" ? t("bdReadySub") : r.kind === "secret" ? t("secReadySub") : t("stReadySub", { n: r.days })}</span></div>
           <button type="button" className="btn" onClick={() => setReward(r)}>{t("stOpen")}</button>
         </div>
       ))}

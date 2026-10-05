@@ -56,7 +56,7 @@ function toCsv(rows) {
   return [head.join(","), ...lines].join("\n");
 }
 
-const EVENT_LABEL = { registered: "Signed up (first payment)", login: "Logged in", password_set: "Password set", claim: "Free product ordered", ebook: "E-book unlocked", rebill: "Rebill paid", cancelled: "Cancelled", reactivated: "Membership reactivated", streak_reward: "Streak gift ready", streak_saver: "Streak saver used", birthday_gift: "Birthday gift ready", suggestion: "Idea submitted", paused: "Paused by customer service", resumed: "Pause ended", cs_cancelled: "Cancelled by customer service", magic_link: "Magic link sent" };
+const EVENT_LABEL = { registered: "Signed up (first payment)", login: "Logged in", password_set: "Password set", claim: "Free product ordered", ebook: "E-book unlocked", rebill: "Rebill paid", cancelled: "Cancelled", reactivated: "Membership reactivated", streak_reward: "Streak gift ready", streak_saver: "Streak saver used", birthday_gift: "Birthday gift ready", suggestion: "Idea submitted", paused: "Paused by customer service", resumed: "Pause ended", cs_cancelled: "Cancelled by customer service", magic_link: "Magic link sent", secret_gift: "Secret gift earned (abandoned checkout mail)" };
 
 // One label/value line in the side panel
 const Row = ({ label, children }) => (

@@ -1197,3 +1197,104 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+/* ---------- Abandoned checkout ----------------------------------------------
+   1. E-mail ingevuld → /api/checkout/started → Klaviyo "Started Checkout"
+      (flow: mail 1 na 5 min, mail 2 na 1 uur; stopt bij "Checkout Completed").
+   2. Terug via de mail: ?email= vult het e-mailadres in, ?code= past de kortingscode toe,
+      ?gift=1 toont duidelijk het "regalo segreto" (gratis e-book in de ledenomgeving).
+   Tekst van de banner/regel: COPY_GIFT hieronder. Fouten blokkeren de checkout nooit. */
+const COPY_GIFT = {
+  name: 'Regalo segreto GRATIS',
+  variant: 'E-book a sorpresa',
+  value: 2995,          // centen, doorgestreept naast GRATIS
+  free: 'GRATIS',
+  timerMin: 10,         // korte countdown naast het cadeau (blijft doorlopen bij verversen)
+};
+const GIFT = params.get('gift') === '1';
+const _sentEmails = new Set();
+function sendStartedCheckout() {
+  try {
+    const em = ($('#email') && $('#email').value.trim().toLowerCase()) || '';
+    if (!/^\S+@\S+\.\S+$/.test(em) || _sentEmails.has(em)) return;
+    _sentEmails.add(em);
+    fetch('/api/checkout/started', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({ email: em, pack, first_name: ($('#first-name') && $('#first-name').value.trim()) || '', track: attribution(), gift: GIFT }),
+    }).catch(() => {});
+  } catch (e) {}
+}
+function showGift() {
+  if (!GIFT) return;
+  if (!document.getElementById('jj-gift-style')) {
+    const st = document.createElement('style');
+    st.id = 'jj-gift-style';
+    st.textContent = '.jj-gift-row{margin-top:14px}.jj-gift-thumb{width:64px;height:64px;border:1px solid var(--border);border-radius:var(--radius);background:#fdf3ec;display:flex;align-items:center;justify-content:center;font-size:30px}'
+      + '.jj-gift-row .actual{color:#2d6b45;font-weight:700}.jj-gift-timer{display:inline-flex;align-items:center;gap:4px;margin-top:5px;background:#fdecea;color:#b3261e;border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}';
+    document.head.appendChild(st);
+  }
+  $$('.js-summary-slot').forEach(slot => {
+    const prod = slot.querySelector('.prod-row');
+    if (!prod || slot.querySelector('.jj-gift-row')) return;
+    const row = document.createElement('div');
+    row.className = 'prod-row jj-gift-row';
+    row.innerHTML = '<div class="prod-thumb"><div class="jj-gift-thumb">🎁</div><span class="qty-badge">1</span></div>'
+      + '<div class="prod-info"><div class="prod-name">' + COPY_GIFT.name + '</div><div class="prod-variant">' + COPY_GIFT.variant + '</div>'
+      + '<div class="jj-gift-timer">⏱ <span class="jj-gift-clock">' + COPY_GIFT.timerMin + ':00</span></div></div>'
+      + '<div class="prod-price"><span class="compare">' + money(COPY_GIFT.value) + '</span><span class="actual">' + COPY_GIFT.free + '</span></div>';
+    prod.parentNode.insertBefore(row, prod.nextSibling);
+  });
+  startGiftTimer();
+}
+function startGiftTimer() {
+  let end = 0;
+  try { end = Number(localStorage.getItem('jj_gift_end')) || 0; } catch (e) {}
+  if (!end || end < Date.now() - 3600000) {
+    end = Date.now() + COPY_GIFT.timerMin * 60000;
+    try { localStorage.setItem('jj_gift_end', String(end)); } catch (e) {}
+  }
+  const tick = () => {
+    const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+    const txt = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+    $$('.jj-gift-clock').forEach(el => { el.textContent = txt; });
+    if (!left) clearInterval(iv);
+  };
+  const iv = setInterval(tick, 1000);
+  tick();
+}
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const em = $('#email');
+    const preEmail = (params.get('email') || '').trim();
+    if (em && preEmail && !em.value) em.value = preEmail;
+    if (em) {
+      em.addEventListener('change', sendStartedCheckout);
+      em.addEventListener('blur', sendStartedCheckout);
+    }
+    // Terug via mail 2: cadeau onthouden voor dit e-mailadres (ook als het al ingevuld was)
+    if (GIFT && em && em.value) sendStartedCheckout();
+    // Het overzicht (prijzen, kortingsveld) wordt asynchroon opgebouwd: wachten tot het er staat
+    const t1 = Date.now();
+    const wait = setInterval(() => {
+      if (!$$('.js-summary-slot .totals').length && Date.now() - t1 < 10000) return;
+      clearInterval(wait);
+      showGift();
+      applyLinkCode();
+    }, 150);
+  } catch (e) { logClient('abandon_init', e && e.message, 'abandon'); }
+});
+function applyLinkCode() {
+  try {
+    // Kortingscode uit de link automatisch toepassen
+    const code = (params.get('code') || '').trim();
+    if (code) {
+      const inputs = $$('.js-discount-input');
+      inputs.forEach(i => { i.value = code; });
+      const btn = inputs.length ? inputs[inputs.length - 1].closest('.discount-row').querySelector('.js-apply') : null;
+      if (btn) {
+        btn.classList.add('active');
+        btn.click();
+      }
+    }
+  } catch (e) { logClient('abandon_code', e && e.message, 'abandon'); }
+}
