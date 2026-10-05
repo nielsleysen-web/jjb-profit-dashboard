@@ -60,6 +60,9 @@ function dueInfo(iso) {
 }
 
 const Icon = {
+  chev: (
+    <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M2 3.5l3 3 3-3" /></svg>
+  ),
   search: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
   ),
@@ -127,6 +130,18 @@ export default function CreativesList({
   const [menuId, setMenuId] = useState(null);
   const [dragId, setDragId] = useState(null);
   const [dragOver, setDragOver] = useState(null);
+  // Ingeklapte statusgroepen (onthouden per pagina in deze browser)
+  const COLLAPSE_KEY = `jj-creatives-collapsed-${kind}`;
+  const [collapsed, setCollapsed] = useState({});
+  useEffect(() => {
+    try { setCollapsed(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}")); } catch {}
+  }, [COLLAPSE_KEY]);
+  const toggleGroup = (status) =>
+    setCollapsed((c) => {
+      const next = { ...c, [status]: !c[status] };
+      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
 
   const active = tasks.filter((t) => BOARD_STATUSES.includes(t.status));
   const ql = q.trim().toLowerCase();
@@ -253,6 +268,7 @@ export default function CreativesList({
             .sort((a, b) => (a.deadline || "9999").localeCompare(b.deadline || "9999"));
           const late = g.filter((t) => t.deadline && new Date(t.deadline) < new Date()).length;
           const isOver = dragOver === status && dragId;
+          const isClosed = !!collapsed[status];
           return (
             <div
               key={status}
@@ -270,9 +286,12 @@ export default function CreativesList({
                 drop(status);
               }}
             >
-              <div className="cl-gh">
+              <div className={`cl-gh ${isClosed ? "closed" : ""}`}>
+                <button className="cl-chev" onClick={() => toggleGroup(status)} aria-label={isClosed ? `Show ${status}` : `Hide ${status}`} aria-expanded={!isClosed}>
+                  {Icon.chev}
+                </button>
                 <span className="cl-dot" style={{ background: STAGE_COLOR[status] }} />
-                <h3>{status}</h3>
+                <h3 onClick={() => toggleGroup(status)} style={{ cursor: "pointer" }}>{status}</h3>
                 <span className="cl-n">{g.length}</span>
                 {late > 0 && <span className="cl-late">· {late} late</span>}
                 {me?.canEdit && (
@@ -281,9 +300,10 @@ export default function CreativesList({
                   </button>
                 )}
               </div>
+              {isClosed && !isOver ? null : (
               <div className={`cl-list ${isOver ? "over" : ""}`} style={isOver ? { borderColor: STAGE_COLOR[status] } : undefined}>
-                {g.length === 0 && <div className="cl-empty">{isOver ? `Drop here to move to ${status}` : "No tasks"}</div>}
-                {g.map((t) => {
+                {(g.length === 0 || isClosed) && <div className="cl-empty">{isOver ? `Drop here to move to ${status}` : "No tasks"}</div>}
+                {!isClosed && g.map((t) => {
                   const d = dueInfo(t.deadline);
                   const n = counts(t);
                   return (
@@ -374,6 +394,7 @@ export default function CreativesList({
                   );
                 })}
               </div>
+              )}
             </div>
           );
         })}
@@ -421,6 +442,11 @@ body:has(.cl-dark){background:#0f1012}
 .cl-grp{margin-top:22px}
 .cl-gh{display:flex;align-items:center;gap:8px;padding:0 4px 9px}
 .cl-gh h3{margin:0;font-size:12.5px;font-weight:600;color:var(--ink)}
+.cl-chev{width:20px;height:20px;border:0;background:transparent;color:var(--ink3);display:inline-flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;padding:0;margin-left:-4px;transition:transform .15s}
+.cl-chev:hover{color:var(--ink);background:var(--seg)}
+.cl-chev svg{width:11px;height:11px}
+.cl-gh.closed .cl-chev{transform:rotate(-90deg)}
+.cl-gh.closed{padding-bottom:2px}
 .cl-gh .cl-n{font-size:12px;color:var(--ink3)}
 .cl-gh .cl-late{font-size:12px;color:var(--red)}
 .cl-gadd{margin-left:auto;border:0;background:transparent;color:var(--ink3);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
