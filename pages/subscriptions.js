@@ -1,6 +1,6 @@
 // pages/subscriptions.js — Membership Dashboard (Health For Life), fully in English.
 // Rebill chart (rebills within total revenue, today vs. yesterday), tiles (rebills, net profit,
-// due, MRR), rebills per cycle, rebill events, cohort retention and the member list
+// due, MRR), cohort retention and the member list
 // with customer service actions (pause 30/60/90 days, resume, cancel).
 // Source: /api/subscriptions (Stripe + PayPal + Shopify + Meta).
 
@@ -121,77 +121,6 @@ function BigTile({ label, value, valueColor, children }) {
   );
 }
 
-const Bar = ({ v }) => <span style={{ display: "inline-block", width: "110px", height: "8px", background: "#f1f5f9", borderRadius: "99px", overflow: "hidden", verticalAlign: "middle", marginRight: "8px" }}><span style={{ display: "block", width: `${Math.round((v || 0) * 100)}%`, height: "100%", background: "#22c55e" }} /></span>;
-
-function CycleTable({ rows, periodLabel }) {
-  return (
-    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
-      <div style={{ marginBottom: "10px" }}><div style={{ fontWeight: 800, fontSize: "15px" }}>Rebills by cycle</div><div style={{ fontSize: "12px", color: "#8a92a3" }}>{periodLabel.toLowerCase()} · members whose rebill k was due in this period (day 7, day 35, day 63, …) · Stripe + PayPal</div></div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr>{["Cycle", "Due", "Paid", "Failed", "Recovered", "Cancelled before rebill", "Still open", "Success rate", "Revenue", "Net profit"].map((h, i) => <th key={h} style={{ ...ui.th, textAlign: i === 0 || i === 7 ? "left" : "right" }}>{h}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((c) => (
-              <tr key={c.k}>
-                <td style={{ ...ui.td, fontWeight: 700 }}>{c.label} <span style={{ color: "#8a92a3", fontSize: "11.5px", fontWeight: 500 }}>day {c.day}</span></td>
-                <td style={{ ...ui.td, textAlign: "right" }}>{c.due}</td>
-                <td style={{ ...ui.td, textAlign: "right", color: "#16a34a", fontWeight: 700 }}>{c.paid}</td>
-                <td style={{ ...ui.td, textAlign: "right", color: c.failed ? "#dc2626" : "#0f172a", fontWeight: 700 }}>{c.failed}</td>
-                <td style={{ ...ui.td, textAlign: "right" }}>{c.recovered}</td>
-                <td style={{ ...ui.td, textAlign: "right" }}>{c.canceledBefore}</td>
-                <td style={{ ...ui.td, textAlign: "right", color: "#8a92a3" }}>{c.open}</td>
-                <td style={ui.td}>{c.successRate == null ? <span style={{ color: "#c3c9d3" }}>—</span> : <><Bar v={c.successRate} />{pct(c.successRate, 0)}</>}</td>
-                <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(c.revenue)}</td>
-                <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: c.net > 0 ? "#16a34a" : "#0f172a", fontWeight: 700 }}>{eur(c.net)}</td>
-              </tr>
-            ))}
-            {rows.length === 0 && <tr><td colSpan={10} style={{ ...ui.td, color: "#8a92a3" }}>No rebills due in this period.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "10px" }}>Due = members whose cycle ended in this period · success rate = paid / (paid + failed) · cancelled before the rebill does not count as failed · net profit = revenue − payment fees − cost of the free product shipped in that cycle</div>
-    </div>
-  );
-}
-
-const EV = { paid: ["✓ Paid", "green"], failed: ["✗ Failed", "red"], scheduled: ["⏳ Scheduled", "amber"] };
-function EventsTable({ events, total, storeHandle, periodLabel }) {
-  return (
-    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
-      <div style={{ marginBottom: "10px" }}><div style={{ fontWeight: 800, fontSize: "15px" }}>Rebills {periodLabel.toLowerCase()}</div><div style={{ fontSize: "12px", color: "#8a92a3" }}>successful and failed charges, plus what is still scheduled for today{total > events.length ? ` · the ${events.length} most recent of ${total}` : ""}</div></div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr>{["Time", "Member", "Via", "Cycle", "Status", "Amount", "Next"].map((h, i) => <th key={h} style={{ ...ui.th, textAlign: i === 5 ? "right" : "left" }}>{h}</th>)}</tr></thead>
-          <tbody>
-            {events.map((e, i) => {
-              const [t, tone] = EV[e.type];
-              return (
-                <tr key={i}>
-                  <td style={ui.td}>{fmtDT(e.at)}</td>
-                  <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "180px" }}><a href={`/members?email=${encodeURIComponent(e.member.email)}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{e.member.name || e.member.email || "—"}</a> <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>{e.member.email}{e.member.order ? ` · ${e.member.order}` : ""}</span></td>
-                  <td style={ui.td}>{e.member.provider === "paypal" ? "PayPal" : "Stripe"}</td>
-                  <td style={ui.td}>Rebill {e.cycle}</td>
-                  <td style={{ ...ui.td, whiteSpace: "normal" }}>
-                    <Chip tone={tone}>{t}{e.type === "failed" && e.reason ? ` · ${e.reason}` : ""}</Chip>
-                    {e.type === "paid" && e.recovered && <> <Chip tone="blue">recovered after failure</Chip></>}
-                    {e.type === "failed" && e.inRecovery && <> <Chip tone="blue">in recovery flow</Chip></>}
-                    {e.type === "failed" && !e.inRecovery && e.member.status === "canceled" && <> <Chip tone="gray">cancelled</Chip></>}
-                    {e.type === "failed" && !e.inRecovery && e.member.status === "active" && <> <Chip tone="green">paid since</Chip></>}
-                  </td>
-                  <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(e.amount)}</td>
-                  <td style={ui.td}>{e.type === "paid" ? fmtD(e.next) : e.type === "failed" ? (e.nextAttempt ? `retry ${fmtD(e.nextAttempt)}` : `${e.attempts} attempt${e.attempts === 1 ? "" : "s"}`) : "—"}</td>
-                </tr>
-              );
-            })}
-            {events.length === 0 && <tr><td colSpan={7} style={{ ...ui.td, color: "#8a92a3" }}>No rebills in this period.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ fontSize: "11.5px", color: "#8a92a3", marginTop: "10px" }}>Click a member for the full timeline (Members). Failed rebills: Stripe retries automatically; the customer gets email 1 right away and email 2 (regalo) after 3 days.</div>
-    </div>
-  );
-}
-
 function Cohorts({ week, month }) {
   const [mode, setMode] = useState("week");
   const rows = mode === "week" ? week : month;
@@ -299,9 +228,6 @@ export default function Subscriptions() {
             <BigTile label="Net rebill profit" value={eur(k.rebillNet)} valueColor={k.rebillNet >= 0 ? "#16a34a" : "#dc2626"}>
               revenue {eur(k.rebillRevenue.period)} − fees {eur(k.rebillFees)} − free products shipped {eur(k.cogs.rebills)} · <b>{pct(k.rebillMargin)}</b> margin
             </BigTile>
-            <BigTile label="Rebill revenue" value={eur(k.rebillRevenue.period)}>
-              {cmp ? <><Change now={k.rebillRevenue.period} prev={cmp.rebillRevenue} /> {cmpLabel} · </> : null}since launch {eur(k.rebillRevenue.total)} ({k.rebillRevenue.totalCount})
-            </BigTile>
           </Grid>
 
           {/* ===== new subscribers · 7-day projection · cancellations ===== */}
@@ -326,9 +252,6 @@ export default function Subscriptions() {
             <Tile label="Active MRR" value={eur(k.mrr)} sub={`${k.activeSubscribers} subscribers × ${eur(data.price)} / 28 d · ${k.active} paying + ${k.trial} in trial${k.problem ? ` · ${k.problem} payment issue${k.problem === 1 ? "" : "s"}` : ""}`} accent="#4f6df5" />
           </Grid>
 
-          <CycleTable rows={data.cycleRows || []} periodLabel={periodLabel} />
-          <EventsTable events={data.events || []} total={data.eventsTotal || 0} storeHandle={data.storeHandle} periodLabel={periodLabel} />
-
           <Cohorts week={data.cohortsWeek} month={data.cohortsMonth} />
 
           <div style={{ ...ui.card, padding: "18px 22px" }}>
@@ -340,7 +263,7 @@ export default function Subscriptions() {
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead><tr>{["Member", "Via", "Status", "Started", "Trial ends", "Next charge", "Cycles", "Membership", "Front-end order", "Actions"].map((h) => <th key={h} style={ui.th}>{h}</th>)}</tr></thead>
+                <thead><tr>{["Member", "Via", "Status", "Started", "Trial ends", "Next charge", "Front-end order", "Actions"].map((h) => <th key={h} style={ui.th}>{h}</th>)}</tr></thead>
                 <tbody>
                   {rows.map((m) => (
                     <tr key={m.id}>
@@ -350,13 +273,11 @@ export default function Subscriptions() {
                       <td style={ui.td}>{fmtDY(m.startedAt)}</td>
                       <td style={{ ...ui.td, color: m.status === "trial" ? "#854d0e" : "#8a92a3" }}>{fmtD(m.trialEnd)}</td>
                       <td style={ui.td}>{m.status === "canceled" ? "—" : m.status === "paused" ? (m.pausedUntil ? `after ${fmtD(m.pausedUntil)}` : "paused") : fmtD(m.nextBilling)}</td>
-                      <td style={{ ...ui.td, textAlign: "center" }}>{m.cycles}</td>
-                      <td style={{ ...ui.td, fontVariantNumeric: "tabular-nums" }}>{eur(m.membershipRevenue)}</td>
                       <td style={ui.td}>{m.order ? <><a href={`https://admin.shopify.com/store/${data.storeHandle}/orders/${m.order.id}`} target="_blank" rel="noreferrer" style={{ color: "#4f6df5", fontWeight: 700, textDecoration: "none" }}>{m.order.name}</a><div style={{ fontSize: "11.5px", color: "#8a92a3" }}>{m.order.bundle} · {eur(m.order.net)}{m.order.refunded ? ` · refund ${eur(m.order.refunded)}` : ""}</div></> : <span style={{ color: "#b6bdc9" }}>no order</span>}</td>
                       <td style={ui.td}><MemberActionButtons m={m} onChanged={() => setTimeout(() => load(range), 1500)} /></td>
                     </tr>
                   ))}
-                  {rows.length === 0 && <tr><td colSpan={10} style={{ ...ui.td, color: "#8a92a3" }}>No members in this selection.</td></tr>}
+                  {rows.length === 0 && <tr><td colSpan={8} style={{ ...ui.td, color: "#8a92a3" }}>No members in this selection.</td></tr>}
                 </tbody>
               </table>
             </div>

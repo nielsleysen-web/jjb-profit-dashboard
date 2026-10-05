@@ -19,16 +19,13 @@ const fmtDT = (s) => (s ? new Date(s).toLocaleString("en-GB", { day: "2-digit", 
 const ago = (s) => { if (!s) return "never"; const d = Math.floor((Date.now() - Date.parse(s)) / 86400000); return d === 0 ? "today" : d === 1 ? "yesterday" : `${d} d ago`; };
 const STATUS = { trial: ["Trial", "#fef9c3", "#854d0e"], active: ["Paying", "#dcfce7", "#166534"], canceled: ["Cancelled", "#f1f5f9", "#64748b"], problem: ["Payment issue", "#fee2e2", "#991b1b"], paused: ["Paused", "#e0e7ff", "#3730a3"] };
 const Pill = ({ s, stop }) => { const [t, bg, fg] = STATUS[s] || [s, "#f1f5f9", "#64748b"]; return <span style={{ background: bg, color: fg, fontWeight: 700, fontSize: "11px", padding: "3px 8px", borderRadius: "999px" }}>{t}{stop ? " · ends" : ""}</span>; };
-const Dot = ({ on, title }) => <span title={title} style={{ display: "inline-block", width: 9, height: 9, borderRadius: "50%", background: on ? "#22c55e" : "#e2e6ec", marginRight: 6, verticalAlign: "middle" }} />;
 
 const FILTERS = [
   ["all", "All"], ["trial", "Trial"], ["active", "Paying"], ["paused", "Paused"], ["problem", "Payment issue"], ["canceled", "Cancelled"],
   ["never", "Never logged in"], ["noclaim", "Logged in, nothing ordered"], ["ending", "Trial ends < 48 h, never logged in"], ["claimed", "Product ordered"], ["upsell", "Upsell 1+1"],
 ];
 const COLS = [
-  ["name", "Member"], ["magic", "Login link"], ["provider", "Via"], ["status", "Status"], ["startedAt", "Since"], ["days", "Days"], ["cycle", "Cycle"], ["trialEnd", "Trial ends"], ["nextBilling", "Next rebill"],
-  ["rebills", "Rebills"], ["membershipRevenue", "Paid"], ["welcomeOpenedAt", "Welcome link"], ["firstLoginAt", "1st login"], ["lastLoginAt", "Last login"], ["loginCount", "Logins"], ["lastSeenAt", "Last active"],
-  ["claims", "Products"], ["lastClaimAt", "Last product"], ["ebooks", "E-books"], ["upsell", "Upsell"], ["regift", "Regalo"],
+  ["name", "Member"], ["magic", "Login link"], ["provider", "Via"], ["status", "Status"], ["trialEnd", "Trial ends"], ["membershipRevenue", "Paid"],
 ];
 
 function Tile({ label, value, sub, accent, onClick, on }) {
@@ -61,48 +58,99 @@ function toCsv(rows) {
 
 const EVENT_LABEL = { registered: "Signed up (first payment)", login: "Logged in", password_set: "Password set", claim: "Free product ordered", ebook: "E-book unlocked", rebill: "Rebill paid", cancelled: "Cancelled", reactivated: "Membership reactivated", streak_reward: "Streak gift ready", streak_saver: "Streak saver used", birthday_gift: "Birthday gift ready", suggestion: "Idea submitted", paused: "Paused by customer service", resumed: "Pause ended", cs_cancelled: "Cancelled by customer service", magic_link: "Magic link sent" };
 
-function Detail({ email, onClose }) {
+// One label/value line in the side panel
+const Row = ({ label, children }) => (
+  <div style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 12, padding: "7px 0", borderBottom: "1px solid #f3f4f7", fontSize: 13 }}>
+    <div style={{ color: "#8a92a3" }}>{label}</div>
+    <div style={{ color: "#0f172a", wordBreak: "break-word" }}>{children ?? "—"}</div>
+  </div>
+);
+const Section = ({ title, children }) => (
+  <div style={{ marginBottom: 18 }}>
+    <div style={{ ...ui.label, marginBottom: 4 }}>{title}</div>
+    {children}
+  </div>
+);
+
+function Detail({ email, row, onClose }) {
   const [d, setD] = useState(null);
   useEffect(() => { setD(null); fetch(`/api/members?email=${encodeURIComponent(email)}`).then((r) => r.json()).then(setD).catch(() => setD({ success: false })); }, [email]);
   const m = d?.member;
+  const r = row || {};
+  const addr = m?.address ? [m.address.address1, [m.address.zip, m.address.city].filter(Boolean).join(" "), m.address.province ? `(${m.address.province})` : ""].filter(Boolean).join(", ") : null;
+  const paused = m?.pausedUntil && Date.parse(m.pausedUntil) > Date.now();
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.35)", zIndex: 50 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "min(560px, 100%)", background: "#fff", overflowY: "auto", padding: "24px 26px", boxShadow: "-8px 0 30px rgba(0,0,0,.12)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div><div style={{ fontWeight: 800, fontSize: 18 }}>{m ? [m.firstName, m.lastName].filter(Boolean).join(" ") || email : email}</div><div style={{ fontSize: 12.5, color: "#8a92a3" }}>{email}</div></div>
+      <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: "min(520px, 100%)", background: "#fff", overflowY: "auto", padding: "24px 26px", boxShadow: "-8px 0 30px rgba(0,0,0,.12)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 18 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 18 }}>{m ? [m.firstName, m.lastName].filter(Boolean).join(" ") || email : r.name || email}</div>
+            <div style={{ fontSize: 12.5, color: "#8a92a3", marginBottom: 6 }}>{email}</div>
+            {r.status && <Pill s={r.status} stop={r.cancelAtPeriodEnd} />}
+          </div>
           <span style={{ display: "flex", gap: 8, marginRight: 56 }}><MagicLinkButton email={email} /><button style={ui.btn(false)} onClick={onClose}>Close</button></span>
         </div>
         {!d && <div style={{ color: "#8a92a3" }}>Loading…</div>}
         {d && !d.success && <div style={{ color: "#991b1b" }}>Not found.</div>}
         {m && (
           <>
-            <div style={{ ...ui.card, padding: "14px 16px", marginBottom: 14, fontSize: 13, lineHeight: 1.7 }}>
-              <div><b>Via:</b> {m.provider} · <b>subscription:</b> {m.subscriptionId || "—"} · <b>first order:</b> {m.shopifyOrder || "—"} · <b>bundle:</b> {m.bundle ? `${m.bundle} bottle${m.bundle === 1 ? "" : "s"}` : "—"}</div>
-              <div><b>Started:</b> {fmtDT(m.startedAt)} · <b>trial until:</b> {fmtD(m.trialEnds)} · <b>next rebill:</b> {fmtD(m.nextChargeAt)}</div>
-              <div><b>Status (record):</b> {m.status} {m.cancelledAt ? `· cancelled ${fmtDT(m.cancelledAt)}` : ""} {m.reactivatedAt ? `· reactivated ${fmtDT(m.reactivatedAt)}` : ""}{m.pausedUntil && Date.parse(m.pausedUntil) > Date.now() ? ` · paused until ${fmtD(m.pausedUntil)} (${m.pausedDays} days)` : ""}</div>
-              <div><b>Last payment:</b> {fmtDT(m.lastPaymentAt)} {m.lastPaymentAmount != null ? `(${eur(m.lastPaymentAmount)})` : ""} · <b>rebills:</b> {m.rebills || 0} · <b>total rebills:</b> {eur(m.totalPaid || 0)}</div>
-              <div><b>Address:</b> {m.address ? `${m.address.address1 || ""}, ${m.address.zip || ""} ${m.address.city || ""}${m.address.province ? ` (${m.address.province})` : ""}` : "—"} · <b>phone:</b> {m.phone || "—"}</div>
-              <div><b>Welcome link opened:</b> {fmtDT(m.welcomeOpenedAt)} · <b>password:</b> {m.hasPassword ? `yes (${fmtDT(m.passwordSetAt)})` : "no"}</div>
-              <div><b>First login:</b> {fmtDT(m.firstLoginAt)} · <b>last:</b> {fmtDT(m.lastLoginAt)} · <b>logins:</b> {m.loginCount || 0} · <b>last active:</b> {fmtDT(m.lastSeenAt)}{m.streak ? <> · <b>login streak:</b> {m.streak.current} (best {m.streak.best})</> : null}{m.birthday ? <> · <b>birthday:</b> {m.birthday.split("-").reverse().join("/")}</> : null}</div>
-              <div><b>E-books unlocked:</b> {m.ebooks?.length ? m.ebooks.join(", ") : "none"} · <b>welcome gift:</b> {m.giftClaimedAt ? fmtDT(m.giftClaimedAt) : "not claimed"}</div>
-              {m.regift && <div><b>Reactivation regalo:</b> granted {fmtDT(m.regift.grantedAt)} · e-book {m.regift.ebookUsedAt ? `used (${m.regift.ebookSlug})` : "still open"} · credit {m.regift.creditUsedAt ? `used on ${m.regift.creditFor} (${m.regift.creditOrder})` : "still open"}</div>}
-            </div>
             {m.csCancellation && (
-              <div style={{ ...ui.card, padding: "14px 16px", marginBottom: 14, background: "#fffafa", borderColor: "#fde2e2" }}>
+              <div style={{ ...ui.card, padding: "14px 16px", marginBottom: 18, background: "#fffafa", borderColor: "#fde2e2" }}>
                 <div style={{ ...ui.label, marginBottom: 8 }}>Cancellation (customer service)</div>
                 <CancellationInfo c={m.csCancellation} />
               </div>
             )}
-            <div style={ui.label}>Timeline</div>
-            <div style={{ marginTop: 8 }}>
+
+            <Section title="Membership">
+              <Row label="Via">{m.provider === "paypal" ? "PayPal" : m.provider === "stripe" ? "Card (Stripe)" : m.provider}</Row>
+              <Row label="Subscription">{m.subscriptionId || "—"}</Row>
+              <Row label="First order">{m.shopifyOrder || "—"}{m.bundle ? ` · ${m.bundle} bottle${m.bundle === 1 ? "" : "s"}` : ""}</Row>
+              <Row label="Started">{fmtDT(m.startedAt)}</Row>
+              <Row label="Trial until">{fmtD(m.trialEnds || r.trialEnd)}</Row>
+              <Row label="Next rebill">{r.status === "canceled" ? "—" : fmtD(r.nextBilling || m.nextChargeAt)}</Row>
+              {paused && <Row label="Paused until">{fmtD(m.pausedUntil)} ({m.pausedDays} days)</Row>}
+              <Row label="Rebills">{r.rebills ?? m.rebills ?? 0}</Row>
+              <Row label="Paid (rebills)">{eur(r.membershipRevenue ?? m.totalPaid ?? 0)}</Row>
+              <Row label="Last payment">{m.lastPaymentAt ? `${fmtDT(m.lastPaymentAt)}${m.lastPaymentAmount != null ? ` (${eur(m.lastPaymentAmount)})` : ""}` : "—"}</Row>
+              {m.cancelledAt && <Row label="Cancelled">{fmtDT(m.cancelledAt)}</Row>}
+              {m.reactivatedAt && <Row label="Reactivated">{fmtDT(m.reactivatedAt)}</Row>}
+            </Section>
+
+            <Section title="Contact">
+              <Row label="Email">{email}</Row>
+              <Row label="Phone">{m.phone || "—"}</Row>
+              <Row label="Address">{addr || "—"}</Row>
+            </Section>
+
+            <Section title="Portal activity">
+              <Row label="Welcome link opened">{fmtDT(m.welcomeOpenedAt)}</Row>
+              <Row label="Password">{m.hasPassword ? (m.passwordSetAt ? `Yes (${fmtDT(m.passwordSetAt)})` : "Yes") : "No"}</Row>
+              <Row label="First login">{fmtDT(m.firstLoginAt)}</Row>
+              <Row label="Last login">{m.lastLoginAt ? `${fmtDT(m.lastLoginAt)} (${ago(m.lastLoginAt)})` : "Never"}</Row>
+              <Row label="Logins">{m.loginCount || 0}</Row>
+              <Row label="Last active">{m.lastSeenAt ? `${fmtDT(m.lastSeenAt)} (${ago(m.lastSeenAt)})` : "—"}</Row>
+              <Row label="Login streak">{m.streak ? `${m.streak.current} (best ${m.streak.best})` : "—"}</Row>
+              {m.birthday && <Row label="Birthday">{m.birthday.split("-").reverse().slice(0, 2).join("/")}</Row>}
+            </Section>
+
+            <Section title="Products & rewards">
+              <Row label="Free products">{r.claims ? `${r.claims} · ${r.claimSlugs.join(", ")}` : "None yet"}</Row>
+              <Row label="Last product">{fmtD(r.lastClaimAt)}</Row>
+              <Row label="E-books unlocked">{m.ebooks?.length ? m.ebooks.join(", ") : "None"}</Row>
+              <Row label="Welcome gift">{m.giftClaimedAt ? fmtDT(m.giftClaimedAt) : "Not claimed"}</Row>
+              <Row label="Upsell 1+1">{r.upsell ? `Yes · ${r.upsell.order}` : "No"}</Row>
+              {m.regift && <Row label="Reactivation regalo">Granted {fmtDT(m.regift.grantedAt)} · e-book {m.regift.ebookUsedAt ? `used (${m.regift.ebookSlug})` : "still open"} · credit {m.regift.creditUsedAt ? `used on ${m.regift.creditFor} (${m.regift.creditOrder})` : "still open"}</Row>}
+            </Section>
+
+            <Section title="Timeline">
               {(d.log || []).length === 0 && <div style={{ color: "#8a92a3", fontSize: 13 }}>No events logged yet (logging started on 2 Oct).</div>}
               {(d.log || []).map((e, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: 10, padding: "7px 0", borderBottom: "1px solid #f3f4f7", fontSize: 12.5 }}>
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 12, padding: "7px 0", borderBottom: "1px solid #f3f4f7", fontSize: 12.5 }}>
                   <div style={{ color: "#8a92a3", fontVariantNumeric: "tabular-nums" }}>{fmtDT(e.at)}</div>
                   <div><b>{EVENT_LABEL[e.type] || e.type}</b>{e.method ? ` · ${e.method}` : ""}{e.days ? ` · ${e.days} days` : ""}{e.reason ? ` · "${e.reason}"` : ""}{e.chargebackRisk ? ` · risk ${e.chargebackRisk}` : ""}{e.by ? ` · by ${e.by}` : ""}{e.slug ? ` · ${e.slug}` : ""}{e.order ? ` · ${e.order}` : ""}{e.amount != null ? ` · ${eur(e.amount)}` : ""}{e.gift ? " · 🎁" : ""}{e.regift ? " · regalo" : ""}{e.provider ? ` · ${e.provider}` : ""}</div>
                 </div>
               ))}
-            </div>
+            </Section>
           </>
         )}
       </div>
@@ -169,35 +217,20 @@ export default function Members() {
                       <td style={ui.td} onClick={(e) => e.stopPropagation()}><MagicLinkButton email={m.email} small /></td>
                       <td style={ui.td}>{m.provider}</td>
                       <td style={ui.td}><Pill s={m.status} stop={m.cancelAtPeriodEnd} />{m.status === "paused" && m.pausedUntil ? <div style={{ fontSize: 11, color: "#8a92a3", marginTop: 3 }}>until {fmtD(m.pausedUntil)}</div> : null}</td>
-                      <td style={ui.td}>{fmtD(m.startedAt)}</td>
-                      <td style={{ ...ui.td, textAlign: "center" }}>{m.days}</td>
-                      <td style={{ ...ui.td, textAlign: "center" }}>{m.cycle === 0 ? "trial" : m.cycle}</td>
                       <td style={ui.td}>{fmtD(m.trialEnd)}</td>
-                      <td style={ui.td}>{m.status === "canceled" ? <span style={{ color: "#8a92a3" }}>cancelled {fmtD(m.canceledAt)}</span> : fmtD(m.nextBilling)}</td>
-                      <td style={{ ...ui.td, textAlign: "center" }}>{m.rebills}</td>
                       <td style={ui.td}>{eur(m.membershipRevenue)}</td>
-                      <td style={ui.td}><Dot on={!!m.welcomeOpenedAt} />{m.welcomeOpenedAt ? fmtD(m.welcomeOpenedAt) : m.hasPassword ? "password set" : "no"}</td>
-                      <td style={ui.td}>{fmtD(m.firstLoginAt)}</td>
-                      <td style={ui.td} title={fmtDT(m.lastLoginAt)}>{ago(m.lastLoginAt)}</td>
-                      <td style={{ ...ui.td, textAlign: "center" }}>{m.loginCount}</td>
-                      <td style={ui.td} title={fmtDT(m.lastSeenAt)}>{ago(m.lastSeenAt)}</td>
-                      <td style={ui.td}><Dot on={m.claims > 0} />{m.claims}{m.claimSlugs.length ? <span style={{ color: "#8a92a3", fontSize: 11 }}> · {m.claimSlugs.slice(0, 2).join(", ")}{m.claimSlugs.length > 2 ? "…" : ""}</span> : ""}</td>
-                      <td style={ui.td}>{fmtD(m.lastClaimAt)}</td>
-                      <td style={{ ...ui.td, textAlign: "center" }}>{m.ebooks}{m.giftClaimed ? " 🎁" : ""}</td>
-                      <td style={ui.td}>{m.upsell ? `✓ ${m.upsell.order}` : "—"}</td>
-                      <td style={ui.td}>{m.regift ? (m.regift.used ? "used" : `${m.regift.ebookLeft ? "e-book " : ""}${m.regift.credit ? `€${m.regift.credit}` : ""}`.trim()) : "—"}</td>
                     </tr>
                   ))}
                   {rows.length === 0 && <tr><td colSpan={COLS.length} style={{ ...ui.td, color: "#8a92a3" }}>No members in this selection.</td></tr>}
                 </tbody>
               </table>
             </div>
-            <div style={{ fontSize: 11.5, color: "#8a92a3", marginTop: 10 }}>Logins and "last active" are tracked since 2 October 2026; earlier activity is not available. Click a member for the full timeline.</div>
+            <div style={{ fontSize: 11.5, color: "#8a92a3", marginTop: 10 }}>Click a member for all details: portal activity, products, rewards and the full timeline.</div>
           </div>
         </>
       )}
       <Suggestions />
-      {open && <Detail email={open} onClose={() => setOpen(null)} />}
+      {open && <Detail email={open} row={data?.members?.find((x) => x.email === open)} onClose={() => setOpen(null)} />}
     </div>
   );
 }
