@@ -3,7 +3,11 @@
 // per variant bezoekers, checkout-kliks, orders, omzet, CVR, AOV en omzet per bezoeker,
 // plus een dagreeks en een statistische toets (2-proporties z-test) op de order-conversie.
 // Bron: jjb-track beacons (Redis, fmv:*) + Shopify-orders (attribution-store, jjb_pgs).
-// GET ?from=YYYY-MM-DD&to=YYYY-MM-DD | ?days=N
+// GET ?from=YYYY-MM-DD&to=YYYY-MM-DD | ?days=N | ?settingsOnly=1
+// POST { key: "host/pad", start?, control?, labels? }  → instellingen per test (gedeeld voor het hele team)
+//   start    startdatum van de test (de pagina toont standaard "sinds start")
+//   control  pageid van het origineel (variant A); zonder keuze: de variant die vóór de start al verkeer had
+//   labels   { pageid: "naam" }
 
 import crypto from "crypto";
 import axios from "axios";
@@ -54,6 +58,31 @@ async function mget(keys) {
   return out.map((v) => parseInt(v || "0", 10) || 0);
 }
 
+// Instellingen per test (Redis-hash ab:settings, veld = host+pad). Standaardwaarden voor lopende tests:
+const SETTINGS_KEY = "ab:settings";
+const DEFAULTS = {
+  "try.getjustjenny.com/neurodrops": { start: "2026-10-05", names: { control: "Original ABV", challenger: "Customer Data Adjustment" } },
+};
+async function getSettings() {
+  const raw = (await redis([["HGETALL", SETTINGS_KEY]]))[0]?.result || [];
+  const out = {};
+  for (const [k, v] of Object.entries(DEFAULTS)) out[k] = { ...v };
+  for (let i = 0; i < raw.length; i += 2) {
+    try { out[raw[i]] = { ...(out[raw[i]] || {}), ...JSON.parse(raw[i + 1]) }; } catch {}
+  }
+  return out;
+}
+
+// Orders komen uit de attributie-store; die wordt bijgewerkt door een scan. Bij openen van deze pagina
+// een scan aanstoten (de scan zelf throttlet op 4 min), zodat de orders per variant actueel zijn.
+let lastKick = 0;
+async function kickAttributionScan(host) {
+  if (!host || Date.now() - lastKick < 4 * 60 * 1000) return;
+  lastKick = Date.now();
+  const key = crypto.createHmac("sha256", SESSION_SECRET).update("attribution:scan").digest("base64url");
+  await axios.post(`https://${host}/api/attribution`, { action: "scan", key }, { timeout: 2000 }).catch(() => {});
+}
+
 // Normale verdeling: P(Z < z)
 function phi(z) {
   const t = 1 / (1 + 0.2316419 * Math.abs(z));
@@ -78,6 +107,26 @@ export default async function handler(req, res) {
     const roles = Array.isArray(s?.roles) ? s.roles : [];
     if (!s || !(s.finance || s.admin || roles.includes("Funnel Builder"))) return res.status(401).json({ success: false, error: "No access" });
     if (!R_URL || !R_TOK) return res.status(200).json({ success: true, configured: false, tests: [] });
+
+    if (req.method === "POST") {
+      const b = req.body || {};
+      const key = String(b.key || "").toLowerCase().slice(0, 200);
+      if (!/^[a-z0-9.\-]+\/[\w\-\/]*$/.test(key)) return res.status(400).json({ success: false, error: "Invalid test" });
+      const cur = (await getSettings())[key] || {};
+      const next = { ...cur };
+      if ("start" in b) next.start = /^\d{4}-\d{2}-\d{2}$/.test(b.start || "") ? b.start : null;
+      if ("control" in b) next.control = String(b.control || "").replace(/[^\w-]/g, "").slice(0, 24) || null;
+      if (b.labels && typeof b.labels === "object") {
+        next.labels = { ...(cur.labels || {}) };
+        for (const [id, name] of Object.entries(b.labels).slice(0, 20)) next.labels[String(id).replace(/[^\w-]/g, "").slice(0, 24)] = String(name || "").slice(0, 60);
+      }
+      next.updatedBy = s.email || s.name || "";
+      await redis([["HSET", SETTINGS_KEY, key, JSON.stringify(next)]]);
+      return res.status(200).json({ success: true, settings: next });
+    }
+    const settings = await getSettings();
+    if (req.query.settingsOnly) return res.status(200).json({ success: true, configured: true, settings });
+    kickAttributionScan(req.headers.host);
 
     const isDate = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x || "");
     const today = new Date().toISOString().slice(0, 10);
@@ -129,14 +178,38 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. response
-    const out = Object.values(tests).map((t) => {
-      const vids = Object.keys(t.variants).sort();
+    // 3. welke variant is het origineel? Gekozen in de instellingen, anders: de variant die de dag vóór
+    //    de start (of vóór de periode) al verkeer had en de andere niet.
+    const keyOf = (t) => `${t.host}${t.path}`.toLowerCase();
+    const prevDay = (d) => new Date(Date.parse(`${d}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+    const list = Object.values(tests);
+    const before = await redis(list.map((t) => ["SMEMBERS", `fmvs:${prevDay(settings[keyOf(t)]?.start || from)}:${t.host}:${t.path}`]));
+    list.forEach((t, i) => {
+      const ids = Object.keys(t.variants);
+      const set = settings[keyOf(t)] || {};
+      let control = ids.includes(set.control) ? set.control : null;
+      if (!control) {
+        const old = new Set(before[i]?.result || []);
+        const olds = ids.filter((id) => old.has(id));
+        if (olds.length === 1) control = olds[0];
+      }
+      t.control = control;
+      t.autoControl = !!control && control !== set.control;
+      const visits = (id) => t.variants[id].pvu;
+      t.order = control ? [control, ...ids.filter((id) => id !== control).sort((x, y) => visits(y) - visits(x))] : ids.sort();
+    });
+
+    // 4. response
+    const out = list.map((t) => {
+      const vids = t.order;
+      const set = settings[keyOf(t)] || {};
       const variants = vids.map((id, idx) => {
         const v = t.variants[id]; const ob = byVid[id] || { o: 0, r: 0, days: {} };
         const series = dates.map((d) => ({ d, pvu: v.days[d]?.pvu || 0, ccu: v.days[d]?.ccu || 0, o: ob.days[d]?.o || 0, r: Math.round((ob.days[d]?.r || 0) * 100) / 100 }));
+        const role = t.control ? (id === t.control ? "control" : "challenger") : null;
         return {
-          id, letter: String.fromCharCode(65 + idx),
+          id, letter: String.fromCharCode(65 + idx), role,
+          name: set.labels?.[id] || (role && idx < 2 ? set.names?.[role] : "") || "",
           pv: v.pv, pvu: v.pvu, cc: v.cc, ccu: v.ccu,
           orders: ob.o, revenue: Math.round(ob.r * 100) / 100,
           cvr: v.pvu > 0 ? ob.o / v.pvu : 0,
@@ -150,7 +223,8 @@ export default async function handler(req, res) {
       const stat = zTest(a.orders, a.pvu, b.orders, b.pvu);
       const lift = (x, y) => (x > 0 ? (y - x) / x : null);
       return {
-        key: `${t.host}${t.path}`, host: t.host, path: t.path, variants,
+        key: keyOf(t), host: t.host, path: t.path, variants, control: t.control, autoControl: t.autoControl,
+        start: set.start || null, extra: Math.max(0, variants.length - 2),
         compare: {
           cvrLift: lift(a.cvr, b.cvr), rpvLift: lift(a.rpv, b.rpv), ctrLift: lift(a.ctr, b.ctr), aovLift: lift(a.aov, b.aov),
           probBetter: stat?.probBetter ?? null, pValue: stat?.pValue ?? null,
@@ -159,7 +233,7 @@ export default async function handler(req, res) {
       };
     }).sort((x, y) => (y.variants[0].pvu + y.variants[1].pvu) - (x.variants[0].pvu + x.variants[1].pvu));
 
-    return res.status(200).json({ success: true, configured: true, from, to, tests: out });
+    return res.status(200).json({ success: true, configured: true, from, to, tests: out, settings });
   } catch (e) {
     console.error("ab-test:", e.message);
     return res.status(500).json({ success: false, error: e.message });
