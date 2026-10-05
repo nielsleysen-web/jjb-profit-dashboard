@@ -464,6 +464,15 @@ export default async function handler(req, res) {
     for (const f of pFailed) { const m = byId[f.subId]; if (!m) continue; events.push({ type: "failed", at: f.at, amount: r2(f.amount), cycle: m.cycles + 1, reason: f.reason || null, attempts: f.attempts || 1, nextAttempt: f.nextAttempt || null, inRecovery: m.status === "problem", member: who(m) }); }
     for (const m of openInPeriod) events.push({ type: "scheduled", at: m.nextBilling, amount: PRICE, cycle: m.cycles + 1, member: who(m) });
     events.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+
+    // Rebills die vandaag (Brussel) geïnd moeten worden: al betaald, mislukt of nog gepland — los van de gekozen periode
+    const tb = (() => { const t = period("today"); return dayBounds(t.from, t.to); })();
+    const inToday = (t) => { const ms = Date.parse(t || 0); return ms >= tb.start && ms < tb.end; };
+    const dueToday = [];
+    for (const r of rebills) { if (!inToday(r.at)) continue; const m = byId[r.subId]; if (!m) continue; dueToday.push({ type: "paid", at: r.at, amount: r2(r.amount), cycle: m.rebillAt.indexOf(r.at) + 1 || m.cycles, recovered: !!r.recovered, member: who(m) }); }
+    for (const f of failed) { if (!inToday(f.at)) continue; const m = byId[f.subId]; if (!m) continue; dueToday.push({ type: "failed", at: f.at, amount: r2(f.amount), cycle: m.cycles + 1, reason: f.reason || null, nextAttempt: f.nextAttempt || null, member: who(m) }); }
+    for (const m of billable) if (between(m.nextBilling, Math.max(now, tb.start), tb.end)) dueToday.push({ type: "scheduled", at: m.nextBilling, amount: PRICE, cycle: m.cycles + 1, member: who(m) });
+    dueToday.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     const eventsTotal = events.length;
     events.splice(150);
 
@@ -498,7 +507,7 @@ export default async function handler(req, res) {
     };
 
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });

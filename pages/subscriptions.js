@@ -121,6 +121,42 @@ function BigTile({ label, value, valueColor, children }) {
   );
 }
 
+// Rebills due today (Brussels): scheduled, paid and failed — always today, whatever period is selected
+const DUE = { scheduled: ["Scheduled", "amber"], paid: ["✓ Paid", "green"], failed: ["✗ Failed", "red"] };
+function DueToday({ rows }) {
+  const open = rows.filter((r) => r.type === "scheduled");
+  const sum = (list) => list.reduce((a, r) => a + r.amount, 0);
+  return (
+    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
+      <div style={{ marginBottom: "10px" }}>
+        <div style={{ fontWeight: 800, fontSize: "15px" }}>Rebills due today</div>
+        <div style={{ fontSize: "12px", color: "#8a92a3" }}>{rows.length} due today · {open.length} still to collect ({eur(sum(open))}) · {rows.filter((r) => r.type === "paid").length} paid · {rows.filter((r) => r.type === "failed").length} failed</div>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr>{["Time", "Member", "Via", "Rebill", "Status", "Amount"].map((h, i) => <th key={h} style={{ ...ui.th, textAlign: i === 5 ? "right" : "left" }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const [t, tone] = DUE[r.type];
+              return (
+                <tr key={i}>
+                  <td style={ui.td}>{fmtT(r.at)}</td>
+                  <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "180px" }}><a href={`/members?email=${encodeURIComponent(r.member.email)}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{r.member.name || r.member.email || "—"}</a> <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.member.email}{r.member.order ? ` · ${r.member.order}` : ""}</span></td>
+                  <td style={ui.td}>{r.member.provider === "paypal" ? "PayPal" : "Card"}</td>
+                  <td style={ui.td}>Rebill {r.cycle}</td>
+                  <td style={ui.td}><Chip tone={tone}>{t}{r.type === "failed" && r.reason ? ` · ${r.reason}` : ""}</Chip>{r.type === "paid" && r.recovered ? <> <Chip tone="blue">recovered</Chip></> : null}</td>
+                  <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(r.amount)}</td>
+                </tr>
+              );
+            })}
+            {rows.length === 0 && <tr><td colSpan={6} style={{ ...ui.td, color: "#8a92a3" }}>No rebills due today.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function Cohorts({ week, month }) {
   const [mode, setMode] = useState("week");
   const rows = mode === "week" ? week : month;
@@ -251,6 +287,8 @@ export default function Subscriptions() {
             <Tile label={live ? "Due today" : "Still to collect"} value={k.due.open} sub={`${eur(k.due.openAmount)} · ${k.due.stripe} Stripe · ${k.due.paypal} PayPal`} />
             <Tile label="Active MRR" value={eur(k.mrr)} sub={`${k.activeSubscribers} subscribers × ${eur(data.price)} / 28 d · ${k.active} paying + ${k.trial} in trial${k.problem ? ` · ${k.problem} payment issue${k.problem === 1 ? "" : "s"}` : ""}`} accent="#4f6df5" />
           </Grid>
+
+          <DueToday rows={data.dueToday || []} />
 
           <Cohorts week={data.cohortsWeek} month={data.cohortsMonth} />
 
