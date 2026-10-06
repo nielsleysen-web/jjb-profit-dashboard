@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { pickBundle, SHIPPING, fmtEur, PRODUCT_TITLE, UPSELL } from "../../lib/checkout";
+import { SHIPPING, fmtEur, UPSELL, getProduct, pickBundleFor } from "../../lib/checkout";
 
 // Enquête (post-purchase quiz). Antwoorden → Google Sheet via /api/checkout-quiz.
 // Vragen aanpassen kan hier; de volgorde moet gelijk blijven aan de kolommen in de Sheet.
@@ -43,6 +43,16 @@ const BUNDLE_IMG = {
   3: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Artboard3_2.png?v=1783404886&width=240",
   5: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Artboard3copy_1c26406e-68ad-44c1-a428-5d99f4ff1fa7.png?v=1783404886&width=240",
 };
+
+// LubriSense (checkout.getjustjenny.com/lubrisense): eigen productfoto's, geen NeuroTone-enquête
+const LUBRI_IMG = {
+  1: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/3_5305b5fc-f123-40dc-a487-545a8bd63b05.png?v=1787285389&width=240",
+  2: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/4_681fd7dd-be4d-4f81-ad4b-c1295e55e3f6.png?v=1787285390&width=240",
+  3: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/5.png?v=1787285390&width=240",
+  5: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/6.png?v=1787285390&width=240",
+};
+const IMGS = { neurotone: BUNDLE_IMG, lubrisense: LUBRI_IMG };
+const CHECKOUT_PATH = { neurotone: "/checkout?", lubrisense: "/checkout?p=lubrisense&" };
 
 const BRAND = { amex: "American Express", visa: "Visa", mastercard: "Mastercard", maestro: "Maestro", discover: "Discover", jcb: "JCB", unionpay: "UnionPay", diners: "Diners Club" };
 const WALLET = { apple_pay: "Apple Pay", google_pay: "Google Pay", link: "Link" };
@@ -192,13 +202,13 @@ export default function Grazie() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     // Stripe: ?sub=sub_…   PayPal: ?pp=I-…
-    setQ({ sub: p.get("sub") || p.get("pp") || "", paypal: !!p.get("pp"), b: p.get("b"), rs: p.get("redirect_status") || "", up: p.get("up") === "1" });
+    setQ({ sub: p.get("sub") || p.get("pp") || "", paypal: !!p.get("pp"), b: p.get("b"), p: (p.get("p") || "").toLowerCase(), rs: p.get("redirect_status") || "", up: p.get("up") === "1" });
   }, []);
 
   // Gegevens ophalen; zolang de Shopify-order er nog niet is (webhook), even opnieuw proberen
   useEffect(() => {
     if (!q) return;
-    if (!q.sub) { setData({ ...PREVIEW, qty: pickBundle(q.b).qty }); return; }
+    if (!q.sub) { setData({ ...PREVIEW, product: getProduct(q.p).key, qty: pickBundleFor(getProduct(q.p), q.b).qty }); return; }
     let timer;
     const load = async () => {
       try {
@@ -233,13 +243,14 @@ export default function Grazie() {
         window.fbq("init", pixelId);
         window.fbq("track", "PageView");
       }
-      const b = pickBundle(data.qty || q.b);
+      const prod = getProduct(data.product || q.p);
+      const b = pickBundleFor(prod, data.qty || q.b);
       window.fbq("track", "Purchase", {
         value: (data.amountPaid ?? b.price + (SHIPPING[data.shipping] || SHIPPING.insured).price) / 100,
         currency: "EUR",
         content_type: "product",
-        content_ids: ["10561889403146"],
-        contents: [{ id: "10561889403146", quantity: b.qty }],
+        content_ids: [prod.shopifyProductId],
+        contents: [{ id: prod.shopifyProductId, quantity: b.qty }],
         num_items: b.qty,
         order_id: orderNo,
       }, { eventID: `jjb-${orderNo}` });
@@ -249,7 +260,11 @@ export default function Grazie() {
 
   const preview = q && !q.sub;
   const failed = q?.rs === "failed";
-  const bundle = pickBundle(data?.qty || q?.b);
+  const product = getProduct(data?.product || q?.p);
+  const PRODUCT_TITLE = product.title;
+  const IMG = IMGS[product.key] || BUNDLE_IMG;
+  const buyAgain = `${CHECKOUT_PATH[product.key] || "/checkout?"}b=`;
+  const bundle = pickBundleFor(product, data?.qty || q?.b);
   const ship = SHIPPING[data?.shipping] || SHIPPING.insured;
   const hasUpsell = !!(data?.order?.upsell || q?.up);
   const total = (data?.amountPaid ?? bundle.price + ship.price) + (hasUpsell ? UPSELL.price : 0);
@@ -294,7 +309,7 @@ export default function Grazie() {
             <div style={{ fontSize: "20px", fontWeight: 600, marginBottom: "8px" }}>Pagamento non riuscito</div>
             <div style={{ fontSize: "15px", color: "#555", lineHeight: 1.55 }}>
               Il pagamento non è andato a buon fine. Nessun importo è stato addebitato.{" "}
-              <a href={`/checkout?b=${bundle.qty}`} style={{ color: GREEN, fontWeight: 600 }}>Riprova</a>
+              <a href={`${buyAgain}${bundle.qty}`} style={{ color: GREEN, fontWeight: 600 }}>Riprova</a>
             </div>
           </div>
         ) : err ? (
@@ -305,7 +320,7 @@ export default function Grazie() {
           <div className="gz-card" style={{ fontSize: "15px", color: "#666" }}>Caricamento del tuo ordine…</div>
         ) : (
           <>
-            <Quiz sub={q.sub} preview={preview} />
+            {product.key === "neurotone" && <Quiz sub={q.sub} preview={preview} />}
 
             {/* Ordernummer */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "26px" }}>
@@ -313,7 +328,7 @@ export default function Grazie() {
                 <div style={{ fontSize: "20px", fontWeight: 600 }}>{data.order?.name ? `Ordine ${data.order.name}` : "Ordine confermato"}</div>
                 <div style={{ fontSize: "14px", color: "#6b6b6b", marginTop: "3px" }}>Confermato il giorno {date}</div>
               </div>
-              <a className="gz-outline" href={`/checkout?b=${bundle.qty}`}>Acquista di nuovo</a>
+              <a className="gz-outline" href={`${buyAgain}${bundle.qty}`}>Acquista di nuovo</a>
             </div>
 
             {/* Upsell (1+1 gratis) net toegevoegd op /checkout/offerta */}
@@ -347,7 +362,7 @@ export default function Grazie() {
             <div className="gz-card">
               <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
                 <div style={{ position: "relative", width: "64px", height: "64px", border: "1px solid #e3e3e3", borderRadius: "10px", background: "#f7f7f7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <img src={BUNDLE_IMG[bundle.qty]} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  <img src={IMG[bundle.qty]} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
                   <span style={{ position: "absolute", top: "-8px", right: "-8px", background: "#111", color: "#fff", borderRadius: "999px", minWidth: "21px", height: "21px", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>1</span>
                 </div>
                 <div style={{ flex: 1, fontSize: "14.5px", paddingTop: "14px" }}>

@@ -13,10 +13,9 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { pickBundle, SHIPPING, MEMBERSHIP, PRODUCT_TITLE, TRACK_KEYS } from "../../../lib/checkout";
+import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor } from "../../../lib/checkout";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
-const FUNNEL = "main";
 const CURRENCY = "eur";
 const V = "v1"; // verhoog bij een prijswijziging
 
@@ -35,7 +34,10 @@ export default async function handler(req, res) {
 
   try {
     const b = req.body || {};
-    const bundle = pickBundle(b.pack);
+    // Product: NeuroTone (standaard) of LubriSense (checkout.getjustjenny.com/lubrisense) — elk met een eigen membership
+    const product = getProduct(b.product);
+    const MEMBERSHIP = product.membership, PRODUCT_TITLE = product.title;
+    const bundle = pickBundleFor(product, b.pack);
     const ship = SHIPPING[b.ship_method] || SHIPPING.insured;
 
     const email = clean(b.email, 120).toLowerCase();
@@ -61,7 +63,8 @@ export default async function handler(req, res) {
 
     // --- metadata: funnel + bundel + onze tracking (jjb_*) → webhook → Shopify-order ---
     const metadata = {
-      funnel: FUNNEL,
+      funnel: product.funnel,
+      product_key: product.key,
       source: "jjb-checkout",
       qty: String(bundle.qty),
       bundle: String(bundle.qty),
@@ -79,13 +82,13 @@ export default async function handler(req, res) {
     if (track.utm_medium) metadata.jjb_utm_medium = clean(track.utm_medium, 100);
 
     // --- prijzen (automatisch aangemaakt, daarna hergebruikt) ---
-    const membershipPrice = process.env.STRIPE_PRICE_MEMBERSHIP || (await getOrCreatePrice(`jj_membership_${MEMBERSHIP.price}_${MEMBERSHIP.intervalDays}d_${V}`, {
+    const membershipPrice = process.env[product.priceEnv] || (await getOrCreatePrice(`${product.lookupPrefix}_membership_${MEMBERSHIP.price}_${MEMBERSHIP.intervalDays}d_${V}`, {
       currency: CURRENCY,
       unit_amount: MEMBERSHIP.price,
       recurring: { interval: "day", interval_count: MEMBERSHIP.intervalDays },
       product_data: { name: MEMBERSHIP.name },
     }));
-    const bundlePrice = await getOrCreatePrice(`jj_bundle_${bundle.qty}_${bundle.price}_${V}`, {
+    const bundlePrice = await getOrCreatePrice(`${product.lookupPrefix}_bundle_${bundle.qty}_${bundle.price}_${V}`, {
       currency: CURRENCY,
       unit_amount: bundle.price,
       product_data: { name: `${PRODUCT_TITLE} — ${bundle.label}` },

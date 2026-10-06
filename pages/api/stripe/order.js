@@ -6,7 +6,7 @@
 // abonnementen van de laatste 30 dagen.
 
 import Stripe from "stripe";
-import { BUNDLES, SHIPPING, UPSELL } from "../../../lib/checkout";
+import { SHIPPING, UPSELL, getProduct } from "../../../lib/checkout";
 import { findOrderForInvoice } from "../../../lib/shopify-admin";
 import { sweepIfDue } from "../../../lib/upsell-queue";
 
@@ -26,7 +26,8 @@ export default async function handler(req, res) {
 
     const md = sub.metadata || {};
     const qty = parseInt(md.qty || md.bundle || "3", 10);
-    const bundle = BUNDLES[qty] || BUNDLES[3];
+    const product = getProduct(md.product_key);
+    const bundle = product.bundles[qty] || product.bundles[3];
     const ship = SHIPPING[md.shipping] || SHIPPING.insured;
     const cust = typeof sub.customer === "object" ? sub.customer : {};
     const inv = sub.latest_invoice && typeof sub.latest_invoice === "object" ? sub.latest_invoice : null;
@@ -53,6 +54,9 @@ export default async function handler(req, res) {
       paid: inv?.status === "paid",
       created: sub.created,
       qty: bundle.qty,
+      product: product.key,
+      bundleLabel: bundle.label,
+      bundlePrice: bundle.price,
       shipping: ship.code,
       amountPaid: inv?.amount_paid ?? bundle.price + ship.price,
       email: cust.email || "",

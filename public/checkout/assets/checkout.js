@@ -24,6 +24,22 @@ const CONFIG = {
 };
 /* ============================================================================ */
 
+/* ---- Product: NeuroTone (standaard) of LubriSense ----------------------------
+   checkout.getjustjenny.com/lubrisense  (of /checkout?p=lubrisense) → LubriSense met een eigen membership.
+   Bedragen moeten gelijk zijn aan PRODUCTS in lib/checkout.js. */
+const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || /^lubrisense$/i.test(new URLSearchParams(location.search).get('p') || '')) ? 'lubrisense' : 'neurotone';
+const PRODUCT_CONFIG = {
+  lubrisense: {
+    PRODUCT_NAME: 'LubriSense',
+    SUCCESS_PATH: '/checkout/grazie', // (nog) geen upsellpagina voor LubriSense
+    MEMBERSHIP_NAME: 'Just Jenny Intimate Care Membership',
+    META_CONTENT_IDS: ['10597036163338'],
+  },
+};
+CONFIG.MEMBERSHIP_NAME = 'Just Jenny Health For Life Membership';
+Object.assign(CONFIG, PRODUCT_CONFIG[PRODUCT_KEY] || {});
+const PQ = PRODUCT_KEY === 'neurotone' ? '' : '&p=' + PRODUCT_KEY; // gaat mee naar de bedankpagina
+
 /* ---- Client error logging ---------------------------------------------------
    Ships uncaught errors + payment failures to /api/clientlog so a break that
    stops checkout shows up in your server logs instead of being invisible. ---- */
@@ -49,12 +65,20 @@ const PAYPAL_CLIENT_ID = CONFIG.PAYPAL_CLIENT_ID;
 /* Bundels (centen). `amount` moet gelijk zijn aan BUNDLES in lib/checkout.js — dat is wat
    Stripe rekent; `compare` / `save` / `savePct` zijn enkel voor de weergave. */
 const IMG = 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/';
-const PACKS = {
+const PACKS_NEUROTONE = {
   1: { label: '1x NeuroTone™', amount: 2995, compare: 6000,  save: 3005,  savePct: 50, img: IMG + 'Artboard3_aa37d423-8b7a-450f-8ea6-83c2aff726c2.png?v=1783404886&width=240' },
   2: { label: '2x NeuroTone™', amount: 3995, compare: 12000, save: 8005,  savePct: 67, img: IMG + 'Artboard3_1.png?v=1783404885&width=240' },
   3: { label: '3x NeuroTone™', amount: 4995, compare: 18000, save: 13005, savePct: 72, img: IMG + 'Artboard3_2.png?v=1783404886&width=240' },
   5: { label: '5x NeuroTone™', amount: 5995, compare: 30000, save: 24005, savePct: 80, img: IMG + 'Artboard3copy_1c26406e-68ad-44c1-a428-5d99f4ff1fa7.png?v=1783404886&width=240' },
 };
+// LubriSense: prijzen zoals in Shopify, geen doorstreepprijs (compare 0 → niet getoond)
+const PACKS_LUBRISENSE = {
+  1: { label: '1x LubriSense™', amount: 3495, compare: 0, save: 0, savePct: 0, img: IMG + '3_5305b5fc-f123-40dc-a487-545a8bd63b05.png?v=1787285389&width=240' },
+  2: { label: '2x LubriSense™', amount: 4495, compare: 0, save: 0, savePct: 0, img: IMG + '4_681fd7dd-be4d-4f81-ad4b-c1295e55e3f6.png?v=1787285390&width=240' },
+  3: { label: '3x LubriSense™', amount: 5495, compare: 0, save: 0, savePct: 0, img: IMG + '5.png?v=1787285390&width=240' },
+  5: { label: '5x LubriSense™', amount: 6495, compare: 0, save: 0, savePct: 0, img: IMG + '6.png?v=1787285390&width=240' },
+};
+const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
   free:    { cents: 0,   title: 'Standard (5-8 giorni lavorativi)' },
@@ -106,7 +130,7 @@ function renewalCents() {
 }
 function successUrl(subId) {
   // Mail 2 (?bonus=1): geen upsellpagina, meteen door naar de bedankpagina (skip=1)
-  return new URL(CONFIG.SUCCESS_PATH + '?sub=' + encodeURIComponent(subId || '') + '&b=' + pack + (BONUS ? '&skip=1' : ''), location.origin).href;
+  return new URL(CONFIG.SUCCESS_PATH + '?sub=' + encodeURIComponent(subId || '') + '&b=' + pack + PQ + (BONUS ? '&skip=1' : ''), location.origin).href;
 }
 
 /* ---------- Render order summary into both slots ---------- */
@@ -115,17 +139,19 @@ function renderSummaries() {
   $$('.js-summary-slot').forEach(slot => {
     slot.innerHTML = '';
     slot.appendChild(tpl.content.cloneNode(true));
+    slot.querySelectorAll('.prod-name').forEach(el => { el.textContent = CONFIG.PRODUCT_NAME; });
   });
   wireDiscountInputs();
   updateAmounts();
 }
 
 function updateAmounts() {
-  $$('.prod-thumb img, .mobile-total img').forEach(el => { el.src = P.img; });
+  $$('.prod-thumb img, .mobile-total img').forEach(el => { el.src = P.img; el.alt = CONFIG.PRODUCT_NAME; });
   $$('.js-pack-label').forEach(el => el.textContent = P.label);
-  $$('.js-compare').forEach(el => el.textContent = money(P.compare));
+  const hasCompare = P.compare > P.amount;
+  $$('.js-compare').forEach(el => { el.textContent = hasCompare ? money(P.compare) : ''; el.hidden = !hasCompare; });
   $$('.js-price').forEach(el => el.textContent = money(P.amount));
-  $$('.js-save').forEach(el => el.textContent = `Risparmi ${money(P.save)} (${P.savePct}%)`);
+  $$('.js-save').forEach(el => { el.textContent = hasCompare ? `Risparmi ${money(P.save)} (${P.savePct}%)` : ''; el.hidden = !hasCompare; });
   $$('.js-subtotal').forEach(el => el.textContent = money(P.amount));
   $$('.js-shipping').forEach(el => {
     if (!addrComplete()) {
@@ -664,7 +690,7 @@ function initPayPal() {
         const r = await fetch('/api/paypal/create-subscription', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            pack, ship_method: shipMethod, track: attribution(),
+            pack, product: PRODUCT_KEY, ship_method: shipMethod, track: attribution(),
             email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh,
           }),
         });
@@ -682,7 +708,7 @@ function initPayPal() {
           });
         } catch (e) { logClient('paypal_confirm', e && e.message, 'paypal'); }
         try { sessionStorage.setItem('checkout_purchase_fired', id); } catch (e) {}
-        location.href = new URL(CONFIG.SUCCESS_PATH + '?pp=' + encodeURIComponent(id) + '&b=' + pack + (BONUS ? '&skip=1' : ''), location.origin).href;
+        location.href = new URL(CONFIG.SUCCESS_PATH + '?pp=' + encodeURIComponent(id) + '&b=' + pack + PQ + (BONUS ? '&skip=1' : ''), location.origin).href;
       },
       onError: (err) => { showError('PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.'); logClient('paypal_error', err && err.message, 'paypal'); },
     });
@@ -739,6 +765,7 @@ function createSubscription(customer) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         pack,
+        product: PRODUCT_KEY,
         ship_method: shipMethod,
         promo_code: promo ? promo.code : null,
         track: attribution(),
@@ -1226,7 +1253,7 @@ function sendStartedCheckout() {
     _sentEmails.add(em);
     fetch('/api/checkout/started', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
-      body: JSON.stringify({ email: em, pack, first_name: ($('#first-name') && $('#first-name').value.trim()) || '', track: attribution(), gift: GIFT, bonus: BONUS }),
+      body: JSON.stringify({ email: em, pack, product: PRODUCT_KEY, first_name: ($('#first-name') && $('#first-name').value.trim()) || '', track: attribution(), gift: GIFT, bonus: BONUS }),
     }).catch(() => {});
   } catch (e) {}
 }
@@ -1299,6 +1326,19 @@ function startGiftTimer() {
   const iv = setInterval(tick, 1000);
   tick();
 }
+// Productteksten in de pagina (naam membership in de voorwaarden, alt-teksten, links met ?p=)
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    $$('.js-membership-name').forEach(el => { el.textContent = CONFIG.MEMBERSHIP_NAME; });
+    $$('img[alt="NeuroTone"]').forEach(el => { el.alt = CONFIG.PRODUCT_NAME; });
+    if (PRODUCT_KEY !== 'neurotone') {
+      document.title = 'Checkout — ' + CONFIG.PRODUCT_NAME + ' — Just Jenny';
+      $$('a[href^="/checkout/termini"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY; });
+      // De NeuroTone-membershippagina past niet: opzeggen staat in de voorwaarden
+      $$('a[href^="/checkout/membership"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY + '#membership'; });
+    }
+  } catch (e) { logClient('product_init', e && e.message, 'product'); }
+});
 document.addEventListener('DOMContentLoaded', () => {
   try {
     const em = $('#email');

@@ -2,6 +2,7 @@
 // Statische pagina; gelinkt vanuit de checkout (tekst onder de bestelknop), de upsellpagina en de mails.
 // Inhoud goedgekeurd door Niels; wijzigingen alleen na overleg. Checkout- en mailteksten blijven onaangeroerd.
 import Head from "next/head";
+import { useEffect, useState } from "react";
 
 const LOGO = "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114";
 const UPDATED = "2 ottobre 2026";
@@ -36,6 +37,10 @@ a{color:#c96f43;font-weight:700}
 `;
 
 export default function Termini() {
+  // ?p=lubrisense → zelfde voorwaarden met de naam van de LubriSense-membership; de NeuroTone-voordelen vallen weg
+  const [lubri, setLubri] = useState(false);
+  useEffect(() => { setLubri(/^lubrisense$/i.test(new URLSearchParams(window.location.search).get("p") || "")); }, []);
+  const MNAME = lubri ? "Intimate Care Membership" : "Health For Life Membership";
   return (
     <>
       <Head>
@@ -51,7 +56,7 @@ export default function Termini() {
           <p className="upd">Ultimo aggiornamento: {UPDATED}</p>
 
           <div className="toc">
-            <a href="#panoramica">Panoramica</a><a href="#legge">Legge applicabile</a><a href="#membership">Health For Life Membership</a><a href="#garanzia">Garanzia 90 giorni</a><a href="#prodotti">Prodotti</a><a href="#sms">SMS</a><a href="#condizioni">Condizioni generali</a><a href="#contatti">Contatti</a>
+            <a href="#panoramica">Panoramica</a><a href="#legge">Legge applicabile</a><a href="#membership">{MNAME}</a><a href="#garanzia">Garanzia 90 giorni</a><a href="#prodotti">Prodotti</a><a href="#sms">SMS</a><a href="#condizioni">Condizioni generali</a><a href="#contatti">Contatti</a>
           </div>
 
           <h2 id="panoramica">Panoramica</h2>
@@ -65,19 +70,21 @@ export default function Termini() {
           <p>La validità, l'interpretazione, l'esecuzione e l'adempimento del presente accordo, nonché qualsiasi accordo separato con cui ti forniamo i Servizi, sono regolati dalle leggi degli Stati Uniti d'America, ove applicabili, e in subordine dalle leggi dello Stato del Wyoming, senza riguardo ai principi sul conflitto di leggi. Qualsiasi controversia derivante da questi Termini e condizioni sarà sottoposta a un tribunale competente dello Stato del Wyoming, Stati Uniti d'America.</p>
           <p>Nulla in questi Termini limita i diritti inderogabili che potrebbero spettarti in base alla legislazione del tuo paese di residenza.</p>
 
-          <h2 id="membership">Termini della Health For Life Membership</h2>
+          <h2 id="membership">Termini della {MNAME}</h2>
           <div className="box">
-            <p><b>In breve:</b> la Health For Life Membership inizia con una prova gratuita di <b>7 giorni</b>. Se non annulli prima della fine della prova, il tuo metodo di pagamento sarà addebitato di <b>49,00 €</b> ogni <b>28 giorni</b>, fino a quando non annulli. Puoi annullare in qualsiasi momento dall'area membri o scrivendo a <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. Ti inviamo un promemoria via e-mail <b>3 giorni prima</b> di ogni addebito.</p>
+            <p><b>In breve:</b> la {MNAME} inizia con una prova gratuita di <b>7 giorni</b>. Se non annulli prima della fine della prova, il tuo metodo di pagamento sarà addebitato di <b>49,00 €</b> ogni <b>28 giorni</b>, fino a quando non annulli. Puoi annullare in qualsiasi momento dall'area membri o scrivendo a <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. Ti inviamo un promemoria via e-mail <b>3 giorni prima</b> di ogni addebito.</p>
           </div>
 
           <h3>Programma in abbonamento</h3>
-          <p>Quando la Health For Life Membership viene aggiunta al tuo ordine, ti iscrivi a un programma in abbonamento con rinnovo automatico.</p>
+          <p>Quando la {MNAME} viene aggiunta al tuo ordine, ti iscrivi a un programma in abbonamento con rinnovo automatico.</p>
 
           <h3>Prova gratuita e addebiti ricorrenti</h3>
           <p>La tua membership inizia con una prova gratuita di 7 giorni. Salvo annullamento prima della fine della prova, autorizzi Just Jenny ad addebitare automaticamente sul metodo di pagamento utilizzato per l'ordine originale l'importo di 49,00 € ogni 28 giorni, fino a quando non annulli.</p>
 
+          {!lubri && <>
           <h3>Vantaggi della membership</h3>
           <p>Finché la tua membership è attiva, puoi accedere ai vantaggi riservati ai membri, tra cui: a ogni ciclo di fatturazione un prodotto idoneo per il benessere dell'udito gratuito, pagando soltanto il contributo di spedizione e gestione indicato per ciascun articolo; la Biblioteca Tinnitus con e-book scaricabili; offerte riservate ai membri; assistenza dedicata e altri vantaggi messi a disposizione da Just Jenny.</p>
+          </>}
           <p>I prodotti idonei e i vantaggi sono accessibili tramite l'<a href={PORTAL} target="_blank" rel="noopener">Area Membri</a>. L'idoneità dei prodotti, le quantità, la disponibilità, i contributi di spedizione e gestione e le altre condizioni sono indicati nell'area membri al momento della selezione.</p>
 
           <h3>Gestione della membership</h3>
@@ -97,7 +104,7 @@ export default function Termini() {
           <p>Una volta elaborato un addebito ricorrente della membership, la quota relativa a quel periodo di fatturazione non è rimborsabile, salvo quanto diversamente previsto dalla legge applicabile o approvato ai sensi delle politiche di rimborso di Just Jenny.</p>
 
           <h3>Autorizzazione</h3>
-          <p>Selezionando l'opzione membership e completando l'acquisto, confermando l'ordine nel checkout, dichiari di aver letto e accettato i presenti Termini della Health For Life Membership. Autorizzi Just Jenny ad addebitare sul metodo di pagamento selezionato 49,00 € ogni 28 giorni al termine della prova gratuita di 7 giorni, fino a quando non annulli.</p>
+          <p>Selezionando l'opzione membership e completando l'acquisto, confermando l'ordine nel checkout, dichiari di aver letto e accettato i presenti Termini della {MNAME}. Autorizzi Just Jenny ad addebitare sul metodo di pagamento selezionato 49,00 € ogni 28 giorni al termine della prova gratuita di 7 giorni, fino a quando non annulli.</p>
           <p>Per domande sulla tua membership, scrivi a <a href={`mailto:${EMAIL}`}>{EMAIL}</a>.</p>
 
           <h2 id="garanzia">Garanzia soddisfatti o rimborsati di 90 giorni</h2>

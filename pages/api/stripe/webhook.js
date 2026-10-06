@@ -11,8 +11,8 @@
 
 import Stripe from "stripe";
 import axios from "axios";
-import { BUNDLES, SHIPPING, PRODUCT_TITLE, MEMBERSHIP } from "../../../lib/checkout";
-import { syncNewMember, syncRenewal, syncCancel, trackEvent } from "../../../lib/klaviyo";
+import { SHIPPING, getProduct } from "../../../lib/checkout";
+import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
 import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
 import { registerMember, markRenewed, markCancelled } from "../../../lib/portal-members";
@@ -71,7 +71,8 @@ async function orderExistsForInvoice(invoiceId) {
 async function createShopifyOrder({ invoice, subscription, customer, paymentIntent }) {
   const md = { ...(subscription?.metadata || {}), ...(paymentIntent?.metadata || {}) };
   const qty = parseInt(md.qty || md.bundle || "3", 10);
-  const bundle = BUNDLES[qty] || BUNDLES[3];
+  const product = getProduct(md.product_key); // NeuroTone of LubriSense
+  const bundle = product.bundles[qty] || product.bundles[3];
   const shipCode = md.shipping || "insured";
   const ship = SHIPPING[shipCode] || SHIPPING.insured;
   const addr = customer?.shipping?.address || customer?.address || {};
@@ -92,6 +93,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   const addrOk = !!(addr.line1 && addr.city && /^\d{5}$/.test(String(addr.postal_code || "")));
   const tags = ["stripe", "subscription-frontend", invTag(invoice.id)];
   if (!addrOk) tags.push("missing-address");
+  if (product.tag) tags.push(product.tag);
   // Kortingscode in Stripe → zelfde korting op de Shopify-order, zodat de bedragen kloppen
   const discountCents = (invoice.total_discount_amounts || []).reduce((t, d) => t + (d.amount || 0), 0);
 
@@ -102,7 +104,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
     financialStatus: "PAID",
     sourceName: "stripe-checkout",
     tags,
-    note: `Stripe checkout — ${bundle.label} + membership (7 giorni prova). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`,
+    note: `Stripe checkout — ${bundle.label} + ${product.membership.name} (${product.membership.trialDays} giorni prova). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`,
     customAttributes,
     lineItems: [{ variantId: bundle.variantId, quantity: 1, priceSet: { shopMoney: { amount: (bundle.price / 100).toFixed(2), currencyCode: "EUR" } } }],
     shippingLines: [{ title: ship.title, code: ship.code, priceSet: { shopMoney: { amount: (ship.price / 100).toFixed(2), currencyCode: "EUR" } } }],
@@ -125,7 +127,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   }
 
   // Abandoned-checkout-mail 2: 1 flacone in omaggio
-  const bonus = await hasCheckoutBonus(order.email);
+  const bonus = product.abandoned ? await hasCheckoutBonus(order.email) : false;
   if (bonus) { order.lineItems.push(bonusLineItem()); order.tags.push("abandon-bonus"); order.note += " + 1x NeuroTone in omaggio (abandoned checkout)"; }
 
   const d = await shopifyGraphql(
@@ -198,6 +200,7 @@ export default async function handler(req, res) {
         }
         const md = { ...(subscription?.metadata || {}), ...(paymentIntent?.metadata || {}) };
         const qty = parseInt(md.qty || md.bundle || "3", 10);
+        const product = getProduct(md.product_key);
         const addr = customer?.shipping?.address || customer?.address || {};
         const [fn, ...ln] = String(customer?.shipping?.name || customer?.name || "").split(" ");
         // Meta CAPI: Purchase (server-side, gededupliceerd met de pixel op de bedankpagina via event_id)
@@ -206,7 +209,7 @@ export default async function handler(req, res) {
           email: customer?.email || inv.customer_email, phone: customer?.shipping?.phone || customer?.phone,
           firstName: fn, lastName: ln.join(" "), city: addr.city, zip: addr.postal_code, state: addr.state, country: addr.country || "IT",
           clientIp: md.client_ip, userAgent: md.client_ua, fbc: md.jjb_fbc, fbp: md.jjb_fbp, vid: md.jjb_vid,
-          contents: [{ id: META_CONTENT_ID, quantity: qty }],
+          contents: [{ id: product.key === "neurotone" ? META_CONTENT_ID : product.shopifyProductId, quantity: qty }],
         });
         // Ledenportaal: record aanmaken + welkomstlink (30 dagen) voor mail 1; nooit blokkerend
         const memberInfo = {
@@ -214,11 +217,16 @@ export default async function handler(req, res) {
           phone: itPhone(customer?.shipping?.phone || customer?.phone),
           address: { address1: addr.line1, city: addr.city, zip: addr.postal_code, province: addr.state, country: addr.country || "IT" },
           provider: "stripe", subscriptionId: subscription?.id || subId, stripeCustomerId: custId, qty,
-          bundleLabel: (BUNDLES[qty] || BUNDLES[3]).label, shippingTitle: (SHIPPING[md.shipping] || SHIPPING.insured).title,
+          bundleLabel: (product.bundles[qty] || product.bundles[3]).label, shippingTitle: (SHIPPING[md.shipping] || SHIPPING.insured).title,
           amountPaid: (inv.amount_paid || 0) / 100, trialEnds: subscription?.trial_end ? subscription.trial_end * 1000 : null,
-          orderName: order.name, membershipPrice: MEMBERSHIP.price / 100, intervalDays: MEMBERSHIP.intervalDays,
+          orderName: order.name, membershipPrice: product.membership.price / 100, intervalDays: product.membership.intervalDays,
           startedAt: inv.created * 1000, nextChargeAt: subscription?.current_period_end ? subscription.current_period_end * 1000 : null,
         };
+        // Product zonder (NeuroTone-)portaal, bv. LubriSense: alleen eigen Klaviyo-events, geen portaal/upsell-mail
+        if (!product.portal) {
+          await syncProductMember(product, "started", memberInfo);
+          return res.status(200).json({ received: true, order: order.name, product: product.key });
+        }
         const portalLoginUrl = await registerMember(memberInfo);
         // Abonnee → Klaviyo (lijst + event "Started Membership"); nooit blokkerend
         await syncNewMember({ ...memberInfo, portalLoginUrl }); // profiel + lijst
@@ -231,6 +239,12 @@ export default async function handler(req, res) {
       if (inv.billing_reason === "subscription_cycle" && inv.amount_paid > 0) {
         const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
         const sub = subId ? await stripe.subscriptions.retrieve(subId).catch(() => null) : null;
+        const product = getProduct(sub?.metadata?.product_key);
+        if (!product.portal) {
+          await syncProductMember(product, "renewed", { email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
+            amountPaid: (inv.amount_paid || 0) / 100, nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
+          return res.status(200).json({ received: true, renewal: true, product: product.key });
+        }
         await syncRenewal({ email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
           amountPaid: (inv.amount_paid || 0) / 100, nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
         await markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: sub?.current_period_end ? sub.current_period_end * 1000 : null, amountPaid: (inv.amount_paid || 0) / 100 });
@@ -241,6 +255,13 @@ export default async function handler(req, res) {
       // Mislukte rebill: het portaal deactiveert het lid (status live uit Stripe) → Klaviyo-event voor de herinneringsmail
       const inv = event.data.object;
       if (inv.customer_email && inv.billing_reason === "subscription_cycle") {
+        const fsubId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
+        const fsub = fsubId ? await stripe.subscriptions.retrieve(fsubId).catch(() => null) : null;
+        const fproduct = getProduct(fsub?.metadata?.product_key);
+        if (!fproduct.portal) {
+          await syncProductMember(fproduct, "failed", { email: inv.customer_email, provider: "stripe", subscriptionId: fsubId, invoiceId: inv.id, amountPaid: (inv.amount_due || 0) / 100 });
+          return res.status(200).json({ received: true, paymentFailed: true, product: fproduct.key });
+        }
         await trackEvent("Membership Payment Failed", inv.customer_email, { provider: "stripe", subscription_id: typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id || "", amount: ((inv.amount_due || 0) / 100).toFixed(2).replace(".", ","), portal_url: `${PORTAL_URL}/riattiva` }, { uniqueId: `payfail-${inv.id}` }).catch(() => {});
       }
       return res.status(200).json({ received: true, paymentFailed: true });
@@ -249,6 +270,11 @@ export default async function handler(req, res) {
       const sub = event.data.object;
       const custId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
       const customer = custId ? await stripe.customers.retrieve(custId).catch(() => null) : null;
+      const cproduct = getProduct(sub.metadata?.product_key);
+      if (!cproduct.portal) {
+        await syncProductMember(cproduct, "cancelled", { email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });
+        return res.status(200).json({ received: true, cancelled: true, product: cproduct.key });
+      }
       await syncCancel({ email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });
       await markCancelled(customer?.email);
       return res.status(200).json({ received: true, cancelled: true });

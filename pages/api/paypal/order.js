@@ -3,7 +3,7 @@
 
 import { paypalConfigured, pp, unpackCustom, findOrderForPaypal } from "../../../lib/paypal";
 import { sweepIfDue } from "../../../lib/upsell-queue";
-import { BUNDLES, SHIPPING, UPSELL } from "../../../lib/checkout";
+import { SHIPPING, UPSELL, getProduct } from "../../../lib/checkout";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -15,7 +15,8 @@ export default async function handler(req, res) {
     const created = Math.floor(new Date(sub.create_time || Date.now()).getTime() / 1000);
     if (Date.now() / 1000 - created > 30 * 86400) return res.status(404).json({ error: "Non trovato" });
     const meta = unpackCustom(sub.custom_id);
-    const bundle = BUNDLES[meta.qty] || BUNDLES[3];
+    const product = getProduct(meta.product);
+    const bundle = product.bundles[meta.qty] || product.bundles[3];
     const ship = SHIPPING[meta.ship] || SHIPPING.insured;
     const s = sub.subscriber || {};
     const a = s.shipping_address?.address || {};
@@ -29,6 +30,9 @@ export default async function handler(req, res) {
       paid: sub.status === "ACTIVE",
       created,
       qty: bundle.qty,
+      product: product.key,
+      bundleLabel: bundle.label,
+      bundlePrice: bundle.price,
       shipping: ship.code,
       amountPaid: Math.round(parseFloat(sub.billing_info?.last_payment?.amount?.value || (bundle.price + ship.price) / 100) * 100),
       email: s.email_address || "",

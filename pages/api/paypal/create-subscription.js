@@ -11,13 +11,13 @@ export default async function handler(req, res) {
   if (!paypalConfigured()) return res.status(500).json({ error: "PayPal non configurato" });
   try {
     const b = req.body || {};
-    const plan = await planFor(parseInt(b.pack, 10), b.ship_method);
+    const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product);
     const s = b.shipping || {};
     const full = !!(s.line1 && s.city && /^\d{5}$/.test(String(s.postal_code || "")) && (s.name || b.name));
 
     const body = {
       plan_id: plan.id,
-      custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}),
+      custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}, plan.product.key),
       application_context: {
         brand_name: "Just Jenny",
         locale: "it-IT",

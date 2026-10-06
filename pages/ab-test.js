@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from "react";
 
-const FOCUS = ["neurodrops"]; // standaard alleen deze funnel(s) tonen; "Alle tests" toont de rest
+const FOCUS = ["neurodrops", "lubrisense"]; // standaard alleen deze funnel(s) tonen; "Alle tests" toont de rest
 
 const ui = {
   page: { padding: "28px 36px", background: "#f7f8fa", minHeight: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", color: "#0f172a" },

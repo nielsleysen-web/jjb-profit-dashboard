@@ -14,7 +14,7 @@
 // Antwoordt altijd snel { ok: true }; fouten blokkeren de checkout nooit.
 import { trackEvent, klaviyoConfigured } from "../../../lib/klaviyo";
 import { bump, redis, storeConfigured } from "../../../lib/portal-store";
-import { BUNDLES } from "../../../lib/checkout";
+import { BUNDLES, getProduct } from "../../../lib/checkout";
 
 const CHECKOUT_BASE = process.env.CHECKOUT_URL || "https://checkout.getjustjenny.com/";
 export const RECOVERY_CODE = process.env.CHECKOUT_RECOVERY_CODE || "BENTORNATO20";
@@ -31,6 +31,8 @@ export default async function handler(req, res) {
     const b = req.body || {};
     const email = String(b.email || "").trim().toLowerCase().slice(0, 200);
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(200).json({ ok: false, error: "invalid_email" });
+    // Abandoned-checkout-mails bestaan (nog) alleen voor NeuroTone
+    if (!getProduct(b.product).abandoned) return res.status(200).json({ ok: true, skipped: "product" });
     const pack = BUNDLES[b.pack] ? String(b.pack) : "3";
     const bundle = BUNDLES[pack];
 

@@ -3,6 +3,7 @@
 //   /checkout                          → /checkout/index.html   (op elk domein, ook *.vercel.app om te testen)
 //   checkout.getjustjenny.com/         → /checkout/index.html
 //   checkout.getjustjenny.com/grazie   → /checkout/grazie        (bedankpagina met quiz)
+//   checkout.getjustjenny.com/lubrisense → /checkout/index.html  (LubriSense; ook /checkout?p=lubrisense)
 // Het ledenportaal: members.getjustjenny.com/<pad> → /portal/<pad> (pages/portal/*).
 //   API-routes (/api/portal/*) en Next-assets blijven op hun eigen pad.
 // Het Operations Centre blijft gewoon op het dashboard-domein bereikbaar.
@@ -30,7 +31,9 @@ export function middleware(req) {
     return NextResponse.rewrite(to);
   }
 
-  if (url.pathname === "/checkout" || url.pathname === "/checkout/" || (onCheckoutHost && url.pathname === "/")) {
+  // LubriSense: checkout.getjustjenny.com/lubrisense → zelfde checkoutpagina; checkout.js leest het product uit het pad
+  const lubri = onCheckoutHost && (url.pathname === "/lubrisense" || url.pathname === "/lubrisense/");
+  if (url.pathname === "/checkout" || url.pathname === "/checkout/" || (onCheckoutHost && url.pathname === "/") || lubri) {
     const to = url.clone();
     to.pathname = "/checkout/index.html";
     return NextResponse.rewrite(to);
