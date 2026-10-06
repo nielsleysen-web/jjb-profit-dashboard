@@ -5,15 +5,16 @@
 //   POST { t }       → token controleren, sessie-cookie zetten, antwoord { ok, next }
 //                     next: "/welcome" (nog geen wachtwoord) · "/new-password" (reset) · "/" (startpagina)
 
-import { consumeLoginToken, setSessionCookie, PORTAL_URL } from "../../../../lib/portal-auth";
+import { consumeLoginToken, setSessionCookie, portalUrl } from "../../../../lib/portal-auth";
 import { getMember } from "../../../../lib/portal-members";
 import { recordLogin } from "../../../../lib/portal-activity";
+import { withPortalBrand } from "../../../../lib/portal-brand";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method === "GET") {
     const t = String(req.query.t || "");
-    return res.redirect(302, `${PORTAL_URL}/verify?t=${encodeURIComponent(t)}`);
+    return res.redirect(302, `${portalUrl()}/verify?t=${encodeURIComponent(t)}`);
   }
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   try {
@@ -31,3 +32,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "server" });
   }
 }
+
+// Brand volgt de host: members.… = NeuroTone, intimate.… = LubriSense (lib/portal-brand.js)
+export default withPortalBrand(handler);

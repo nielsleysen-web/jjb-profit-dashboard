@@ -8,6 +8,7 @@
 import crypto from "crypto";
 import { trackEvent, klaviyoConfigured } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
+import { withPortalBrand } from "../../../lib/portal-brand";
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 function dashboardSession(req) {
@@ -26,7 +27,7 @@ function authorized(req) {
   return !!(s && (s.finance || s.admin));
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (!authorized(req)) return res.status(401).json({ ok: false, error: "unauthorized" });
   if (!klaviyoConfigured()) return res.status(500).json({ ok: false, error: "klaviyo_not_configured" });
@@ -49,3 +50,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: e.message, sent });
   }
 }
+
+// Brand volgt de host: members.… = NeuroTone, intimate.… = LubriSense (lib/portal-brand.js)
+export default withPortalBrand(handler);

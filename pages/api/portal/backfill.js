@@ -17,6 +17,7 @@ import { shopifyGraphql } from "../../../lib/shopify-admin";
 import { getMember, upsertMember, listMemberEmails } from "../../../lib/portal-members";
 import { createLoginLink, normEmail } from "../../../lib/portal-auth";
 import { storeConfigured } from "../../../lib/portal-store";
+import { withPortalBrand } from "../../../lib/portal-brand";
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 function getSession(req) {
@@ -29,7 +30,7 @@ function getSession(req) {
   try { const p = JSON.parse(Buffer.from(body, "base64url").toString()); return p.exp && p.exp > Date.now() ? p : null; } catch { return null; }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   try {
     const s = getSession(req);
@@ -162,3 +163,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ success: false, error: e.message });
   }
 }
+
+// Brand volgt de host: members.… = NeuroTone, intimate.… = LubriSense (lib/portal-brand.js)
+export default withPortalBrand(handler);

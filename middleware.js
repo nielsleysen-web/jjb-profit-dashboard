@@ -4,7 +4,7 @@
 //   checkout.getjustjenny.com/         → /checkout/index.html
 //   checkout.getjustjenny.com/grazie   → /checkout/grazie        (bedankpagina met quiz)
 //   checkout.getjustjenny.com/lubrisense → /checkout/index.html  (LubriSense; ook /checkout?p=lubrisense)
-// Het ledenportaal: members.getjustjenny.com/<pad> → /portal/<pad> (pages/portal/*).
+// Het ledenportaal: members.getjustjenny.com/<pad> en intimate.getjustjenny.com/<pad> → /portal/<pad> (pages/portal/*).
 //   API-routes (/api/portal/*) en Next-assets blijven op hun eigen pad.
 // Het Operations Centre blijft gewoon op het dashboard-domein bereikbaar.
 
@@ -17,7 +17,8 @@ export function middleware(req) {
   const host = (req.headers.get("host") || "").toLowerCase();
   const url = req.nextUrl;
   const onCheckoutHost = host.startsWith("checkout.");
-  const onMembersHost = host.startsWith("members.");
+  // Ledenportaal: members.… (NeuroTone) en intimate.… (LubriSense) — zelfde pagina's, brand volgt de host (lib/portal-brand.js)
+  const onMembersHost = host.startsWith("members.") || host.startsWith("intimate.");
 
   if (onMembersHost) {
     // Nette URL's: members.getjustjenny.com/login i.p.v. /portal/login

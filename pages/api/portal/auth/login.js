@@ -4,8 +4,9 @@ import { normEmail, verifyPassword, setSessionCookie } from "../../../../lib/por
 import { getMember } from "../../../../lib/portal-members";
 import { bump } from "../../../../lib/portal-store";
 import { recordLogin } from "../../../../lib/portal-activity";
+import { withPortalBrand } from "../../../../lib/portal-brand";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   try {
@@ -30,3 +31,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "server" });
   }
 }
+
+// Brand volgt de host: members.… = NeuroTone, intimate.… = LubriSense (lib/portal-brand.js)
+export default withPortalBrand(handler);

@@ -6,8 +6,9 @@
 import { readSession } from "../../../lib/portal-auth";
 import { getMember } from "../../../lib/portal-members";
 import { startClaim, ClaimError } from "../../../lib/portal-claim";
+import { withPortalBrand } from "../../../lib/portal-brand";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   const s = readSession(req);
@@ -24,3 +25,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "server" });
   }
 }
+
+// Brand volgt de host: members.… = NeuroTone, intimate.… = LubriSense (lib/portal-brand.js)
+export default withPortalBrand(handler);

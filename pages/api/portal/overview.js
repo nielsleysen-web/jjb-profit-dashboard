@@ -6,8 +6,9 @@ import { getMember, publicMember } from "../../../lib/portal-members";
 import { getOverview } from "../../../lib/portal-account";
 import { touchSeen } from "../../../lib/portal-activity";
 import { buildHome } from "../../../lib/portal-home";
+import { withPortalBrand } from "../../../lib/portal-brand";
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   const s = readSession(req);
   if (!s) return res.status(401).json({ ok: false, error: "not_logged_in" });
@@ -23,3 +24,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "server" });
   }
 }
+
+// Brand volgt de host: members.… = NeuroTone, intimate.… = LubriSense (lib/portal-brand.js)
+export default withPortalBrand(handler);

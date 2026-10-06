@@ -2,14 +2,17 @@
 // (login, link verstuurd, wachtwoord vergeten, welkom, nieuw wachtwoord). Design: design/portal/01 + 06.
 
 import Head from "next/head";
+import { usePortalBrand } from "../../lib/portal-i18n";
+import { brandCss } from "../../lib/portal-theme";
 
 export const LOGO = "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114";
 export const SUPPORT_EMAIL = "Hello@justjennybeauty.com";
 
 export default function AuthShell({ title, heading, sub, children, below, footer }) {
+  const brand = usePortalBrand();
   return (
     <>
-      <AuthStyles />
+      <AuthStyles brand={brand} />
       <Head>
         <title>{title ? `${title} — Just Jenny` : "Just Jenny members"}</title>
         <meta name="viewport" content="width=device-width,initial-scale=1" />
@@ -21,16 +24,14 @@ export default function AuthShell({ title, heading, sub, children, below, footer
         {sub && <p className="sub">{sub}</p>}
         <div className="card">{children}</div>
         {below}
-        <p className="foot">{footer || "Health For Life Membership · Just Jenny"}<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
+        <p className="foot">{footer || (brand === "lubrisense" ? "Intimate Care Membership · Just Jenny" : "Health For Life Membership · Just Jenny")}<br /><a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></p>
       </div>
     </>
   );
 }
 
-function AuthStyles() {
-  return (
-    <>
-      <style jsx global>{`
+function AuthStyles({ brand }) {
+  const css = `
         *{box-sizing:border-box}
         body{margin:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a}
         .top{padding:26px 20px 0;text-align:center}
@@ -58,9 +59,9 @@ function AuthStyles() {
         .foot{color:#999;font-size:12px;margin-top:60px;line-height:1.8}
         .foot a{color:#999;text-decoration:none}
         @media (max-width:520px){h1{font-size:28px}.card{padding:20px 18px 18px}.wrap{padding-top:32px}}
-      `}</style>
-    </>
-  );
+      `;
+  // LubriSense-portaal: eigen merkkleuren (lib/portal-theme.js)
+  return <style jsx global>{`${brandCss(css, brand)}`}</style>;
 }
 
 // Formulieren zonder <form>: zo kan een klik of Enter vóór het laden van de scripts de pagina
@@ -68,7 +69,7 @@ function AuthStyles() {
 export const onEnter = (fn) => (e) => { if (e.key === "Enter") { e.preventDefault(); fn(e); } };
 
 // Paden: op members.getjustjenny.com zonder "/portal" (de middleware herschrijft), elders mét.
-export const P = (path) => (typeof window !== "undefined" && /^members\./i.test(window.location.host) ? path : `/portal${path === "/" ? "" : path}`);
+export const P = (path) => (typeof window !== "undefined" && /^(members|intimate)\./i.test(window.location.host) ? path : `/portal${path === "/" ? "" : path}`);
 // Navigatie tussen de inlogschermen: gewone paginalading (simpel en betrouwbaar)
 export const go = (path) => { window.location.assign(P(path)); };
 

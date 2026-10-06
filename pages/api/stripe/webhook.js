@@ -12,10 +12,11 @@
 import Stripe from "stripe";
 import axios from "axios";
 import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT } from "../../../lib/checkout";
+import { runWithBrand } from "../../../lib/portal-brand";
 import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
 import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
-import { registerMember, markRenewed, markCancelled } from "../../../lib/portal-members";
+import { registerMember, markRenewed, markCancelled, productMemberEvent } from "../../../lib/portal-members";
 import { addUpsellToOrder } from "../../../lib/upsell";
 import { holdStartedMembership, releaseStartedMembership } from "../../../lib/upsell-gate";
 import { hasCheckoutBonus, clearCheckoutBonus, bonusLineItem } from "../../../lib/checkout-bonus";
@@ -172,7 +173,9 @@ export default async function handler(req, res) {
         const subIdEarly = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
         const subEarly = subIdEarly ? await stripe.subscriptions.retrieve(subIdEarly).catch(() => null) : null;
         if (subEarly?.metadata?.kind === "reactivation") {
-          await markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: subEarly.current_period_end * 1000, amountPaid: (inv.amount_paid || 0) / 100 });
+          // In het portaal van het juiste product (LubriSense-heractivering → intimate.…)
+          await runWithBrand(getProduct(subEarly.metadata.product_key).portalBrand || "neurotone", () =>
+            markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: subEarly.current_period_end * 1000, amountPaid: (inv.amount_paid || 0) / 100 }));
           return res.status(200).json({ received: true, reactivation: true });
         }
         const already = await orderExistsForInvoice(inv.id);
@@ -227,7 +230,7 @@ export default async function handler(req, res) {
         };
         // Product zonder (NeuroTone-)portaal, bv. LubriSense: alleen eigen Klaviyo-events, geen portaal/upsell-mail
         if (!product.portal) {
-          await syncProductMember(product, "started", memberInfo);
+          await productMemberEvent(product, "started", memberInfo);
           return res.status(200).json({ received: true, order: order.name, product: product.key });
         }
         const portalLoginUrl = await registerMember(memberInfo);
@@ -244,7 +247,7 @@ export default async function handler(req, res) {
         const sub = subId ? await stripe.subscriptions.retrieve(subId).catch(() => null) : null;
         const product = getProduct(sub?.metadata?.product_key);
         if (!product.portal) {
-          await syncProductMember(product, "renewed", { email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
+          await productMemberEvent(product, "renewed", { paidAt: inv.created * 1000, email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
             amountPaid: (inv.amount_paid || 0) / 100, nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
           return res.status(200).json({ received: true, renewal: true, product: product.key });
         }
@@ -262,7 +265,7 @@ export default async function handler(req, res) {
         const fsub = fsubId ? await stripe.subscriptions.retrieve(fsubId).catch(() => null) : null;
         const fproduct = getProduct(fsub?.metadata?.product_key);
         if (!fproduct.portal) {
-          await syncProductMember(fproduct, "failed", { email: inv.customer_email, provider: "stripe", subscriptionId: fsubId, invoiceId: inv.id, amountPaid: (inv.amount_due || 0) / 100 });
+          await productMemberEvent(fproduct, "failed", { email: inv.customer_email, provider: "stripe", subscriptionId: fsubId, invoiceId: inv.id, amountPaid: (inv.amount_due || 0) / 100 });
           return res.status(200).json({ received: true, paymentFailed: true, product: fproduct.key });
         }
         await trackEvent("Membership Payment Failed", inv.customer_email, { provider: "stripe", subscription_id: typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id || "", amount: ((inv.amount_due || 0) / 100).toFixed(2).replace(".", ","), portal_url: `${PORTAL_URL}/riattiva` }, { uniqueId: `payfail-${inv.id}` }).catch(() => {});
@@ -275,7 +278,7 @@ export default async function handler(req, res) {
       const customer = custId ? await stripe.customers.retrieve(custId).catch(() => null) : null;
       const cproduct = getProduct(sub.metadata?.product_key);
       if (!cproduct.portal) {
-        await syncProductMember(cproduct, "cancelled", { email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });
+        await productMemberEvent(cproduct, "cancelled", { email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });
         return res.status(200).json({ received: true, cancelled: true, product: cproduct.key });
       }
       await syncCancel({ email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });

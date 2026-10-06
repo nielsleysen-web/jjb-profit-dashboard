@@ -4,10 +4,11 @@
 import { readSession, hashPassword, verifyPassword } from "../../../lib/portal-auth";
 import { getMember, upsertMember, setMemberPassword } from "../../../lib/portal-members";
 import { bump } from "../../../lib/portal-store";
+import { withPortalBrand } from "../../../lib/portal-brand";
 
 const clean = (v) => String(v || "").replace(/\s+/g, " ").trim().slice(0, 60);
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   const s = readSession(req);
@@ -41,3 +42,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "server" });
   }
 }
+
+// Brand volgt de host: members.… = NeuroTone, intimate.… = LubriSense (lib/portal-brand.js)
+export default withPortalBrand(handler);

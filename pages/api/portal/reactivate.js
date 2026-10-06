@@ -16,9 +16,10 @@ import { readSession } from "../../../lib/portal-auth";
 import { getMember, upsertMember } from "../../../lib/portal-members";
 import { getSubscriptionInfo } from "../../../lib/portal-account";
 import { paypalConfigured, pp, reactivationPlan } from "../../../lib/paypal";
-import { MEMBERSHIP } from "../../../lib/checkout";
+import { getProduct } from "../../../lib/checkout";
+import { currentBrand, withPortalBrand } from "../../../lib/portal-brand";
 import { trackEvent, klaviyoConfigured } from "../../../lib/klaviyo";
-import { PORTAL_URL } from "../../../lib/portal-auth";
+import { portalUrl } from "../../../lib/portal-auth";
 import { grantReactivationGift } from "../../../lib/portal-regift";
 import { logEvent } from "../../../lib/portal-activity";
 
@@ -26,12 +27,17 @@ const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SEC
 export const config = { maxDuration: 30 };
 const V = "v1";
 
+// Membership van het actieve brand (NeuroTone: Health For Life · LubriSense: Intimate Care)
+const brandProduct = () => getProduct(currentBrand().productKey);
+const reactCustom = (email) => (currentBrand().key === "neurotone" ? `reactivate|${email}` : `reactivate|${email}|${currentBrand().key}`).slice(0, 127);
+
 async function membershipPriceId() {
-  if (process.env.STRIPE_PRICE_MEMBERSHIP) return process.env.STRIPE_PRICE_MEMBERSHIP;
-  const key = `jj_membership_${MEMBERSHIP.price}_${MEMBERSHIP.intervalDays}d_${V}`;
+  const product = brandProduct(), MEMBERSHIP = product.membership;
+  if (process.env[product.priceEnv]) return process.env[product.priceEnv];
+  const key = `${product.lookupPrefix}_membership_${brandProduct().membership.price}_${MEMBERSHIP.intervalDays}d_${V}`;
   const found = await stripe.prices.list({ lookup_keys: [key], limit: 1 });
   if (found.data.length) return found.data[0].id;
-  const price = await stripe.prices.create({ currency: "eur", unit_amount: MEMBERSHIP.price, recurring: { interval: "day", interval_count: MEMBERSHIP.intervalDays }, product_data: { name: MEMBERSHIP.name }, lookup_key: key });
+  const price = await stripe.prices.create({ currency: "eur", unit_amount: brandProduct().membership.price, recurring: { interval: "day", interval_count: MEMBERSHIP.intervalDays }, product_data: { name: MEMBERSHIP.name }, lookup_key: key });
   return price.id;
 }
 
@@ -46,11 +52,11 @@ async function activate(member, { provider, subscriptionId, customerId, nextChar
     nextChargeAt: nextChargeAt ? new Date(nextChargeAt).toISOString() : undefined,
   });
   if (klaviyoConfigured()) {
-    await trackEvent("Membership Reactivated", member.email, { first_name: member.firstName || "", provider, amount: amount.toFixed(2).replace(".", ","), portal_url: PORTAL_URL, gift }, { value: amount, uniqueId: `reactivate-${subscriptionId}` }).catch(() => {});
+    await trackEvent("Membership Reactivated", member.email, { first_name: member.firstName || "", provider, amount: amount.toFixed(2).replace(".", ","), portal_url: portalUrl(), gift }, { value: amount, uniqueId: `reactivate-${subscriptionId}` }).catch(() => {});
   }
 }
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "method" });
   const s = readSession(req);
@@ -104,7 +110,7 @@ export default async function handler(req, res) {
         }
         const fresh = await stripe.subscriptions.retrieve(sub.subscriptionId);
         if (!["active", "trialing"].includes(fresh.status)) return res.status(402).json({ ok: false, error: "payment_failed" });
-        await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId, nextChargeAt: fresh.current_period_end * 1000, amount: (inv?.amount_paid ?? MEMBERSHIP.price) / 100 , gift: pastDue });
+        await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId, nextChargeAt: fresh.current_period_end * 1000, amount: (inv?.amount_paid ?? brandProduct().membership.price) / 100 , gift: pastDue });
         return res.status(200).json({ ok: true, reactivated: true });
       }
 
@@ -115,7 +121,7 @@ export default async function handler(req, res) {
         created = await stripe.subscriptions.create({
           customer: customerId, items: [{ price, quantity: 1 }], default_payment_method: pmId,
           payment_behavior: "error_if_incomplete", off_session: true,
-          metadata: { source: "jjb-portal", kind: "reactivation", portal_email: member.email, previous_subscription: sub.subscriptionId || member.subscriptionId || "" },
+          metadata: { source: "jjb-portal", kind: "reactivation", product_key: currentBrand().productKey, portal_email: member.email, previous_subscription: sub.subscriptionId || member.subscriptionId || "" },
           expand: ["latest_invoice.payment_intent"],
         }, { idempotencyKey: `jjreact_${member.email}_${Date.now() - (Date.now() % 60000)}` });
       } catch (e) {
@@ -125,7 +131,7 @@ export default async function handler(req, res) {
         return res.status(402).json({ ok: false, error: e.type === "StripeCardError" ? "card_declined" : "payment_failed" });
       }
       const inv = created.latest_invoice;
-      await activate(member, { provider: "stripe", subscriptionId: created.id, customerId, nextChargeAt: created.current_period_end * 1000, amount: (inv?.amount_paid ?? MEMBERSHIP.price) / 100 , gift: pastDue });
+      await activate(member, { provider: "stripe", subscriptionId: created.id, customerId, nextChargeAt: created.current_period_end * 1000, amount: (inv?.amount_paid ?? brandProduct().membership.price) / 100 , gift: pastDue });
       return res.status(200).json({ ok: true, reactivated: true });
     }
 
@@ -135,20 +141,20 @@ export default async function handler(req, res) {
       if (!subId.startsWith("sub_")) return res.status(400).json({ ok: false, error: "payment_failed" });
       const fresh = await stripe.subscriptions.retrieve(subId, { expand: ["latest_invoice"] });
       if (!["active", "trialing"].includes(fresh.status)) return res.status(402).json({ ok: false, error: "payment_failed" });
-      await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId: typeof fresh.customer === "string" ? fresh.customer : fresh.customer?.id, nextChargeAt: fresh.current_period_end * 1000, amount: (fresh.latest_invoice?.amount_paid ?? MEMBERSHIP.price) / 100 , gift: pastDue });
+      await activate(member, { provider: "stripe", subscriptionId: fresh.id, customerId: typeof fresh.customer === "string" ? fresh.customer : fresh.customer?.id, nextChargeAt: fresh.current_period_end * 1000, amount: (fresh.latest_invoice?.amount_paid ?? brandProduct().membership.price) / 100 , gift: pastDue });
       return res.status(200).json({ ok: true, reactivated: true });
     }
 
     // ---------- PayPal ----------
     if (b.action === "paypal") {
       if (!paypalConfigured()) return res.status(500).json({ ok: false, error: "paypal" });
-      const plan = await reactivationPlan();
+      const plan = await reactivationPlan(currentBrand().productKey);
       const order = await pp("post", "/v1/billing/subscriptions", {
         plan_id: plan.id,
-        custom_id: `reactivate|${member.email}`.slice(0, 127),
+        custom_id: reactCustom(member.email),
         subscriber: { email_address: member.email, name: { given_name: member.firstName || undefined, surname: member.lastName || undefined } },
         application_context: { brand_name: "Just Jenny", locale: "it-IT", shipping_preference: "NO_SHIPPING", user_action: "SUBSCRIBE_NOW",
-          return_url: `${PORTAL_URL}/riattiva?pp=1`, cancel_url: `${PORTAL_URL}/riattiva` },
+          return_url: `${portalUrl()}/riattiva?pp=1`, cancel_url: `${portalUrl()}/riattiva` },
       });
       const url = (order.links || []).find((l) => l.rel === "approve")?.href;
       if (!url) return res.status(500).json({ ok: false, error: "paypal" });
@@ -165,9 +171,9 @@ export default async function handler(req, res) {
         await new Promise((r) => setTimeout(r, 1500));
       }
       if (!psub || psub.status !== "ACTIVE") return res.status(402).json({ ok: false, error: "payment_failed" });
-      if (psub.custom_id !== `reactivate|${member.email}`.slice(0, 127)) return res.status(400).json({ ok: false, error: "payment_failed" });
+      if (psub.custom_id !== reactCustom(member.email)) return res.status(400).json({ ok: false, error: "payment_failed" });
       const next = psub.billing_info?.next_billing_time ? new Date(psub.billing_info.next_billing_time).getTime() : null;
-      await activate(member, { provider: "paypal", subscriptionId: psub.id, nextChargeAt: next, amount: MEMBERSHIP.price / 100 , gift: pastDue });
+      await activate(member, { provider: "paypal", subscriptionId: psub.id, nextChargeAt: next, amount: brandProduct().membership.price / 100 , gift: pastDue });
       return res.status(200).json({ ok: true, reactivated: true });
     }
 
@@ -177,3 +183,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: "server" });
   }
 }
+
+export default withPortalBrand(handler);

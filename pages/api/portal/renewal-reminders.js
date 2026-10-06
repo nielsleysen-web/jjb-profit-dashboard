@@ -21,7 +21,8 @@ import { getSubscriptionInfo } from "../../../lib/portal-account";
 import { createLoginLink, normEmail } from "../../../lib/portal-auth";
 import { redis, storeConfigured } from "../../../lib/portal-store";
 import { trackEvent, klaviyoConfigured } from "../../../lib/klaviyo";
-import { MEMBERSHIP } from "../../../lib/checkout";
+import { getProduct } from "../../../lib/checkout";
+import { runWithBrand, currentBrand, BRANDS } from "../../../lib/portal-brand";
 import { resumeDuePauses } from "../../../lib/membership-actions";
 
 export const config = { maxDuration: 60 };
@@ -29,7 +30,8 @@ export const config = { maxDuration: 60 };
 const HOUR = 3600000;
 const MIN_H = 6, MAX_H = 84;
 const EVENT = "Membership Renewal Reminder";
-const PRICE = (MEMBERSHIP?.price || 4900) / 100;
+// Prijs van de membership van het actieve brand (NeuroTone / LubriSense)
+const brandPrice = () => (getProduct(currentBrand().productKey).membership?.price || 4900) / 100;
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 function dashboardSession(req) {
@@ -70,11 +72,53 @@ async function sendReminder(m, at, provider, { test = false } = {}) {
     first_name: m.firstName || "",
     renewal_date: itDate(at),
     renewal_date_iso: iso,
-    amount: eur(PRICE),
+    amount: eur(brandPrice()),
     login_url: loginUrl,
     provider: provider || "",
   }, { uniqueId: `renewrem-${normEmail(m.email)}-${iso}${test ? `-test-${Date.now()}` : ""}` });
   return iso;
+}
+
+// Herinneringen voor de leden van het actieve brand
+async function runFor(dry) {
+  const brand = currentBrand().key;
+  const now = Date.now();
+  const emails = await listMemberEmails();
+  const sent = [], due = [], skipped = [], errors = [];
+
+  // Beperkt parallel (Stripe/PayPal-limieten)
+  const queue = [...emails];
+  const worker = async () => {
+    while (queue.length) {
+      const email = queue.shift();
+      try {
+        const m = await getMember(email);
+        if (!m) continue;
+        if (m.test) { skipped.push({ email, reason: "testlid" }); continue; }
+        if (m.pausedUntil && Date.parse(m.pausedUntil) > now) { skipped.push({ email, reason: "gepauzeerd" }); continue; }
+        const n = await nextCharge(m);
+        if (!n.renews) { skipped.push({ email, reason: `geen verlenging (${n.status || "onbekend"})` }); continue; }
+        if (!n.at) { skipped.push({ email, reason: "datum onbekend" }); continue; }
+        const h = (n.at - now) / HOUR;
+        if (h <= MIN_H || h > MAX_H) continue;
+        const iso = new Date(n.at).toISOString().slice(0, 10);
+        const row = { email, renewal: new Date(n.at).toISOString(), inHours: Math.round(h), provider: n.provider, live: n.live };
+        if (dry) { due.push({ ...row, brand }); continue; }
+        // Eén herinnering per afschrijving
+        const lockKey = `portal:renewrem:${normEmail(email)}:${iso}`;
+        const ok = await redis(["SET", lockKey, "1", "NX", "EX", String(10 * 86400)]);
+        if (ok !== "OK") { skipped.push({ email, reason: "al herinnerd" }); continue; }
+        try { await sendReminder(m, n.at, n.provider); }
+        catch (e) { await redis(["DEL", lockKey]).catch(() => {}); throw e; } // mislukt → morgen opnieuw proberen
+        sent.push({ ...row, brand });
+      } catch (e) {
+        errors.push({ email, error: e.message });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+
+  return { sent, due, skipped, errors, members: emails.length };
 }
 
 export default async function handler(req, res) {
@@ -88,51 +132,25 @@ export default async function handler(req, res) {
   try {
     // Eén testherinnering, los van het tijdvenster
     if (req.query.test) {
-      const m = await getMember(req.query.test);
-      if (!m) return res.status(404).json({ success: false, error: `Geen lid met e-mail ${normEmail(req.query.test)}` });
-      const n = await nextCharge(m).catch(() => ({ at: null }));
-      const at = n.at && n.at > Date.now() ? n.at : Date.now() + 3 * 86400000;
-      const iso = await sendReminder(m, at, n.provider, { test: true });
-      return res.status(200).json({ success: true, test: true, email: m.email, renewalDate: iso, note: "Testherinnering verstuurd" });
+      // ?brand=lubrisense voor een lid van het LubriSense-portaal
+      const out = await runWithBrand(String(req.query.brand || "neurotone"), async () => {
+        const m = await getMember(req.query.test);
+        if (!m) return { status: 404, body: { success: false, error: `Geen lid met e-mail ${normEmail(req.query.test)}` } };
+        const n = await nextCharge(m).catch(() => ({ at: null }));
+        const at = n.at && n.at > Date.now() ? n.at : Date.now() + 3 * 86400000;
+        const iso = await sendReminder(m, at, n.provider, { test: true });
+        return { status: 200, body: { success: true, test: true, brand: currentBrand().key, email: m.email, renewalDate: iso, note: "Testherinnering verstuurd" } };
+      });
+      return res.status(out.status).json(out.body);
     }
 
+    // Elk portaal apart: NeuroTone (members.…) en LubriSense (intimate.…), elk met eigen leden en eigen Klaviyo-event
     const dry = req.query.dry === "1";
-    const now = Date.now();
-    const emails = await listMemberEmails();
-    const sent = [], due = [], skipped = [], errors = [];
-
-    // Beperkt parallel (Stripe/PayPal-limieten)
-    const queue = [...emails];
-    const worker = async () => {
-      while (queue.length) {
-        const email = queue.shift();
-        try {
-          const m = await getMember(email);
-          if (!m) continue;
-          if (m.test) { skipped.push({ email, reason: "testlid" }); continue; }
-          if (m.pausedUntil && Date.parse(m.pausedUntil) > now) { skipped.push({ email, reason: "gepauzeerd" }); continue; }
-          const n = await nextCharge(m);
-          if (!n.renews) { skipped.push({ email, reason: `geen verlenging (${n.status || "onbekend"})` }); continue; }
-          if (!n.at) { skipped.push({ email, reason: "datum onbekend" }); continue; }
-          const h = (n.at - now) / HOUR;
-          if (h <= MIN_H || h > MAX_H) continue;
-          const iso = new Date(n.at).toISOString().slice(0, 10);
-          const row = { email, renewal: new Date(n.at).toISOString(), inHours: Math.round(h), provider: n.provider, live: n.live };
-          if (dry) { due.push(row); continue; }
-          // Eén herinnering per afschrijving
-          const lockKey = `portal:renewrem:${normEmail(email)}:${iso}`;
-          const ok = await redis(["SET", lockKey, "1", "NX", "EX", String(10 * 86400)]);
-          if (ok !== "OK") { skipped.push({ email, reason: "al herinnerd" }); continue; }
-          try { await sendReminder(m, n.at, n.provider); }
-          catch (e) { await redis(["DEL", lockKey]).catch(() => {}); throw e; } // mislukt → morgen opnieuw proberen
-          sent.push(row);
-        } catch (e) {
-          errors.push({ email, error: e.message });
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: 4 }, worker));
-
+    const results = {};
+    for (const key of Object.keys(BRANDS)) results[key] = await runWithBrand(key, () => runFor(dry));
+    const sent = Object.values(results).flatMap((r) => r.sent), due = Object.values(results).flatMap((r) => r.due);
+    const skipped = Object.values(results).flatMap((r) => r.skipped), errors = Object.values(results).flatMap((r) => r.errors);
+    const emails = { length: Object.values(results).reduce((n, r) => n + r.members, 0) };
     console.log(`portal renewal-reminders: ${dry ? "dry " : ""}${dry ? due.length : sent.length} due, ${errors.length} errors`);
     return res.status(200).json({ success: true, dryRun: dry, resumedPauses: resumed, members: emails.length, window: `${MIN_H}-${MAX_H}u`, ...(dry ? { due } : { sent }), skipped, errors });
   } catch (e) {

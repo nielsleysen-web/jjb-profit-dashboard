@@ -31,7 +31,7 @@ const ptitle = (lang, p) => (lang === "it" && p.it ? p.it.title : p.title);
 const ptag = (lang, p) => (lang === "it" && p.it ? p.it.tagline : p.tagline);
 
 export default function Portal() {
-  const { lang, t } = useT();
+  const { lang, t, brand } = useT();
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   const [route, setRoute] = useState("home");
@@ -78,7 +78,7 @@ export default function Portal() {
 
   const isHome = !["free", "library", "courses", "membership", "orders", "settings", "claim", "done"].includes(tab);
   const showHelp = data && !data.ended && !["settings", "claim", "done"].includes(tab);
-  const counts = data && !data.deactivated ? { free: (data.freeItems || []).filter((p) => !p.ordered).length, library: data.library?.left || 0 } : {};
+  const counts = data && !data.deactivated ? { free: (data.freeItems || []).filter((p) => !p.ordered).length, library: (data.library?.books || []).length ? data.library?.left || 0 : 0 } : {};
 
   return (
     <>
@@ -93,10 +93,10 @@ export default function Portal() {
         <aside className={`side${menu ? " open" : ""}`}>
           <img src={LOGO} alt="Just Jenny" />
           {m && !data?.deactivated && (
-            <div className="mcard"><div className="mc-k">Health For Life</div><div className="mc-n">{t("mcMember")}</div>
+            <div className="mcard"><div className="mc-k">{brand === "lubrisense" ? "Intimate Care" : "Health For Life"}</div><div className="mc-n">{t("mcMember")}</div>
               <div className="mc-s">{t("mcSince", { date: fmtDate(lang, data.membership?.since || m.startedAt, { day: "numeric", month: "long", year: "numeric" }) })}</div><span className="mc-dot" /></div>
           )}
-          {(data?.deactivated ? [] : TABS).map((x) => (
+          {(data?.deactivated ? [] : TABS.filter((x) => x.id !== "courses" || (data?.courses || []).length > 0)).map((x) => (
             <div key={x.id}>
               {x.group && <div className="grp">{t(x.group)}</div>}
               <button type="button" className={`nav${(isHome ? "home" : activeTab) === x.id ? " on" : ""}`} onClick={() => nav(x.id)}>
@@ -116,7 +116,7 @@ export default function Portal() {
             <div className="topbar"><h1>{isHome ? t("navHome") : ""}</h1><Bell t={t} lang={lang} data={data} nav={nav} /></div>
           )}
           <div className={`wrap${isHome && data?.home ? " wide" : ""}`}>
-            {!data?.deactivated && !isHome && tab !== "library" && data?.library?.left > 0 && (
+            {!data?.deactivated && !isHome && tab !== "library" && data?.library?.left > 0 && (data?.library?.books || []).length > 0 && (
               <a className="ebb" href="#library" onClick={(e) => { e.preventDefault(); nav("library"); }}>
                 <span>{t("ebookBanner")}</span><b>{t("ebookBannerCta")} →</b>
               </a>
@@ -319,7 +319,7 @@ function Membership({ t, lang, data }) {
   return (
     <>
       <h1>{t("memberTitle")}</h1>
-      <p className="sub">Health For Life Membership</p>
+      <p className="sub">{brand === "lubrisense" ? "Intimate Care Membership" : "Health For Life Membership"}</p>
       <div className="card rows">
         <div className="r"><span>{t("memberSince")}</span><b>{fmtDate(lang, ms.since) || t("unknown")}</b></div>
         <div className="r"><span>{t("lastPayment")}</span><b>{lp ? `${fmtDate(lang, lp.at)}${lp.amount != null ? ` · ${fmtMoney(lang, lp.amount)}` : ""}` : t("unknown")}</b></div>

@@ -212,7 +212,7 @@ export default function Home({ t, lang, data, nav, reload }) {
             <button type="button" className="wx" onClick={dismiss}>{t("gotIt")}</button>
           </div>
           <div className="wg">
-            {[["free", IcGift, "navFree", "wFreeSub"], ["library", IcBooks, "navLibrary", "wLibSub"], ["courses", IcCap, "navCourses", "wCourseSub"], ["orders", IcBox, "navOrders", "wOrdersSub"]].map(([id, Ic, lab, sub]) => (
+            {[["free", IcGift, "navFree", "wFreeSub"], ["library", IcBooks, "navLibrary", "wLibSub"], ["courses", IcCap, "navCourses", "wCourseSub"], ["orders", IcBox, "navOrders", "wOrdersSub"]].filter(([id]) => id !== "courses" || (data?.courses || []).length > 0).map(([id, Ic, lab, sub]) => (
               <button type="button" key={id} className="wt" onClick={() => nav(id)}><span className="wi"><Ic /></span><span><b>{t(lab)}</b><small>{t(sub)}</small></span></button>
             ))}
           </div>
@@ -305,7 +305,7 @@ export default function Home({ t, lang, data, nav, reload }) {
       {/* dove trovare tutto */}
       <div className="sect"><h3>{t("whereTitle")}</h3></div>
       <div className="grid6">
-        {[["free", "🎁", "navFree", "whFree"], ["library", "📚", "navLibrary", "whLib"], ["courses", "🎓", "navCourses", "whCourses"], ["membership", "💚", "navMember", "whMember"], ["orders", "📦", "navOrders", "whOrders"], ["settings", "⚙️", "navSettings", "whSettings"]].map(([id, ic, lab, sub]) => (
+        {[["free", "🎁", "navFree", "whFree"], ["library", "📚", "navLibrary", "whLib"], ...((data?.courses || []).length ? [["courses", "🎓", "navCourses", "whCourses"]] : []), ["membership", "💚", "navMember", "whMember"], ["orders", "📦", "navOrders", "whOrders"], ["settings", "⚙️", "navSettings", "whSettings"]].map(([id, ic, lab, sub]) => (
           <button type="button" key={id} className="card tile" onClick={() => nav(id)}><span className="tico">{ic}</span><b>{t(lab)}</b><span>{t(sub)}</span></button>
         ))}
       </div>

@@ -5,7 +5,8 @@
 // Events: BILLING.SUBSCRIPTION.ACTIVATED (+ CANCELLED/EXPIRED → Klaviyo) · Env: PAYPAL_WEBHOOK_ID
 
 import { paypalConfigured, pp, ensureOrderForPaypal, cancelMemberForPaypal, unpackCustom } from "../../../lib/paypal";
-import { trackEvent, syncProductMember } from "../../../lib/klaviyo";
+import { trackEvent } from "../../../lib/klaviyo";
+import { productMemberEvent } from "../../../lib/portal-members";
 import { getProduct } from "../../../lib/checkout";
 import { PORTAL_URL } from "../../../lib/portal-auth";
 
@@ -44,7 +45,7 @@ export default async function handler(req, res) {
       const email = sub?.subscriber?.email_address;
       const product = getProduct(unpackCustom(sub?.custom_id).product);
       if (email && !product.portal) {
-        await syncProductMember(product, "failed", { email, provider: "paypal", subscriptionId: event.resource.id, invoiceId: `${event.resource.id}-${new Date().toISOString().slice(0, 10)}` });
+        await productMemberEvent(product, "failed", { email, provider: "paypal", subscriptionId: event.resource.id, invoiceId: `${event.resource.id}-${new Date().toISOString().slice(0, 10)}` });
         return res.status(200).json({ received: true, paymentFailed: true, product: product.key });
       }
       if (email) await trackEvent("Membership Payment Failed", email, { provider: "paypal", subscription_id: event.resource.id, portal_url: `${PORTAL_URL}/riattiva` }, { uniqueId: `payfail-${event.resource.id}-${new Date().toISOString().slice(0, 10)}` }).catch(() => {});

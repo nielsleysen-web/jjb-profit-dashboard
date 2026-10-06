@@ -1,5 +1,7 @@
 // components/portal/PortalStyles.js — opmaak van het ingelogde portaal (design/portal/03-portal-en.html, Home: design/portal/home)
 import { SIDE_CSS, HOME_CSS, HOME_CSS_MOBILE } from "./HomeStyles";
+import { usePortalBrand } from "../../lib/portal-i18n";
+import { brandCss } from "../../lib/portal-theme";
 // Cadeau-banner (ook gebruikt op de welkomstpagina, zonder de rest van de portaal-opmaak)
 export const GIFT_CSS = `
       .gift{position:relative;display:grid;grid-template-columns:84px 1fr;gap:18px;align-items:center;background:linear-gradient(135deg,#fffdfb,#fdf3ec);border:1px solid #f1d9c9;border-radius:16px;padding:18px 20px 18px 24px;margin:0 0 22px;box-shadow:0 8px 28px rgba(223,132,85,.12);overflow:hidden}
@@ -23,8 +25,8 @@ export const GIFT_CSS = `
 export const GIFT_CSS_MOBILE = `.gift{grid-template-columns:64px 1fr;gap:14px;padding:14px 14px 14px 18px}.gift img{width:64px;height:86px}.gift .clock{font-size:22px}.gift b{font-size:15px}.gift .btn{width:100%}`;
 
 export default function PortalStyles() {
-  return (
-    <style jsx global>{`
+  const brand = usePortalBrand();
+  const css = `
       *{box-sizing:border-box}body{margin:0;background:#faf8f6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;font-size:17px}
       a{color:inherit}
       .app{display:flex;min-height:100vh}
@@ -124,6 +126,7 @@ export default function PortalStyles() {
         .oc{grid-template-columns:1fr}
         .ol{grid-template-columns:72px 1fr}.ol .st{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center;flex-wrap:wrap}
       }
-    `}</style>
-  );
+    `;
+  // LubriSense-portaal: eigen merkkleuren (lib/portal-theme.js)
+  return <style jsx global>{`${brandCss(css, brand)}`}</style>;
 }
