@@ -122,15 +122,16 @@ function BigTile({ label, value, valueColor, children }) {
 }
 
 // Rebills due today (Brussels): scheduled, paid and failed — always today, whatever period is selected
-const DUE = { scheduled: ["Scheduled", "amber"], paid: ["✓ Paid", "green"], failed: ["✗ Failed", "red"] };
+const DUE = { scheduled: ["Scheduled", "amber"], processing: ["Processing", "blue"], paid: ["✓ Paid", "green"], failed: ["✗ Failed", "red"], cancelled: ["Cancelled", "gray"], paused: ["Paused", "gray"] };
 function DueToday({ rows }) {
-  const open = rows.filter((r) => r.type === "scheduled");
+  const open = rows.filter((r) => r.type === "scheduled" || r.type === "processing");
+  const n = (t) => rows.filter((r) => r.type === t).length;
   const sum = (list) => list.reduce((a, r) => a + r.amount, 0);
   return (
     <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
       <div style={{ marginBottom: "10px" }}>
         <div style={{ fontWeight: 800, fontSize: "15px" }}>Rebills due today</div>
-        <div style={{ fontSize: "12px", color: "#8a92a3" }}>{rows.length} due today · {open.length} still to collect ({eur(sum(open))}) · {rows.filter((r) => r.type === "paid").length} paid · {rows.filter((r) => r.type === "failed").length} failed</div>
+        <div style={{ fontSize: "12px", color: "#8a92a3" }}>{rows.length} due today · {open.length} still to collect ({eur(sum(open))}){n("processing") ? ` (${n("processing")} processing)` : ""} · {n("paid")} paid · {n("failed")} failed{n("cancelled") ? ` · ${n("cancelled")} cancelled` : ""}{n("paused") ? ` · ${n("paused")} paused` : ""}</div>
       </div>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -144,8 +145,8 @@ function DueToday({ rows }) {
                   <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "180px" }}><a href={`/members?email=${encodeURIComponent(r.member.email)}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{r.member.name || r.member.email || "—"}</a> <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.member.email}{r.member.order ? ` · ${r.member.order}` : ""}</span></td>
                   <td style={ui.td}>{r.member.provider === "paypal" ? "PayPal" : "Card"}</td>
                   <td style={ui.td}>Rebill {r.cycle}</td>
-                  <td style={ui.td}><Chip tone={tone}>{t}{r.type === "failed" && r.reason ? ` · ${r.reason}` : ""}</Chip>{r.type === "paid" && r.recovered ? <> <Chip tone="blue">recovered</Chip></> : null}</td>
-                  <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(r.amount)}</td>
+                  <td style={ui.td}><Chip tone={tone}>{t}{r.type === "failed" && r.reason ? ` · ${r.reason}` : ""}{r.type === "cancelled" && r.canceledAt ? ` · ${fmtT(r.canceledAt)}` : ""}</Chip>{r.type === "paid" && r.recovered ? <> <Chip tone="blue">recovered</Chip></> : null}</td>
+                  <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums", color: r.type === "cancelled" || r.type === "paused" ? "#a4adbd" : undefined, textDecoration: r.type === "cancelled" ? "line-through" : undefined }}>{eur(r.amount)}</td>
                 </tr>
               );
             })}

@@ -140,12 +140,13 @@ async function stripeData() {
       pausedUntil: s.pause_collection?.resumes_at ? iso(s.pause_collection.resumes_at * 1000) : null,
       startedAt: iso(s.created * 1000), trialEnd: iso((s.trial_end || s.created + MEMBERSHIP.trialDays * 86400) * 1000),
       nextBilling: s.status === "canceled" ? null : iso((s.current_period_end || 0) * 1000),
+      periodEnd: iso((s.current_period_end || 0) * 1000), // ook bij opgezegd: wanneer de afschrijving zou vallen
       cancelAtPeriodEnd: !!s.cancel_at_period_end, canceledAt: iso((s.canceled_at || s.ended_at || 0) * 1000),
       cancelReason: s.cancellation_details?.reason || null, cancelFeedback: s.cancellation_details?.feedback || null, cancelAt: iso((s.cancel_at || 0) * 1000),
       email: c.email || "", name: c.shipping?.name || c.name || "", cycles: 0, membershipRevenue: 0, rebillAt: [],
     });
   }
-  const rebills = [], failed = [];
+  const rebills = [], failed = [], pending = [];
   n = 0;
   for await (const inv of stripe.invoices.list({ limit: 100, expand: ["data.payment_intent"] })) {
     if (++n > 8000) break;
@@ -154,9 +155,10 @@ async function stripeData() {
     const pi = typeof inv.payment_intent === "object" ? inv.payment_intent : null;
     const err = pi?.last_payment_error;
     if (inv.status === "paid" && inv.amount_paid) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: inv.amount_paid / 100, provider: "stripe", recovered: (inv.attempt_count || 1) > 1 });
+    else if (!inv.attempted && (inv.status === "draft" || inv.status === "open") && inv.amount_due) pending.push({ subId, at: iso(inv.created * 1000), amount: inv.amount_due / 100, provider: "stripe" });
     else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
   }
-  return { members, rebills, failed };
+  return { members, rebills, failed, pending };
 }
 
 /* ---------------- PayPal ---------------- */
@@ -240,6 +242,7 @@ export default async function handler(req, res) {
     if (!canMembership(s)) return res.status(401).json({ success: false, error: "No access" });
 
     const range = String(req.query.range || "today");
+    const live = range === "today"; // "nog te innen" van vandaag telt alleen in de live dag-weergave
     const { from, to } = period(range);
     const { start: pStart, end: pEnd } = dayBounds(from, to);
     const inPeriod = (t) => { const ms = typeof t === "number" ? t : Date.parse(t || 0); return ms >= pStart && ms < pEnd; };
@@ -472,6 +475,20 @@ export default async function handler(req, res) {
     for (const r of rebills) { if (!inToday(r.at)) continue; const m = byId[r.subId]; if (!m) continue; dueToday.push({ type: "paid", at: r.at, amount: r2(r.amount), cycle: m.rebillAt.indexOf(r.at) + 1 || m.cycles, recovered: !!r.recovered, member: who(m) }); }
     for (const f of failed) { if (!inToday(f.at)) continue; const m = byId[f.subId]; if (!m) continue; dueToday.push({ type: "failed", at: f.at, amount: r2(f.amount), cycle: m.cycles + 1, reason: f.reason || null, nextAttempt: f.nextAttempt || null, member: who(m) }); }
     for (const m of billable) if (between(m.nextBilling, Math.max(now, tb.start), tb.end)) dueToday.push({ type: "scheduled", at: m.nextBilling, amount: PRICE, cycle: m.cycles + 1, member: who(m) });
+    // Zodat de lijst van vandaag niet "krimpt": ook wie vandaag aan de beurt was maar (nog) niet betaald/mislukt is
+    const seenToday = new Set(dueToday.map((d) => d.member.id));
+    const addDue = (type, m, at, extra = {}) => { if (!m || seenToday.has(m.id)) return; seenToday.add(m.id); dueToday.push({ type, at, amount: PRICE, cycle: m.cycles + 1, member: who(m), ...extra }); };
+    // Stripe heeft de verlenging gestart maar nog niet afgeschreven (± 1 uur na het verlengmoment)
+    for (const pnd of st.pending || []) if (inToday(pnd.at)) addDue("processing", byId[pnd.subId], pnd.at);
+    // PayPal: tijdstip voorbij, betaling nog niet binnen (PayPal int soms uren later)
+    for (const m of billable) if (m.provider === "paypal" && inToday(m.nextBilling) && Date.parse(m.nextBilling) < now) addDue("processing", m, m.nextBilling);
+    for (const m of members) {
+      // Opgezegd terwijl de afschrijving vandaag zou vallen (of "stopt aan einde periode" met einde vandaag)
+      const dueAt = m.provider === "stripe" ? m.periodEnd : m.status === "canceled" ? iso(Date.parse(m.trialEnd) + (m.cycles || 0) * CYCLE_MS) : m.nextBilling;
+      if (m.cancelAtPeriodEnd && inToday(m.nextBilling)) addDue("cancelled", m, m.nextBilling, { canceledAt: m.canceledAt || null });
+      else if (m.status === "canceled" && inToday(dueAt) && inToday(m.canceledAt)) addDue("cancelled", m, dueAt, { canceledAt: m.canceledAt || null });
+      else if (m.status === "paused" && inToday(dueAt)) addDue("paused", m, dueAt);
+    }
     dueToday.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     const eventsTotal = events.length;
     events.splice(150);
@@ -496,7 +513,7 @@ export default async function handler(req, res) {
       failed: { count: pFailed.length, amount: r2(pFailed.reduce((a, f) => a + f.amount, 0)), attempts, rate: attempts ? r2(pFailed.length / attempts) : null, inRecovery: problem, recovered: recoveredInPeriod },
       rebillNet: r2(rebillNet), rebillFees: r2(rebillFees), rebillCogs: r2(rebillCogs), rebillMargin: rebillRevenue > 0 ? r2(rebillNet / rebillRevenue) : null,
       frontEnd: { revenue: r2(feRevenue), cogs: r2(feCogs), fees: r2(feFees), count: feOrders.length },
-      due: { open: openInPeriod.length, openAmount: r2(openInPeriod.length * PRICE), total: pRebills.length + pFailed.length + openInPeriod.length, ...byProvider(openInPeriod) },
+      due: { open: openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0), openAmount: r2((openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0)) * PRICE), processing: live ? dueToday.filter((d) => d.type === "processing").length : 0, cancelledToday: live ? dueToday.filter((d) => d.type === "cancelled").length : 0, total: pRebills.length + pFailed.length + openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0), ...byProvider(openInPeriod) },
       next7: { count: next7.length, amount: r2(next7.length * PRICE), ...byProvider(next7), firstDay: next7.length ? dayStr(Math.min(...next7.map((m) => Date.parse(m.nextBilling)))) : null },
       cancellations: cancelStats,
       newSubscribers: { period: newMembers.length, today: newToday.length, trialNow: trial },
