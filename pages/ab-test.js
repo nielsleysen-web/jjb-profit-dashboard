@@ -14,7 +14,7 @@ const ui = {
   card: { background: "#fff", borderRadius: "16px", border: "1px solid #eceef2", boxShadow: "0 1px 2px rgba(15,23,42,0.04)" },
   label: { fontSize: "11px", fontWeight: 600, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.7px" },
 };
-const COL = { A: "#b6bdc9", B: "#4f6df5" };
+const COL = { A: "#16a34a", B: "#3b82f6", C: "#94a3b8", D: "#94a3b8" }; // origineel groen, nieuw blauw (zoals het Membership Dashboard)
 const fmtEur = (v) => `€ ${Number(v || 0).toLocaleString("nl-BE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtPct = (v, d = 1) => (v == null ? "—" : `${(v * 100).toFixed(d)}%`);
 const fmtLift = (v) => (v == null ? "—" : `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)}%`);
@@ -29,23 +29,51 @@ async function saveSetting(body) {
   return d.settings;
 }
 
+/* Conversie per dag (orders / bezoekers), zelfde stijl als de grafiek op het Membership Dashboard:
+   origineel = groen (met zachte vulling), nieuw = blauw. Vandaag (nog bezig) = stippellijn. Hover = details. */
 function CvrChart({ variants }) {
-  const W = 900, H = 150, P = { l: 38, r: 10, t: 10, b: 22 };
+  const [hover, setHover] = useState(null);
   const n = variants[0].series.length;
   if (n < 2) return <div style={{ fontSize: "12px", color: "#b6bdc9", padding: "8px 0" }}>Dagverloop verschijnt bij een periode van 2 dagen of meer.</div>;
-  const cvr = variants.map((v) => v.series.map((s) => (s.pvu > 0 ? s.o / s.pvu : 0)));
-  const maxV = Math.max(0.01, ...cvr.flat());
-  const x = (i) => P.l + (i * (W - P.l - P.r)) / (n - 1);
-  const y = (v) => H - P.b - (v / maxV) * (H - P.t - P.b);
-  const path = (arr) => arr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const W = 1000, H = 230, PAD = { top: 14, right: 16, bottom: 26, left: 44 };
+  const iw = W - PAD.left - PAD.right, ih = H - PAD.top - PAD.bottom;
+  const pts = variants[0].series.map((s0, i) => ({ d: s0.d, v: variants.map((v) => { const s = v.series[i]; return { cvr: s.pvu > 0 ? s.o / s.pvu : 0, o: s.o, pvu: s.pvu, r: s.r }; }) }));
+  const maxV = Math.max(0.01, ...pts.flatMap((p) => p.v.map((x) => x.cvr)));
+  const [nice, stepV] = (() => { const pct = maxV * 100; const m = Math.pow(10, Math.floor(Math.log10(pct))); const f = pct / m; const s = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10; return [(s * m) / 100, ({ 1: 0.25, 2: 0.5, 5: 1, 10: 2 }[s] * m) / 100]; })();
+  const ticks = Array.from({ length: Math.round(nice / stepV) + 1 }, (_, i) => i * stepV);
+  const x = (i) => PAD.left + (i / (n - 1)) * iw;
+  const y = (v) => PAD.top + ih - (Math.min(v, nice) / nice) * ih;
+  const today = new Date().toISOString().slice(0, 10);
+  const live = pts[n - 1].d === today; // laatste dag is vandaag → nog niet compleet
+  const done = live ? n - 1 : n;
+  const path = (k, from, to) => pts.slice(from, to).map((p, j) => `${j ? "L" : "M"}${x(from + j).toFixed(1)},${y(p.v[k].cvr).toFixed(1)}`).join(" ");
+  const label = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString("nl-BE", { day: "numeric", month: "short" });
+  const step = Math.max(1, Math.ceil(n / 10));
+  const onMove = (e) => { const r = e.currentTarget.getBoundingClientRect(); const rx = ((e.clientX - r.left) / r.width) * W; let best = 0, bd = Infinity; pts.forEach((_, i) => { const dd = Math.abs(x(i) - rx); if (dd < bd) { bd = dd; best = i; } }); setHover(best); };
+  const pct = (v) => `${(v * 100).toFixed(v < 0.1 ? 2 : 1)}%`;
+  const LINE = variants.map((v) => COL[v.letter]);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-      {[0, maxV].map((t) => (
-        <g key={t}><line x1={P.l} x2={W - P.r} y1={y(t)} y2={y(t)} stroke="#eef0f4" /><text x={P.l - 6} y={y(t) + 4} fontSize="10" fill="#b6bdc9" textAnchor="end">{(t * 100).toFixed(1)}%</text></g>
-      ))}
-      {variants.map((v, k) => <path key={v.id} d={path(cvr[k])} fill="none" stroke={COL[v.letter]} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />)}
-      {variants[0].series.map((s, i) => (i === 0 || i === n - 1) && <text key={s.d} x={x(i)} y={H - 6} fontSize="10" fill="#b6bdc9" textAnchor={i === 0 ? "start" : "end"}>{s.d.slice(5)}</text>)}
-    </svg>
+    <div style={{ position: "relative" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", cursor: "crosshair" }} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+        <defs><linearGradient id="abFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={LINE[0]} stopOpacity="0.08" /><stop offset="100%" stopColor={LINE[0]} stopOpacity="0" /></linearGradient></defs>
+        {ticks.map((t) => <g key={t}><line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} stroke={t === 0 ? "#e2e6ec" : "#f1f3f6"} /><text x={PAD.left - 7} y={y(t) + 3} textAnchor="end" fontSize="8.5" fill="#a4adbd">{(t * 100).toFixed(stepV * 100 < 1 ? 1 : 0)}%</text></g>)}
+        {done > 1 && <path d={`${path(0, 0, done)} L${x(done - 1).toFixed(1)},${y(0)} L${x(0)},${y(0)} Z`} fill="url(#abFill)" />}
+        {variants.map((v, k) => <g key={v.id}>
+          {done > 1 && <path d={path(k, 0, done)} fill="none" stroke={LINE[k]} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />}
+          {live && <path d={path(k, n - 2, n)} fill="none" stroke={LINE[k]} strokeWidth="1.2" strokeDasharray="4,4" opacity="0.55" />}
+        </g>)}
+        {hover != null && <g><line x1={x(hover)} x2={x(hover)} y1={PAD.top} y2={PAD.top + ih} stroke="#cbd5e1" strokeDasharray="3,3" />{variants.map((v, k) => <circle key={v.id} cx={x(hover)} cy={y(pts[hover].v[k].cvr)} r="3" fill="#fff" stroke={LINE[k]} strokeWidth="1.2" />)}</g>}
+        {pts.map((p, i) => (i % step === 0 || i === n - 1 ? <text key={p.d} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"} fontSize="8.5" fill="#a4adbd">{label(p.d)}{live && i === n - 1 ? " (vandaag)" : ""}</text> : null))}
+      </svg>
+      {hover != null && (
+        <div style={{ position: "absolute", left: `${(x(hover) / W) * 100}%`, top: 0, transform: `translateX(${x(hover) > W * 0.7 ? "-105%" : "8px"})`, background: "#0f172a", color: "#fff", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", lineHeight: 1.7, pointerEvents: "none", boxShadow: "0 8px 24px rgba(15,23,42,0.18)", whiteSpace: "nowrap", zIndex: 10 }}>
+          <div style={{ fontWeight: 700, marginBottom: "2px" }}>{label(pts[hover].d)}{live && hover === n - 1 ? " · nog bezig" : ""}</div>
+          {variants.map((v, k) => { const pv = pts[hover].v[k]; return (
+            <div key={v.id}><span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: LINE[k], marginRight: "6px" }} />{v.label}: <b style={{ color: k ? "#93c5fd" : "#86efac" }}>{pct(pv.cvr)}</b> <span style={{ color: "#94a3b8" }}>({pv.o} orders / {pv.pvu} bezoekers)</span></div>
+          ); })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -125,8 +153,11 @@ function TestCard({ t, labels, setLabel, saveLabel, onSettings }) {
       </div>
 
       <div style={{ marginTop: "18px" }}>
-        <div style={{ ...ui.label, marginBottom: "6px" }}>Conversie per dag</div>
-        <CvrChart variants={[a, b]} />
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", flexWrap: "wrap", marginBottom: "6px" }}>
+          <span style={ui.label}>Conversie per dag</span>
+          {[a, b].map((v) => <span key={v.id} style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "#64748b" }}><span style={{ width: "14px", height: "2px", borderRadius: "2px", background: COL[v.letter] }} />{name(v) || `Variant ${v.letter}`}</span>)}
+        </div>
+        <CvrChart variants={[a, b].map((v) => ({ ...v, label: name(v) || `Variant ${v.letter}` }))} />
       </div>
     </div>
   );
