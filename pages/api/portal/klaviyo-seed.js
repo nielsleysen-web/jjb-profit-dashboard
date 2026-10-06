@@ -3,6 +3,7 @@
 //
 // GET /api/portal/klaviyo-seed?email=<testadres>            → stuurt "Membership Payment Failed" + "Membership Reactivated"
 // GET /api/portal/klaviyo-seed?email=<testadres>&only=failed → alleen het eerste (of only=reactivated)
+// GET /api/portal/klaviyo-seed?email=<testadres>&only=cancelled → alleen "Membership Cancelled" (voor flowfilters)
 // GET /api/portal/klaviyo-seed?email=<testadres>&only=all    → ALLE metrics van het portaal in één keer (Membership Started,
 //     Portal Login Link, Portal Order Confirmed, Membership Renewal Reminder, Membership Renewed, Payment Failed, Reactivated)
 //     + profielveld trial_ends. Met &brand=lubrisense (op de dashboard-host) → "LubriSense …"-metrics, zonder testbestelling.
@@ -40,6 +41,11 @@ async function handler(req, res) {
   const stamp = Date.now();
   const sent = [];
   try {
+    if (only === "cancelled") {
+      // Alleen "Membership Cancelled" (nodig voor de flowfilters "zero times since starting this flow")
+      await trackEvent("Membership Cancelled", email, { provider: "stripe", subscription_id: "sub_test_seed", reason: "test", test: true }, { uniqueId: `seed-cancel-${stamp}` });
+      return res.status(200).json({ ok: true, brand: currentBrand().key, email, sent: [currentBrand().eventPrefix + "Membership Cancelled"], note: "Metric verschijnt binnen ±1 minuut in Klaviyo." });
+    }
     if (only === "all") {
       const base = portalUrl();
       const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
