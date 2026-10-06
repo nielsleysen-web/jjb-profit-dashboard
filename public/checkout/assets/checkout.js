@@ -1361,6 +1361,8 @@ document.addEventListener('DOMContentLoaded', () => {
       $$('a[href^="/checkout/termini"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY; });
       // De NeuroTone-membershippagina past niet: opzeggen staat in de voorwaarden
       $$('a[href^="/checkout/membership"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY + '#membership'; });
+      // LubriSense: eigen klantfoto's (vrouwen) in de header; ontbreekt een foto, dan blijft de letter staan
+      if (PRODUCT_KEY === 'lubrisense') $$('.jh-av img').forEach((img, i) => { img.src = '/checkout/assets/avatar-lub' + (i + 1) + '.jpg?v=1'; });
     }
   } catch (e) { logClient('product_init', e && e.message, 'product'); }
 });
