@@ -70,7 +70,7 @@ export default function Portal() {
   else if (tab === "done") content = <Done t={t} lang={lang} data={data} name={decodeURIComponent(arg || "")} nav={nav} />;
   else if (tab === "library") content = <Library t={t} lang={lang} data={data} reload={load} />;
   else if (tab === "courses") content = <Courses t={t} lang={lang} data={data} />;
-  else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} />;
+  else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} brand={brand} />;
   else if (tab === "orders") content = <Orders t={t} lang={lang} data={data} />;
   else if (tab === "settings") content = <Settings t={t} lang={lang} data={data} reload={load} />;
   else if (tab === "free") content = <FreeItems t={t} lang={lang} data={data} nav={nav} reload={load} />;
@@ -312,7 +312,7 @@ function Courses({ t, lang, data }) {
 }
 
 // ---- Il mio abbonamento --------------------------------------------------------
-function Membership({ t, lang, data }) {
+function Membership({ t, lang, data, brand }) {
   const ms = data.membership;
   const lp = ms.lastPayment;
   const subject = encodeURIComponent(t("changeSubject"));
