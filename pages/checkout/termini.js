@@ -10,7 +10,8 @@ const COMPANY = "Vena Corporate LLC";
 const ADDRESS = "30 N Gould St, STE R, Sheridan, WY 82801, Stati Uniti d'America";
 const EIN = "37-2157232";
 const EMAIL = "Hello@justjennybeauty.com";
-const PORTAL = "https://members.getjustjenny.com";
+const PORTAL_NT = "https://members.getjustjenny.com";
+const PORTAL_LUBRI = "https://intimate.getjustjenny.com"; // eigen ledenportaal LubriSense (Intimate Care Membership)
 
 const css = `
 :root{--page:#f3efd8;--peach:#fde2cc;--peach2:#fdf3ea;--terra:#e0855e;--fg:#222;--fh:"Roboto",Arial,Helvetica,sans-serif;--fb:Arial,Helvetica,sans-serif}
@@ -41,6 +42,7 @@ export default function Termini() {
   const [lubri, setLubri] = useState(false);
   useEffect(() => { setLubri(/^lubrisense$/i.test(new URLSearchParams(window.location.search).get("p") || "")); }, []);
   const MNAME = lubri ? "Intimate Care Membership" : "Health For Life Membership";
+  const PORTAL = lubri ? PORTAL_LUBRI : PORTAL_NT;
   return (
     <>
       <Head>
@@ -81,10 +83,10 @@ export default function Termini() {
           <h3>Prova gratuita e addebiti ricorrenti</h3>
           <p>La tua membership inizia con una prova gratuita di 7 giorni. Salvo annullamento prima della fine della prova, autorizzi Just Jenny ad addebitare automaticamente sul metodo di pagamento utilizzato per l'ordine originale l'importo di 49,00 € ogni 28 giorni, fino a quando non annulli.</p>
 
-          {!lubri && <>
           <h3>Vantaggi della membership</h3>
-          <p>Finché la tua membership è attiva, puoi accedere ai vantaggi riservati ai membri, tra cui: a ogni ciclo di fatturazione un prodotto idoneo per il benessere dell'udito gratuito, pagando soltanto il contributo di spedizione e gestione indicato per ciascun articolo; la Biblioteca Tinnitus con e-book scaricabili; offerte riservate ai membri; assistenza dedicata e altri vantaggi messi a disposizione da Just Jenny.</p>
-          </>}
+          {lubri
+            ? <p>Finché la tua membership è attiva, puoi accedere ai vantaggi riservati ai membri, tra cui: a ogni ciclo di fatturazione ciascuno dei prodotti idonei per il benessere intimo gratuito (un pezzo per prodotto per ciclo), tra cui LubriSense, pagando soltanto il contributo di spedizione e gestione indicato per ciascun articolo (per LubriSense 9,95 €); la Biblioteca dell'Intimità con e-book scaricabili; offerte riservate ai membri; assistenza dedicata e altri vantaggi messi a disposizione da Just Jenny.</p>
+            : <p>Finché la tua membership è attiva, puoi accedere ai vantaggi riservati ai membri, tra cui: a ogni ciclo di fatturazione un prodotto idoneo per il benessere dell'udito gratuito, pagando soltanto il contributo di spedizione e gestione indicato per ciascun articolo; la Biblioteca Tinnitus con e-book scaricabili; offerte riservate ai membri; assistenza dedicata e altri vantaggi messi a disposizione da Just Jenny.</p>}
           <p>I prodotti idonei e i vantaggi sono accessibili tramite l'<a href={PORTAL} target="_blank" rel="noopener">Area Membri</a>. L'idoneità dei prodotti, le quantità, la disponibilità, i contributi di spedizione e gestione e le altre condizioni sono indicati nell'area membri al momento della selezione.</p>
 
           <h3>Gestione della membership</h3>
