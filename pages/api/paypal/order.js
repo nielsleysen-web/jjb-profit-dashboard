@@ -32,6 +32,7 @@ export default async function handler(req, res) {
       qty: bundle.qty,
       product: product.key,
       bundleLabel: bundle.label,
+      gift: !!bundle.gift,
       bundlePrice: bundle.price,
       shipping: ship.code,
       amountPaid: Math.round(parseFloat(sub.billing_info?.last_payment?.amount?.value || (bundle.price + ship.price) / 100) * 100),

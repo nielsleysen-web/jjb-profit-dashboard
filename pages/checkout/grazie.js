@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { SHIPPING, fmtEur, UPSELL, getProduct, pickBundleFor } from "../../lib/checkout";
+import { SHIPPING, fmtEur, UPSELL, getProduct, pickBundleFor, BUNDLE_GIFT } from "../../lib/checkout";
 
 // Enquête (post-purchase quiz). Antwoorden → Google Sheet via /api/checkout-quiz.
 // Vragen aanpassen kan hier; de volgorde moet gelijk blijven aan de kolommen in de Sheet.
@@ -371,6 +371,18 @@ export default function Grazie() {
                 </div>
                 <div style={{ fontSize: "14.5px", paddingTop: "14px" }}>{fmtEur(bundle.price)}</div>
               </div>
+              {bundle.gift && (
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "16px", padding: "10px 12px", border: "1px solid #efe4d8", borderRadius: "12px", background: "linear-gradient(180deg,#fffaf5,#fdf5ee)" }}>
+                  <span style={{ width: "38px", height: "38px", flex: "none", borderRadius: "50%", background: "#fbeadd", color: "#b8693c", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M3 7.5h18V11H3z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M12 7.5V21" stroke="currentColor" strokeWidth="1.5"/><path d="M12 7.5C10.8 4.6 7.2 4 7.2 6.1c0 1.2 1.6 1.4 4.8 1.4zM12 7.5c1.2-2.9 4.8-3.5 4.8-1.4 0 1.2-1.6 1.4-4.8 1.4z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "#2b2420" }}>{BUNDLE_GIFT.title}</div>
+                    <div style={{ fontSize: "12px", color: "#8c7f74", marginTop: "1px" }}>{BUNDLE_GIFT.variant}</div>
+                  </div>
+                  <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: ".5px", color: "#2d6b45", background: "#e8f3ec", borderRadius: "999px", padding: "4px 10px" }}>GRATIS</span>
+                </div>
+              )}
               {hasUpsell && (
                 <div style={{ display: "flex", gap: "14px", alignItems: "flex-start", marginTop: "16px" }}>
                   <div style={{ position: "relative", width: "64px", height: "64px", border: "1px solid #e3e3e3", borderRadius: "10px", background: "#f7f7f7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

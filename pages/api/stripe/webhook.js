@@ -11,7 +11,7 @@
 
 import Stripe from "stripe";
 import axios from "axios";
-import { SHIPPING, getProduct } from "../../../lib/checkout";
+import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT } from "../../../lib/checkout";
 import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
 import { sendPurchase, META_CONTENT_ID } from "../../../lib/meta-capi";
@@ -94,6 +94,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   const tags = ["stripe", "subscription-frontend", invTag(invoice.id)];
   if (!addrOk) tags.push("missing-address");
   if (product.tag) tags.push(product.tag);
+  if (bundle.gift) tags.push(BUNDLE_GIFT.tag);
   // Kortingscode in Stripe → zelfde korting op de Shopify-order, zodat de bedragen kloppen
   const discountCents = (invoice.total_discount_amounts || []).reduce((t, d) => t + (d.amount || 0), 0);
 
@@ -127,6 +128,8 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   }
 
   // Abandoned-checkout-mail 2: 1 flacone in omaggio
+  // Bundel met gratis cadeau (e-book, €0) → zelfde regel als de oude Shopify-cartlink
+  if (bundle.gift) { order.lineItems.push(giftLineItem()); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
   const bonus = product.abandoned ? await hasCheckoutBonus(order.email) : false;
   if (bonus) { order.lineItems.push(bonusLineItem()); order.tags.push("abandon-bonus"); order.note += " + 1x NeuroTone in omaggio (abandoned checkout)"; }
 

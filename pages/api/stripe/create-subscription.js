@@ -65,6 +65,7 @@ export default async function handler(req, res) {
     const metadata = {
       funnel: product.funnel,
       product_key: product.key,
+      ...(bundle.gift ? { gift: "ebook" } : {}),
       source: "jjb-checkout",
       qty: String(bundle.qty),
       bundle: String(bundle.qty),

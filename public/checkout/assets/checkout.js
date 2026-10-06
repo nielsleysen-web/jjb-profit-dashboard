@@ -76,7 +76,7 @@ const PACKS_LUBRISENSE = {
   1: { label: '1x LubriSense™', amount: 3495, compare: 0, save: 0, savePct: 0, img: IMG + '3_5305b5fc-f123-40dc-a487-545a8bd63b05.png?v=1787285389&width=240' },
   2: { label: '2x LubriSense™', amount: 4495, compare: 0, save: 0, savePct: 0, img: IMG + '4_681fd7dd-be4d-4f81-ad4b-c1295e55e3f6.png?v=1787285390&width=240' },
   3: { label: '3x LubriSense™', amount: 5495, compare: 0, save: 0, savePct: 0, img: IMG + '5.png?v=1787285390&width=240' },
-  5: { label: '5x LubriSense™', amount: 6495, compare: 0, save: 0, savePct: 0, img: IMG + '6.png?v=1787285390&width=240' },
+  5: { label: '5x LubriSense™', amount: 6495, compare: 0, save: 0, savePct: 0, img: IMG + '6.png?v=1787285390&width=240', gift: true },
 };
 const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
@@ -133,6 +133,30 @@ function successUrl(subId) {
   return new URL(CONFIG.SUCCESS_PATH + '?sub=' + encodeURIComponent(subId || '') + '&b=' + pack + PQ + (BONUS ? '&skip=1' : ''), location.origin).href;
 }
 
+/* ---------- Gratis cadeau bij de bundel (LubriSense 5x): een e-book op het platform (niet vermeld), €0 ----------
+   Zelfde als de oude Shopify-cartlink (product "Regalo gratuito"); de €0-regel komt mee op de Shopify-order. */
+const BUNDLE_GIFT_COPY = { name: 'Regalo a sorpresa', sub: 'Incluso nel tuo ordine', free: 'GRATIS' };
+const GIFT_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 7.5h18V11H3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 7.5V21" stroke="currentColor" stroke-width="1.5"/><path d="M12 7.5C10.8 4.6 7.2 4 7.2 6.1c0 1.2 1.6 1.4 4.8 1.4zM12 7.5c1.2-2.9 4.8-3.5 4.8-1.4 0 1.2-1.6 1.4-4.8 1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+function addBundleGift(slot) {
+  if (!document.getElementById('jj-bgift-style')) {
+    const st = document.createElement('style');
+    st.id = 'jj-bgift-style';
+    st.textContent = '.jj-bgift{display:flex;align-items:center;gap:12px;margin-top:14px;padding:10px 12px;border:1px solid #efe4d8;border-radius:12px;background:linear-gradient(180deg,#fffaf5,#fdf5ee)}'
+      + '.jj-bgift-ic{width:38px;height:38px;flex:none;border-radius:50%;background:#fbeadd;color:#b8693c;display:flex;align-items:center;justify-content:center}'
+      + '.jj-bgift-tx{flex:1;min-width:0}.jj-bgift-n{font-size:14px;font-weight:600;color:#2b2420}.jj-bgift-s{font-size:12px;color:#8c7f74;margin-top:1px}'
+      + '.jj-bgift-p{font-size:11px;font-weight:700;letter-spacing:.5px;color:#2d6b45;background:#e8f3ec;border-radius:999px;padding:4px 10px}';
+    document.head.appendChild(st);
+  }
+  const prod = slot.querySelector('.prod-row');
+  if (!prod || slot.querySelector('.jj-bgift')) return;
+  const row = document.createElement('div');
+  row.className = 'jj-bgift';
+  row.innerHTML = '<span class="jj-bgift-ic">' + GIFT_ICON + '</span>'
+    + '<span class="jj-bgift-tx"><span class="jj-bgift-n">' + BUNDLE_GIFT_COPY.name + '</span><br><span class="jj-bgift-s">' + BUNDLE_GIFT_COPY.sub + '</span></span>'
+    + '<span class="jj-bgift-p">' + BUNDLE_GIFT_COPY.free + '</span>';
+  prod.parentNode.insertBefore(row, prod.nextSibling);
+}
+
 /* ---------- Render order summary into both slots ---------- */
 function renderSummaries() {
   const tpl = $('#summary-template');
@@ -140,6 +164,7 @@ function renderSummaries() {
     slot.innerHTML = '';
     slot.appendChild(tpl.content.cloneNode(true));
     slot.querySelectorAll('.prod-name').forEach(el => { el.textContent = CONFIG.PRODUCT_NAME; });
+    if (P.gift) addBundleGift(slot);
   });
   wireDiscountInputs();
   updateAmounts();

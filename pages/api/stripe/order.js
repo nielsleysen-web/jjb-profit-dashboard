@@ -56,6 +56,7 @@ export default async function handler(req, res) {
       qty: bundle.qty,
       product: product.key,
       bundleLabel: bundle.label,
+      gift: !!bundle.gift,
       bundlePrice: bundle.price,
       shipping: ship.code,
       amountPaid: inv?.amount_paid ?? bundle.price + ship.price,
