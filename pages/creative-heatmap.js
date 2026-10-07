@@ -166,6 +166,12 @@ export default function CreativeHeatmap() {
             <span className="fade"><i />little spend</span>
           </div>
         </div>
+        {!loading && concepts.length > 0 && (cKeys.every((k) => k === NOT_SET) || rKeys.every((k) => k === NOT_SET)) && (
+          <div className="hm-note">
+            {[cKeys.every((k) => k === NOT_SET) ? DIMS[colDim] : null, rKeys.every((k) => k === NOT_SET) ? DIMS[rowDim] : null].filter(Boolean).join(" and ")} is not filled in on any task yet.
+            Fill it in on the video tasks (see the list below), or pick another dimension.
+          </div>
+        )}
         {loading && !data ? (
           <div className="hm-empty">Loading…</div>
         ) : !concepts.length ? (
@@ -289,12 +295,13 @@ const CSS = `
 .hm-legend .fade{display:inline-flex;align-items:center;gap:5px;margin-left:10px}
 .hm-legend .fade i{width:14px;height:10px;border-radius:3px;background:var(--g2);opacity:.35;display:block}
 .hm-empty{padding:40px 20px;text-align:center;color:var(--ink3)}
+.hm-note{background:var(--seg);border-radius:9px;padding:9px 12px;font-size:12px;color:var(--ink2);margin-bottom:12px}
 .hm-scroll{overflow-x:auto}
-.hm-t{border-collapse:separate;border-spacing:4px;width:100%;table-layout:fixed;min-width:720px}
-.hm-t th{font-weight:500;color:var(--ink2);font-size:11.5px;padding:4px 4px 8px;text-align:center;vertical-align:bottom;line-height:1.25;word-wrap:break-word}
+.hm-t{border-collapse:separate;border-spacing:4px;width:auto;table-layout:fixed}
+.hm-t th{font-weight:500;color:var(--ink2);font-size:11.5px;padding:4px 4px 8px;text-align:center;vertical-align:bottom;line-height:1.25;word-wrap:break-word;width:150px;min-width:150px}
 .hm-t th.rl,.hm-t td.rl{text-align:left;width:180px;color:var(--ink);font-size:12.5px;padding-left:2px;word-wrap:break-word}
 .hm-t th.ns,.hm-t td.ns{color:var(--ink3);font-style:italic}
-.hm-t th.tot,.hm-t td.tot{width:86px}
+.hm-t th.tot,.hm-t td.tot{width:86px;min-width:86px}
 .hm-t td{padding:0}
 .hm-c{height:52px;width:100%;border:0;border-radius:8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:transform .1s,box-shadow .1s}
 .hm-c b{font-size:14px;font-weight:700;letter-spacing:-.2px}
