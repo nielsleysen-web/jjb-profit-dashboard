@@ -323,7 +323,7 @@ export default function CreativesList({
                       title={namingFor?.(t) || ""}
                     >
                       <div className="cl-tk">
-                        <div className="a">{t.concept || t.angle || t.product?.title || (kind === "video" ? "New video task" : "New design task")}</div>
+                        <div className="a">{namingFor?.(t) || t.concept || t.angle || t.product?.title || (kind === "video" ? "New video task" : "New design task")}</div>
                         <div className="b">{subline(t) || "—"}</div>
                       </div>
                       <div className="cl-who">
@@ -464,7 +464,7 @@ body:has(.cl-dark){background:#0f1012}
 .cl-row:hover{background:var(--hover)}
 .cl-row.drag{opacity:.4}
 .cl-tk{min-width:0}
-.cl-tk .a{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-tk .a{font-size:13px;font-weight:500;color:var(--ink);line-height:1.3;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
 .cl-tk .b{font-size:11.5px;color:var(--ink3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cl-who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);min-width:0}
 .cl-who span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
