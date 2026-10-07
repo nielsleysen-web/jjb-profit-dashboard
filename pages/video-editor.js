@@ -168,6 +168,14 @@ export default function VideoEditor() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
 
+  // ?task=<id> in de URL (bv. vanuit de Creative Heatmap) → die taak meteen openen
+  useEffect(() => {
+    try {
+      const id = new URLSearchParams(window.location.search).get("task");
+      if (id) setOpenTaskId(id);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     load();
     const iv = setInterval(load, 45000);

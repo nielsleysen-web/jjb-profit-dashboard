@@ -60,6 +60,7 @@ const CATEGORIES = [
     items: [
       { href: "/video-editor", label: "Video Editor", icon: "🎬" },
       { href: "/graphic-designer", label: "Graphic Designer", icon: "🎨" },
+      { href: "/creative-heatmap", label: "Creative Heatmap", icon: "🧭" },
     ],
   },
   {
@@ -79,7 +80,12 @@ const CATEGORIES = [
 ];
 
 // Pagina's die niet meer in het menu staan maar wel beveiligd bereikbaar blijven via de URL
-const EXTRA_PROTECTED = [{ href: "/daily-overview", perm: "finance" }];
+// Pagina's die niet (meer) in het menu staan maar wel beveiligd blijven
+const EXTRA_PROTECTED = [
+  { href: "/daily-overview", perm: "finance" },
+  { href: "/funnel-metrics", perm: "launching" },
+  { href: "/creatives-data", perm: "creatives" },
+];
 
 const ALL_PROTECTED = [...CATEGORIES.flatMap((c) => c.items.map((i) => i.href)), ...EXTRA_PROTECTED.map((e) => e.href)];
 

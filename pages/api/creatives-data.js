@@ -3,7 +3,8 @@
 // die het creative heeft opgeleverd, zodat editors en designers zien welk werk verkoopt.
 //
 // Koppeling ad → taak gaat via de naming convention in de Meta ad-naam:
-//   PRODUCT | STRATEGIST | EDITOR | ANGLE | NET NEW/ITERATION | DD-MM-YYYY
+//   PRODUCT | CONCEPT | ANGLE | ICP | AWARENESS | SCRIPT STRUCTURE | FORMAT TYPE | STRATEGIST | EDITOR | DD-MM-YYYY
+//   (oudere taken: PRODUCT | STRATEGIST | EDITOR | ANGLE | NET NEW/ITERATION | DD-MM-YYYY)
 // Media buyers zetten daar vaak een prefix voor ("3 | …", "H2 - …") of gebruiken
 // streepjes, dus we matchen op de kern (product + editor + deadline), niet op de
 // exacte string. Wat niet automatisch matcht, kan de admin handmatig koppelen.
@@ -14,6 +15,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import { driveConfigured, folderIdFromLink, findCreativeFile } from "../../lib/gdrive";
+import { videoNaming, videoConcept } from "../../lib/creative-naming";
 
 export const config = { maxDuration: 60 };
 
@@ -292,8 +294,10 @@ function taskProfile(t, kind) {
   const editor = norm(firstName(t.assigneeName));
   const strategist = norm(firstName(t.strategistName));
   const deadline = fmtDeadlineDate(t.deadline);
-  const angle = norm(t.angle);
-  const angleWords = [...new Set(wordsOf(t.angle).filter((w) => !productWords.includes(w)))];
+  // Concept + angle (mechanism) zijn de kenmerkende woorden in de ad-naam; oudere taken hebben alleen "angle"
+  const concept = kind === "video" ? videoConcept(t) : t.angle || "";
+  const angle = norm(concept);
+  const angleWords = [...new Set(wordsOf(`${concept} ${kind === "video" ? t.mechanism || "" : ""}`).filter((w) => !productWords.includes(w)))];
   return {
     id: t.id,
     kind, // "video" | "image"
@@ -308,16 +312,24 @@ function taskProfile(t, kind) {
     strategistName: t.strategistName || "",
     angle,
     angleWords,
+    concept,
+    mechanism: kind === "video" ? t.mechanism || "" : "",
+    icp: kind === "video" ? t.icp || "" : "",
+    awareness: kind === "video" ? t.awareness || "" : "",
+    scriptStructure: kind === "video" ? t.scriptStructure || "" : "",
+    formatType: kind === "video" ? t.formatType || "" : "",
     type: t.type || t.batchType || "",
     deadline,
     deadlineVariants: deadlineVariants(t.deadline),
     deadlineMs: t.deadline ? new Date(t.deadline).getTime() : 0,
     status: t.status || "",
     outputLink: t.finalOutputLink || t.frameioLink || "",
-    naming: [productTitle, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type || t.batchType, deadline]
-      .filter(Boolean)
-      .map((s) => String(s).toUpperCase())
-      .join(" | "),
+    naming: kind === "video"
+      ? videoNaming(t)
+      : [productTitle, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.batchType, deadline]
+          .filter(Boolean)
+          .map((s) => String(s).toUpperCase())
+          .join(" | "),
   };
 }
 
@@ -501,6 +513,12 @@ export default async function handler(req, res) {
           product: task.productTitle,
           productImage: task.productImage,
           angle: task.angle,
+          concept: task.concept,
+          mechanism: task.mechanism,
+          icp: task.icp,
+          awareness: task.awareness,
+          scriptStructure: task.scriptStructure,
+          formatType: task.formatType,
           type: task.type,
           linkedManually,
           outputLink: task.outputLink,
