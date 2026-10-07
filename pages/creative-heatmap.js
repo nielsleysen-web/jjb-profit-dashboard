@@ -20,6 +20,14 @@ const DIMS = {
 const WINDOWS = [["7", "7 days"], ["14", "14 days"], ["30", "30 days"], ["90", "90 days"]];
 const NOT_SET = "Not set";
 
+// Testing ladder: een angle × ICP is bewezen na ≥ €2.000 spend met ROAS ≥ 1,50.
+const LADDER = { minSpend: 2000, minRoas: 1.5 };
+function ladderStatus(spend, roas) {
+  if (spend >= LADDER.minSpend) return roas >= LADDER.minRoas ? "proven" : "failed";
+  return roas >= LADDER.minRoas ? "promising" : "testing";
+}
+const STATUS_LABEL = { proven: "Proven", promising: "Promising", testing: "Testing", failed: "Failed" };
+
 const eur = (n) => "€" + Math.round(n || 0).toLocaleString("nl-BE");
 const eurK = (n) => (n >= 1000 ? "€" + (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(".", ",") + "k" : "€" + Math.round(n || 0));
 const x2 = (n) => (Number.isFinite(n) ? n.toFixed(2).replace(".", ",") : "—");
@@ -48,6 +56,10 @@ export default function CreativeHeatmap() {
   const [adsF, setAdsF] = useState("all");
   const [sel, setSel] = useState(null);
   const [tip, setTip] = useState(null);
+  const [tab, setTab] = useState("heatmap");
+  useEffect(() => { try { const t = localStorage.getItem("jj-heatmap-tab"); if (t === "ladder") setTab(t); } catch {} }, []);
+  useEffect(() => { try { localStorage.setItem("jj-heatmap-tab", tab); } catch {} }, [tab]);
+  const [openAngles, setOpenAngles] = useState({});
 
   useEffect(() => {
     try {
@@ -125,6 +137,42 @@ export default function CreativeHeatmap() {
   const missing = concepts.filter((c) => c.missing.length).sort((a, b) => b.spend - a.spend);
   const board = concepts.filter((c) => !sel || (c[rowDim] === sel[0] && c[colDim] === sel[1])).sort((a, b) => b.spend - a.spend).slice(0, 10);
 
+  // ---- Testing ladder: angle × ICP → formats ----
+  const ladder = useMemo(() => {
+    const m = {};
+    for (const c of concepts) {
+      const key = c.mechanism + "|" + c.icp;
+      const a = m[key] || (m[key] = { key, mechanism: c.mechanism, icp: c.icp, spend: 0, revenue: 0, n: 0, ads: 0, formats: {}, unset: c.mechanism === NOT_SET || c.icp === NOT_SET });
+      a.spend += c.spend; a.revenue += c.revenue; a.n++; a.ads += c.ads;
+      const f = a.formats[c.formatType] || (a.formats[c.formatType] = { name: c.formatType, spend: 0, revenue: 0, n: 0, ads: 0, structures: new Set(), editors: new Set(), concepts: [] });
+      f.spend += c.spend; f.revenue += c.revenue; f.n++; f.ads += c.ads; f.concepts.push(c);
+      if (c.scriptStructure !== NOT_SET) f.structures.add(c.scriptStructure);
+      if (c.editor) f.editors.add(c.editor);
+    }
+    const allIcps = new Set(concepts.map((c) => c.icp).filter((f) => f !== NOT_SET));
+    const list = Object.values(m).map((a) => {
+      a.roas = a.spend > 0 ? a.revenue / a.spend : NaN;
+      a.status = a.unset ? "testing" : ladderStatus(a.spend, a.roas);
+      a.formatList = Object.values(a.formats).map((f) => ({ ...f, roas: f.spend > 0 ? f.revenue / f.spend : NaN, status: f.name === NOT_SET ? "testing" : ladderStatus(f.spend, f.spend > 0 ? f.revenue / f.spend : NaN) })).sort((x, y) => (x.name === NOT_SET) - (y.name === NOT_SET) || y.spend - x.spend);
+      const tested = a.formatList.filter((f) => f.name !== NOT_SET).length;
+      // Volgende stap in de volgorde: angle bewijzen → 5 formats → schalen
+      if (a.unset) a.next = { tone: "", text: `Angle or ICP is empty on ${a.n} task${a.n > 1 ? "s" : ""}. Fill them in to place these concepts on the ladder.` };
+      else if (a.status === "failed") a.next = { tone: "stop", text: `€${Math.round(a.spend).toLocaleString("nl-BE")} spent at ${x2(a.roas)} ROAS (bar: ${x2(LADDER.minRoas)}). Stop this angle for this ICP; try another mechanism.` };
+      else if (a.status === "testing") a.next = { tone: "", text: `${eur(LADDER.minSpend - a.spend)} more spend needed to judge this angle (ROAS now ${x2(a.roas)}, bar ${x2(LADDER.minRoas)}).` };
+      else if (a.status === "promising") a.next = { tone: "go", text: `ROAS above the bar, ${eur(LADDER.minSpend - a.spend)} more spend needed to call it proven. Keep it running.` };
+      else { const best = a.formatList.filter((f) => f.name !== NOT_SET && Number.isFinite(f.roas)).sort((x, y) => y.roas - x.roas)[0]; a.next = { tone: "go", text: `Proven: profitable after ${eur(a.spend)} spend. Scale this angle for this ICP${best ? ` — best format so far: ${best.name} (${x2(best.roas)})` : ""}.` }; }
+      a.tested = tested;
+      return a;
+    });
+    const rank = { proven: 0, promising: 1, testing: 2, failed: 3 };
+    list.sort((x, y) => (x.unset ? 1 : 0) - (y.unset ? 1 : 0) || rank[x.status] - rank[y.status] || y.spend - x.spend);
+    // ICP's die bij een bewezen angle nog nooit getest zijn
+    const gaps = [];
+    for (const mech of [...new Set(list.filter((x) => x.status === "proven").map((x) => x.mechanism))]) for (const icp of allIcps) if (!m[mech + "|" + icp]) gaps.push(`${mech} × ${icp}`);
+    const count = (st) => list.filter((a) => !a.unset && a.status === st).length;
+    return { list, gaps, counts: { proven: count("proven"), promising: count("promising"), testing: count("testing"), failed: count("failed"), unset: list.filter((a) => a.unset).length } };
+  }, [concepts]);
+
   return (
     <div className={`hm ${dark ? "hm-dark" : ""}`} onMouseMove={(e) => tip && setTip({ ...tip, x: e.clientX, y: e.clientY })}>
       <style>{CSS}</style>
@@ -141,16 +189,103 @@ export default function CreativeHeatmap() {
         </div>
       </div>
 
+      <div className="hm-tabs">
+        <button className={tab === "heatmap" ? "on" : ""} onClick={() => setTab("heatmap")}>Heatmap</button>
+        <button className={tab === "ladder" ? "on" : ""} onClick={() => setTab("ladder")}>Testing ladder</button>
+      </div>
+
       <div className="hm-bar">
         <div className="hm-seg">{WINDOWS.map(([k, l]) => <button key={k} className={win === k ? "on" : ""} onClick={() => setWin(k)}>{l}</button>)}</div>
-        <label className="hm-pick">Rows <select value={rowDim} onChange={(e) => setRowDim(e.target.value)}>{Object.entries(DIMS).filter(([k]) => k !== colDim).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-        <label className="hm-pick">Columns <select value={colDim} onChange={(e) => setColDim(e.target.value)}>{Object.entries(DIMS).filter(([k]) => k !== rowDim).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+        {tab === "ladder" && <div className="hm-rule">Proven = ≥ <b>{eur(LADDER.minSpend)}</b> spend and ROAS ≥ <b>{x2(LADDER.minRoas)}</b></div>}
+        {tab === "heatmap" && <label className="hm-pick">Rows <select value={rowDim} onChange={(e) => setRowDim(e.target.value)}>{Object.entries(DIMS).filter(([k]) => k !== colDim).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>}
+        {tab === "heatmap" && <label className="hm-pick">Columns <select value={colDim} onChange={(e) => setColDim(e.target.value)}>{Object.entries(DIMS).filter(([k]) => k !== rowDim).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>}
         <div className="hm-sp" />
         <label className="hm-pick">Ads <select value={adsF} onChange={(e) => setAdsF(e.target.value)}><option value="all">All</option><option value="live">Delivering</option><option value="off">Paused</option></select></label>
       </div>
 
       {error && <div className="hm-card hm-box" style={{ color: "var(--r2)" }}>Error: {error}</div>}
 
+      {tab === "ladder" && (
+        <>
+          {/* Samenvatting: één strook, drie cijfers, één kleur */}
+          <div className="hm-card hm-sum">
+            {(() => {
+              const c = ladder.counts, total = c.proven + c.promising + c.testing + c.failed;
+              const parts = [c.promising ? `${c.promising} promising` : "", c.testing ? `${c.testing} testing` : "", c.failed ? `${c.failed} failed` : "", c.unset ? `${c.unset} not filled in` : ""].filter(Boolean);
+              return (
+                <>
+                  <div className="hm-tile">
+                    <div className="st"><span className="n">1</span>Angle × ICP</div>
+                    <div className="big">{c.proven}<small>of {total} proven</small></div>
+                    <div className="bar"><i style={{ width: `${total ? (c.proven / total) * 100 : 0}%` }} /></div>
+                    <div className="sub">{parts.length ? parts.join(" · ") : "nothing else yet"}</div>
+                  </div>
+                  <div className="hm-tile">
+                    <div className="st"><span className="n">2</span>Still in test</div>
+                    <div className="big">{c.testing + c.promising}<small>under {eur(LADDER.minSpend)} spend</small></div>
+                    <div className="bar"><i style={{ width: `${total ? ((c.testing + c.promising) / total) * 100 : 0}%` }} /></div>
+                    <div className="sub">{c.testing + c.promising ? `${eur(ladder.list.filter((x) => !x.unset && (x.status === "testing" || x.status === "promising")).reduce((t, x) => t + (LADDER.minSpend - x.spend), 0))} more spend needed in total · ${c.promising} already above the bar` : "nothing in test"}</div>
+                  </div>
+                  <div className="hm-tile">
+                    <div className="st"><span className="n">3</span>Gaps</div>
+                    <div className="big">{ladder.gaps.length}<small>proven angle, ICP never tried</small></div>
+                    <div className="gaps">{ladder.gaps.length ? ladder.gaps.slice(0, 2).map((g) => <span key={g}>{g}</span>) : <span>none</span>}{ladder.gaps.length > 2 ? <span>+{ladder.gaps.length - 2} more</span> : null}</div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Eén kaart per angle × ICP: spend-balk naar €2k, ROAS-meter met de lat, 5 format-stippen */}
+          {!ladder.list.length && <div className="hm-card hm-empty">No matched ads for this product in this window.</div>}
+          <div className="hm-grid">
+            {ladder.list.map((a) => {
+              const open = !!openAngles[a.key];
+              const spendPct = Math.min(100, (a.spend / LADDER.minSpend) * 100);
+              const roasPct = Number.isFinite(a.roas) ? Math.min(100, (a.roas / (LADDER.minRoas * 2)) * 100) : 0;
+              return (
+                <div key={a.key} className={`hm-card hm-ac ${a.status} ${a.unset ? "ns" : ""}`}>
+                  <div className="top">
+                    <span className={`hm-st ${a.status}`}>{STATUS_LABEL[a.status]}</span>
+                    <div className="ttl"><b>{a.mechanism}</b><span className="x"> × </span><b>{a.icp}</b></div>
+                    <div className="sub">{a.n} concept{a.n > 1 ? "s" : ""} · {a.ads} ad{a.ads > 1 ? "s" : ""} · {a.tested} format{a.tested === 1 ? "" : "s"}</div>
+                  </div>
+                  <div className="meters">
+                    <div className="m">
+                      <div className="l"><span>Spend</span><b>{eur(a.spend)}</b><small>of {eur(LADDER.minSpend)}</small></div>
+                      <div className="track"><i className={a.status} style={{ width: `${spendPct}%` }} /></div>
+                    </div>
+                    <div className="m">
+                      <div className="l"><span>ROAS</span><b>{x2(a.roas)}</b><small>bar {x2(LADDER.minRoas)}</small></div>
+                      <div className="track"><i className={a.status} style={{ width: `${roasPct}%` }} /><em style={{ left: "50%" }} /></div>
+                    </div>
+                  </div>
+                  <div className={`hm-next ${a.next.tone}`}><i>{a.next.tone === "stop" ? "■" : "→"}</i>{a.next.text}</div>
+                  <button type="button" className="more" onClick={() => setOpenAngles((o) => ({ ...o, [a.key]: !open }))}>{open ? "Hide formats ▴" : "Show formats ▾"}</button>
+                  {open && (
+                    <div className="fl">
+                      {a.formatList.map((f) => (
+                        <div key={f.name} className={`hm-lr l2 ${f.name === NOT_SET ? "ns" : ""}`}>
+                          <div className="tg"><span className={`d ${f.status}`} /></div>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="nm">{f.name}{f.structures.size ? <span className="sub"> · {[...f.structures].join(", ")}</span> : null}</div>
+                            <div className="sub">{f.concepts.slice(0, 3).map((c, i) => <Link key={c.taskId} href={`/video-editor?task=${encodeURIComponent(c.taskId)}`} className="hm-lnk">{i ? " · " : ""}{c.concept !== NOT_SET ? c.concept : "(no concept)"}</Link>)}{f.concepts.length > 3 ? ` · +${f.concepts.length - 3}` : ""}{f.editors.size ? ` · ${[...f.editors].join(", ")}` : ""}</div>
+                          </div>
+                          <div className="v">{eur(f.spend)}</div>
+                          <div className="ro">{x2(f.roas)}</div>
+                          <span className={`hm-st ${f.status}`}>{STATUS_LABEL[f.status]}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {tab === "heatmap" && <>
       <div className="hm-card hm-kpis">
         {[["Spend", eur(tot.s), "Meta, matched ads"], ["ROAS", x2(avg), "Shopify revenue ÷ spend · average = middle of the scale"], ["Concepts", concepts.length, `${tot.ads} ads · ${tot.o} orders`], ["Classified", concepts.length ? `${Math.round(((concepts.length - missing.length) / concepts.length) * 100)}%` : "—", missing.length ? `${missing.length} concept${missing.length > 1 ? "s" : ""} with empty fields` : "all fields filled in"]]
           .map(([l, v, s]) => <div key={l} className="hm-kpi"><div className="l">{l}</div><div className="v">{v}</div><div className="s">{s}</div></div>)}
@@ -255,6 +390,8 @@ export default function CreativeHeatmap() {
         </div>
       )}
 
+      </>}
+
       {tip && <div className="hm-tip" style={{ left: Math.min(tip.x + 14, (typeof window !== "undefined" ? window.innerWidth : 1200) - 250), top: tip.y + 14 }} dangerouslySetInnerHTML={{ __html: tip.html }} />}
     </div>
   );
@@ -275,7 +412,71 @@ const CSS = `
 .hm-seg button{border:0;background:transparent;color:var(--ink2);border-radius:7px;padding:5px 12px;cursor:pointer;font-size:12.5px}
 .hm-seg button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .hm-icon{width:32px;height:32px;border-radius:9px;border:1px solid var(--line2);background:var(--surface);color:var(--ink2);cursor:pointer}
-.hm-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:18px 0 16px}
+.hm-tabs{display:flex;gap:2px;margin:18px 0 0;border-bottom:1px solid var(--line2)}
+.hm-tabs button{border:0;background:transparent;padding:9px 12px;color:var(--ink3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-size:13px}
+.hm-tabs button.on{color:var(--ink);font-weight:600;border-color:var(--ink)}
+.hm-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0 16px}
+.hm-rule{font-size:12px;color:var(--ink3)}.hm-rule b{color:var(--ink2);font-weight:600}
+.hm-sum{display:grid;grid-template-columns:repeat(3,1fr);margin-bottom:16px}
+.hm-tile{padding:14px 18px;border-left:1px solid var(--line)}
+.hm-tile:first-child{border-left:0}
+.hm-tile .st{font-size:12px;font-weight:600;color:var(--ink2);display:flex;align-items:center;gap:8px}
+.hm-tile .st .n{width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--surface);font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.hm-tile .big{font-size:28px;font-weight:800;letter-spacing:-.6px;margin:8px 0 8px;line-height:1}
+.hm-tile .big small{font-size:12px;font-weight:500;color:var(--ink3);margin-left:7px;letter-spacing:0}
+.hm-tile .bar{height:6px;border-radius:3px;background:var(--seg);overflow:hidden}
+.hm-tile .bar i{display:block;height:100%;background:var(--g2);border-radius:3px}
+.hm-tile .sub{font-size:11.5px;color:var(--ink3);margin-top:7px}
+.hm-tile .gaps{display:flex;flex-wrap:wrap;gap:5px}
+.hm-tile .gaps span{font-size:11.5px;background:var(--seg);border-radius:999px;padding:3px 9px;color:var(--ink2)}
+.proven.d,i.proven{background:var(--g2)!important}
+.promising.d,i.promising{background:#3b82f6!important}
+.testing.d,i.testing{background:#b8bcc6!important}
+.failed.d,i.failed{background:var(--r2)!important}
+i.unset{background:var(--line2)!important}
+.hm-tile .gaps{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.hm-tile .gaps span{font-size:11.5px;background:var(--seg);border-radius:999px;padding:3px 9px;color:var(--ink2)}
+.hm-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.hm-ac{padding:16px 18px 12px}
+.hm-ac.proven::before{border-top-color:var(--g2)}.hm-ac.promising::before{border-top-color:#3b82f6}.hm-ac.failed::before{border-top-color:var(--r2)}.hm-ac.testing::before{border-top-color:#b8bcc6}
+.hm-ac.ns{opacity:.75}
+.hm-ac .top{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:start}
+.hm-ac .top .hm-st{grid-column:2;grid-row:1}
+.hm-ac .ttl{grid-column:1;font-size:14.5px;line-height:1.3}
+.hm-ac .ttl .x{color:var(--ink3);font-weight:400}
+.hm-ac.ns .ttl{color:var(--ink3);font-style:italic}
+.hm-ac .top .sub{grid-column:1;color:var(--ink3);font-size:11.5px}
+.hm-ac .meters{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:14px 0 10px}
+.hm-ac .m .l{display:flex;align-items:baseline;gap:6px;font-size:11.5px;color:var(--ink3);margin-bottom:5px}
+.hm-ac .m .l b{font-size:14px;color:var(--ink);font-weight:700}
+.hm-ac .m .l small{font-size:10.5px}
+.hm-ac .track{position:relative;height:8px;border-radius:4px;background:var(--seg);overflow:visible}
+.hm-ac .track i{display:block;height:100%;border-radius:4px;max-width:100%}
+.hm-ac .track em{position:absolute;top:-3px;width:2px;height:14px;background:var(--ink);border-radius:1px;opacity:.55}
+.hm-ac .dots{display:flex;gap:5px}
+.hm-ac .d{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:#fff;flex-shrink:0}
+.hm-ac .d.testing{color:#fff}
+.hm-ac .d.empty{background:transparent!important;border:1.5px dashed var(--line2)}
+.hm-ac .more{border:0;background:none;color:var(--ink3);font-size:11.5px;cursor:pointer;padding:6px 0 0;display:block}
+.hm-ac .fl{margin-top:6px;border-top:1px solid var(--line)}
+.hm-ac .fl .d{width:9px;height:9px;display:block;margin:0 auto}
+.hm-lr{display:grid;grid-template-columns:22px minmax(0,1fr) 90px 64px 96px;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.hm-lr.l2{padding-left:0}
+.hm-lr .tg{color:var(--ink3);font-size:10px;text-align:center}
+.hm-lr .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hm-lr.l2 .nm{font-weight:500}
+.hm-lr .x{color:var(--ink3);font-weight:400}
+.hm-lr .sub{color:var(--ink3);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
+.hm-lr.ns .nm{color:var(--ink3);font-style:italic}
+.hm-lr .v{text-align:right;color:var(--ink2);font-size:12.5px}
+.hm-lr .ro{text-align:right;font-weight:700}
+.hm-lnk{color:inherit;text-decoration:none}.hm-lnk:hover{text-decoration:underline}
+.hm-st{justify-self:end;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.hm-st.proven{background:#dcf5e8;color:#136b49}.hm-st.promising{background:#e8f0fc;color:#2456a8}.hm-st.testing{background:var(--seg);color:var(--ink2)}.hm-st.failed{background:#fde3df;color:#a8322a}
+.hm-dark .hm-st.proven{background:#173d2c;color:#7fd6a8}.hm-dark .hm-st.promising{background:#1d2b45;color:#8fb3f0}.hm-dark .hm-st.failed{background:#44221f;color:#f0968d}
+.hm-next{padding:4px 0 0;font-size:12px;color:var(--ink2);display:flex;gap:6px;align-items:flex-start}
+.hm-next i{font-style:normal}.hm-next.go{color:#136b49}.hm-next.stop{color:#a8322a}
+.hm-dark .hm-next.go{color:#7fd6a8}.hm-dark .hm-next.stop{color:#f0968d}
 .hm-pick{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--surface);border-radius:9px;padding:0 4px 0 10px;height:32px;color:var(--ink3);font-size:12px}
 .hm-pick select{border:0;background:transparent;color:var(--ink);font-weight:600;outline:none;cursor:pointer;height:30px}
 .hm-sp{flex:1}
@@ -334,5 +535,5 @@ const CSS = `
 .hm-row .v{text-align:right;color:var(--ink2)}
 .hm-pill{justify-self:end;font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap}
 .hm-clear{border:0;background:none;color:var(--ink2);text-decoration:underline;cursor:pointer;font-size:12px;padding:0}
-@media (max-width:900px){.hm{padding:18px 14px 40px}.hm-kpis{grid-template-columns:repeat(2,1fr)}.hm-kpi:nth-child(3){border-left:0}.hm-kpi:nth-child(n+3){border-top:1px solid var(--line)}.hm-two{grid-template-columns:1fr}.hm-t th.rl,.hm-t td.rl{width:130px}.hm-row{grid-template-columns:40px minmax(0,1fr) 70px 56px;gap:8px}}
+@media (max-width:900px){.hm-sum,.hm-grid{grid-template-columns:1fr}.hm-tile{border-left:0;border-top:1px solid var(--line)}.hm-tile:first-child{border-top:0}.hm-ac .meters{grid-template-columns:1fr 1fr;gap:10px}.hm-lr{grid-template-columns:18px minmax(0,1fr) auto auto auto;gap:6px 8px}.hm-lr .nm,.hm-lr .sub{white-space:normal}.hm-lr .v,.hm-lr .ro,.hm-lr .hm-st{grid-row:2;align-self:center}.hm-lr .v{grid-column:2;justify-self:start}.hm-lr .ro{grid-column:3}.hm-lr .hm-st{grid-column:4/6}.hm-lr>div:nth-child(2){grid-column:2/6}.hm-next{padding-left:26px}.hm{padding:18px 14px 40px}.hm-kpis{grid-template-columns:repeat(2,1fr)}.hm-kpi:nth-child(3){border-left:0}.hm-kpi:nth-child(n+3){border-top:1px solid var(--line)}.hm-two{grid-template-columns:1fr}.hm-t th.rl,.hm-t td.rl{width:130px}.hm-row{grid-template-columns:40px minmax(0,1fr) 70px 56px;gap:8px}}
 `;
