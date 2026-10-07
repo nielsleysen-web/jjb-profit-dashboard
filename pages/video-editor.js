@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import CreativesList from "../components/creatives/CreativesList";
+import { videoNaming, AWARENESS_STAGES } from "../lib/creative-naming";
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(false);
@@ -110,12 +111,6 @@ const fmtDeadline = (iso) => {
   if (!iso) return "";
   return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
-const fmtDeadlineDate = (iso) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const p = (n) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
-};
 const isoToLocalInput = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
@@ -134,12 +129,8 @@ const deadlineColor = (iso, status) => {
   return "#334155";
 };
 
-// Naming: PRODUCT | CREATIVE STRATEGIST | ASSIGNEE | ANGLE | NET NEW/ITERATION | DEADLINE
-const namingConvention = (t) =>
-  [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type, fmtDeadlineDate(t.deadline)]
-    .filter(Boolean)
-    .map((s) => String(s).toUpperCase())
-    .join(" | ");
+// Naming: PRODUCT | CONCEPT | ANGLE | ICP | AWARENESS STAGE | SCRIPT STRUCTURE | FORMAT TYPE | STRATEGIST | EDITOR | DEADLINE
+const namingConvention = videoNaming;
 
 const NAMING_FROM_STATUS = "Ready To Work";
 const taskTitle = (t) => {
@@ -158,6 +149,7 @@ export default function VideoEditor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
+  const [options, setOptions] = useState({ icp: {}, scriptStructure: [], formatType: [] });
   const [creating, setCreating] = useState(false);
   const isMobile = useIsMobile();
 
@@ -171,6 +163,7 @@ export default function VideoEditor() {
         setEditors(res.videoEditors);
         setTeam(res.team);
         setMe(res.me);
+        if (res.options) setOptions(res.options);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -194,7 +187,8 @@ export default function VideoEditor() {
       alert(res.error || "Something went wrong");
       return null;
     }
-    setTasks(res.tasks);
+    if (res.tasks) setTasks(res.tasks);
+    if (res.options) setOptions(res.options);
     return res;
   };
 
@@ -267,6 +261,7 @@ export default function VideoEditor() {
           editors={editors}
           team={team}
           avatars={avatars}
+          options={options}
           post={post}
           onClose={() => setOpenTaskId(null)}
           isMobile={isMobile}
@@ -278,13 +273,148 @@ export default function VideoEditor() {
 
 /* ================= herbruikbare componenten ================= */
 
+// Inklapbare sectie: klik op de titel of het pijltje. De keuze wordt per sectie onthouden (deze browser).
 function Section({ title, children }) {
+  const key = `jj-ve-sec:${title}`;
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    try { if (localStorage.getItem(key) === "0") setOpen(false); } catch {}
+  }, [key]);
+  const toggle = () => {
+    setOpen((o) => {
+      try { localStorage.setItem(key, o ? "0" : "1"); } catch {}
+      return !o;
+    });
+  };
   return (
-    <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "14px", padding: "14px 18px", marginBottom: "14px" }}>
-      <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "6px" }}>
-        {title}
+    <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "14px", padding: open ? "12px 18px 14px" : "12px 18px", marginBottom: "14px" }}>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: 0, padding: 0, cursor: "pointer", marginBottom: open ? "6px" : 0 }}
+      >
+        <span style={{ fontSize: "11.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.7px" }}>{title}</span>
+        <span style={{ width: "22px", height: "22px", borderRadius: "6px", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+// Briefing-link: eigen kaart met een blauw randje links, net iets zichtbaarder dan de gewone velden
+function BriefingCard({ value, canEdit, onSave }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderLeft: "3px solid #3b82f6", borderRadius: "14px", padding: "12px 18px", marginBottom: "14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <span style={{ fontSize: "15px" }}>📝</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: "13px", fontWeight: 700, color: "#0f172a" }}>Briefing & script</div>
+          <div style={{ fontSize: "11.5px", color: "#8a92a3" }}>Read the briefing before you start editing.</div>
+        </div>
+        {value ? (
+          <a href={value} target="_blank" rel="noreferrer"
+            style={{ border: "1px solid #dbe4f3", background: "#f5f8ff", color: "#1d4ed8", borderRadius: "9px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}>
+            Open briefing ↗
+          </a>
+        ) : (
+          <span style={{ fontSize: "12px", color: "#94a3b8" }}>No link yet</span>
+        )}
       </div>
-      {children}
+      {canEdit && (
+        <div style={{ marginTop: editing ? "10px" : "6px", paddingLeft: "25px" }}>
+          {editing ? (
+            <TextField value={value} onSave={onSave} type="url" placeholder="https://…" />
+          ) : (
+            <button type="button" onClick={() => setEditing(true)} style={{ border: 0, background: "none", padding: 0, color: "#94a3b8", fontSize: "11.5px", cursor: "pointer", textDecoration: "underline" }}>
+              Change link
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Dropdown waarin je ook kunt typen: nieuwe waarden komen automatisch in de lijst (server), met × verwijder je een waarde uit de lijst.
+function ComboField({ value, options, onSave, onRemove, disabled, placeholder, emptyHint }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(value || "");
+  const inputRef = useRef(null);
+  useEffect(() => { if (!open) setText(value || ""); }, [value, open]);
+  if (disabled) return value ? <span style={{ fontSize: "13px" }}>{value}</span> : <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>;
+  const q = text.trim().toLowerCase();
+  const list = options || [];
+  const shown = q && q !== String(value || "").toLowerCase() ? list.filter((o) => o.toLowerCase().includes(q)) : list;
+  const exact = list.some((o) => o.toLowerCase() === q);
+  const choose = (v) => {
+    setOpen(false);
+    setText(v);
+    if (v !== (value || "")) onSave(v);
+    inputRef.current?.blur();
+  };
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
+        <input
+          ref={inputRef}
+          style={{ ...ui.input, padding: "7px 30px 7px 10px" }}
+          value={text}
+          placeholder={placeholder || "Select or type…"}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setText(e.target.value); setOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); choose(text.trim()); }
+            if (e.key === "Escape") { setText(value || ""); setOpen(false); e.target.blur(); }
+          }}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onMouseDown={(e) => { e.preventDefault(); setOpen((o) => !o); inputRef.current?.focus(); }}
+          style={{ position: "absolute", right: "6px", border: 0, background: "none", color: "#94a3b8", cursor: "pointer", fontSize: "10px", padding: "4px" }}
+        >
+          {open ? "▲" : "▼"}
+        </button>
+      </div>
+      {open && (
+        <>
+          <div onMouseDown={() => { if (text.trim() !== (value || "")) choose(text.trim()); else setOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+          <div style={{ position: "absolute", top: "40px", left: 0, right: 0, background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", boxShadow: "0 12px 32px rgba(15,23,42,0.16)", padding: "6px", zIndex: 50, maxHeight: "260px", overflowY: "auto" }}>
+            {q && !exact && (
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); choose(text.trim()); }}
+                style={{ display: "flex", width: "100%", alignItems: "center", gap: "8px", padding: "8px 10px", border: 0, background: "#f0f7ff", color: "#1d4ed8", borderRadius: "8px", cursor: "pointer", fontSize: "12.5px", fontWeight: 600, textAlign: "left" }}>
+                + Add “{text.trim()}”
+              </button>
+            )}
+            {shown.map((o) => (
+              <div key={o} style={{ display: "flex", alignItems: "center", borderRadius: "8px", background: o === value ? "#f1f5f9" : "transparent" }}>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); choose(o); }}
+                  style={{ flex: 1, padding: "8px 10px", border: 0, background: "none", textAlign: "left", cursor: "pointer", fontSize: "12.5px", fontWeight: o === value ? 700 : 500, color: "#0f172a" }}>
+                  {o}
+                </button>
+                {onRemove && (
+                  <button type="button" title="Remove from list"
+                    onMouseDown={(e) => { e.preventDefault(); if (confirm(`Remove “${o}” from this list?`)) onRemove(o); }}
+                    style={{ border: 0, background: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", padding: "4px 10px", lineHeight: 1 }}>
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {!shown.length && !q && <div style={{ padding: "8px 10px", fontSize: "12px", color: "#94a3b8" }}>{emptyHint || "No options yet — type to add one."}</div>}
+            {value && (
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); choose(""); }}
+                style={{ display: "block", width: "100%", marginTop: "4px", padding: "7px 10px", border: 0, borderTop: "1px solid #f1f5f9", background: "none", textAlign: "left", cursor: "pointer", fontSize: "12px", color: "#94a3b8" }}>
+                Clear selection
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1071,7 +1201,7 @@ function DeadlinePicker({ value, onChange }) {
   );
 }
 
-function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, isMobile, allTasks, openTaskById }) {
+function TaskModal({ t, me, strategists, editors, team, avatars, options, post, onClose, isMobile, allTasks, openTaskById }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
@@ -1339,31 +1469,16 @@ function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, 
               ) : (
                 <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
               )}
-              <div style={{ marginTop: "8px" }}>
-                <Field label="Briefing Link" last>
-                  <TextField value={t.scriptLink || BRIEFING_DOC} disabled={!canEdit} onSave={(v) => save("scriptLink", v)} type="url" placeholder="https://…" />
-                </Field>
-              </div>
             </Section>
 
-            {/* Video */}
-            <Section title="🎬 Video">
-              <Field label="Angle">
-                <TextField value={t.angle} disabled={!canEdit} onSave={(v) => save("angle", v)} />
-              </Field>
+            {/* Briefing — los en opvallend, zodat editors hem niet missen */}
+            <BriefingCard value={t.scriptLink || BRIEFING_DOC} canEdit={canEdit} onSave={(v) => save("scriptLink", v)} />
+
+            {/* General Info */}
+            <Section title="🌍 General Info">
               <Field label="Advertorial Link">
                 <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
               </Field>
-              <Field label="Net New / Iteration">
-                <SelectField value={t.type} options={TYPES} onSave={(v) => save("type", v)} disabled={!canEdit} />
-              </Field>
-              <Field label="Reference Ad" last>
-                <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
-              </Field>
-            </Section>
-
-            {/* Market */}
-            <Section title="🌍 Market">
               <Field label="Market">
                 {canEdit ? (
                   <select
@@ -1380,6 +1495,54 @@ function TaskModal({ t, me, strategists, editors, team, avatars, post, onClose, 
               </Field>
               <Field label="Country Code" last>
                 <SelectField value={t.countryCode} options={CODES} onSave={(v) => save("countryCode", v)} disabled={!canEdit} />
+              </Field>
+            </Section>
+
+            {/* Video */}
+            <Section title="🎬 Video">
+              <Field label="Concept (Pain Point)">
+                <TextField value={t.concept || t.angle} disabled={!canEdit} onSave={(v) => post({ action: "update", taskId: t.id, task: { concept: v, ...(t.angle ? { angle: "" } : {}) } })} placeholder="The pain point this video is about" />
+              </Field>
+              <Field label="Angle (Mechanism)">
+                <TextField value={t.mechanism} disabled={!canEdit} onSave={(v) => save("mechanism", v)} placeholder="The mechanism / why it works" />
+              </Field>
+              <Field label="ICP (Ideal Customer Persona)">
+                <ComboField
+                  value={t.icp}
+                  options={options?.icp?.[(t.product?.title || "").trim().toLowerCase() || "_none"] || []}
+                  disabled={!canEdit}
+                  onSave={(v) => save("icp", v)}
+                  onRemove={(v) => post({ action: "optionRemove", list: "icp", value: v, product: t.product?.title || "" })}
+                  placeholder={t.product ? "Select or type a persona…" : "Choose a product first, or type…"}
+                  emptyHint={t.product ? `No personas for ${t.product.title} yet — type to add one.` : "Personas are saved per product."}
+                />
+              </Field>
+              <Field label="Awareness Stage">
+                <SelectField value={t.awareness} options={AWARENESS_STAGES} onSave={(v) => save("awareness", v)} disabled={!canEdit} />
+              </Field>
+              <Field label="Script Structure">
+                <ComboField
+                  value={t.scriptStructure}
+                  options={options?.scriptStructure || []}
+                  disabled={!canEdit}
+                  onSave={(v) => save("scriptStructure", v)}
+                  onRemove={(v) => post({ action: "optionRemove", list: "scriptStructure", value: v })}
+                />
+              </Field>
+              <Field label="Format Type">
+                <ComboField
+                  value={t.formatType}
+                  options={options?.formatType || []}
+                  disabled={!canEdit}
+                  onSave={(v) => save("formatType", v)}
+                  onRemove={(v) => post({ action: "optionRemove", list: "formatType", value: v })}
+                />
+              </Field>
+              <Field label="Net New / Iteration">
+                <SelectField value={t.type} options={TYPES} onSave={(v) => save("type", v)} disabled={!canEdit} />
+              </Field>
+              <Field label="Reference Ad" last>
+                <TextField value={t.referenceAd} disabled={!canEdit} onSave={(v) => save("referenceAd", v)} type="url" placeholder="Link to the ad we are iterating on — https://…" />
               </Field>
             </Section>
 

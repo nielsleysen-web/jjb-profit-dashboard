@@ -3,6 +3,7 @@
 // (from the Video Editor and Graphic Designer boards only).
 
 import { useState, useEffect } from "react";
+import { videoNaming, videoConcept } from "../lib/creative-naming";
 
 const ui = {
   page: { padding: "28px 36px", background: "#f7f8fa", minHeight: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", color: "#0f172a" },
@@ -18,11 +19,7 @@ const fmtDate = (iso) => {
   return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
 };
 
-const creativeNaming = (t) =>
-  [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type, fmtDate(t.deadline)]
-    .filter(Boolean)
-    .map((s) => String(s).toUpperCase())
-    .join(" | ");
+const creativeNaming = videoNaming;
 
 const designNaming = (t) =>
   [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.batchType, fmtDate(t.deadline)]
@@ -175,7 +172,7 @@ export default function ReadyToLaunch() {
                         {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
                         {t.type && <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "3px 9px", borderRadius: "999px" }}>{t.type}</span>}
                       </div>
-                      {t.angle && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{t.angle}</div>}
+                      {videoConcept(t) && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{videoConcept(t)}{t.mechanism ? ` · ${t.mechanism}` : ""}</div>}
                       <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "5px" }}>
                         {t.assigneeName && <>Edited by <b style={{ color: "#334155" }}>{t.assigneeName}</b></>}
                         {t.strategistName && <> · strategist <b style={{ color: "#334155" }}>{t.strategistName}</b></>}

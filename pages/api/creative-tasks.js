@@ -7,6 +7,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import { ensureCreativeFolder, driveConfigured, todayHK } from "../../lib/gdrive";
+import { videoNaming } from "../../lib/creative-naming";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
@@ -140,19 +141,25 @@ async function pushNotifications(items) {
 }
 
 /* ---------------- naming convention (zelfde volgorde als in de Video Editor) ---------------- */
-const firstName = (name) => (name || "").trim().split(/\s+/)[0] || "";
-const fmtDeadlineDate = (iso) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const p = (n) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()}`;
-};
-// PRODUCT | CREATIVE STRATEGIST | ASSIGNEE | ANGLE | NET NEW/ITERATION | DEADLINE
-const namingConvention = (t) =>
-  [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.type, fmtDeadlineDate(t.deadline)]
-    .filter(Boolean)
-    .map((s) => String(s).toUpperCase())
-    .join(" | ");
+// PRODUCT | CONCEPT | ANGLE | ICP | AWARENESS | SCRIPT STRUCTURE | FORMAT TYPE | STRATEGIST | EDITOR | DEADLINE (lib/creative-naming.js)
+const namingConvention = videoNaming;
+
+/* ---------------- keuzelijsten (ICP per product, script structure, format type) ---------------- */
+// Wat iemand intypt komt automatisch in de lijst; verwijderen kan via action "optionRemove".
+const OPTION_LISTS = { icp: "icp", scriptStructure: "scriptStructure", formatType: "formatType" };
+const productKey = (title) => String(title || "").trim().toLowerCase() || "_none";
+function normOptions(o) {
+  return { icp: o?.icp && typeof o.icp === "object" ? o.icp : {}, scriptStructure: Array.isArray(o?.scriptStructure) ? o.scriptStructure : [], formatType: Array.isArray(o?.formatType) ? o.formatType : [] };
+}
+function addOption(opts, list, value, product) {
+  const v = String(value || "").trim();
+  if (!v) return false;
+  const arr = list === "icp" ? (opts.icp[productKey(product)] = opts.icp[productKey(product)] || []) : opts[list];
+  if (arr.some((x) => x.toLowerCase() === v.toLowerCase())) return false;
+  arr.push(v);
+  arr.sort((a, b) => a.localeCompare(b));
+  return true;
+}
 
 /* ---------------- Google Drive: uploadmap per taak ---------------- */
 // Creatives / <productnaam> / <datum van vandaag, HK> / <naming convention>
@@ -258,9 +265,11 @@ export default async function handler(req, res) {
         .filter((u) => (u.roles || []).includes("Video Editor"))
         .map((u) => ({ name: u.name, email: u.email }));
       const team = users.map((u) => ({ name: u.name, email: u.email }));
+      const options = normOptions(await readData("creative-options").catch(() => null));
       return res.status(200).json({
         success: true,
         tasks: viewTasks(store?.tasks || [], isAdmin),
+        options,
         creativeStrategists,
         videoEditors,
         team,
@@ -279,6 +288,7 @@ export default async function handler(req, res) {
     const FIELDS = [
       "product", "scriptLink", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
       "angle", "advertorialLink", "market", "countryCode", "type",
+      "concept", "mechanism", "icp", "awareness", "scriptStructure", "formatType",
       "referenceAd", "inspirationLink", "aRoll", "aRollAvatarId", "aRollAvatarName",
       "aRollLink", "subtitles", "frameioLink", "finalOutputLink",
     ];
@@ -298,6 +308,12 @@ export default async function handler(req, res) {
         assigneeName: "",
         status: STATUSES.includes(input?.status) ? input.status : "Task Start",
         angle: "",
+        concept: "",
+        mechanism: "",
+        icp: "",
+        awareness: "",
+        scriptStructure: "",
+        formatType: "",
         advertorialLink: "",
         market: "",
         countryCode: "",
@@ -330,6 +346,19 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin), createdId: t.id });
     }
 
+    /* --- keuzelijst: waarde verwijderen (ICP per product, script structure, format type) --- */
+    if (action === "optionRemove") {
+      if (!canEdit) return res.status(403).json({ success: false, error: "No permission" });
+      const { list, value, product } = req.body || {};
+      if (!OPTION_LISTS[list]) return res.status(400).json({ success: false, error: "Unknown list" });
+      const opts = normOptions(await readData("creative-options"));
+      const v = String(value || "").toLowerCase();
+      if (list === "icp") { const k = productKey(product); opts.icp[k] = (opts.icp[k] || []).filter((x) => x.toLowerCase() !== v); }
+      else opts[list] = opts[list].filter((x) => x.toLowerCase() !== v);
+      await writeData("creative-options", opts);
+      return res.status(200).json({ success: true, options: opts });
+    }
+
     const task = store.tasks.find((t) => t.id === taskId);
     if (!task) return res.status(404).json({ success: false, error: "Task not found" });
 
@@ -354,8 +383,20 @@ export default async function handler(req, res) {
       }
       if (changed.length) addLog(task, session, `updated ${changed.join(", ")}`);
       await writeData("creative-tasks", store);
+      // Nieuwe ICP / script structure / format type → meteen in de keuzelijst
+      let options;
+      const newOpts = Object.keys(OPTION_LISTS).filter((f) => changed.includes(f) && String(task[f] || "").trim());
+      if (newOpts.length) {
+        try {
+          const opts = normOptions(await readData("creative-options"));
+          let dirty = false;
+          for (const f of newOpts) dirty = addOption(opts, f, task[f], task.product?.title) || dirty;
+          if (dirty) await writeData("creative-options", opts);
+          options = opts;
+        } catch (e) { console.warn("creative-options:", e.message); }
+      }
       await pushNotifications(notifs);
-      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin), ...(options ? { options } : {}) });
     }
 
     /* --- status --- */

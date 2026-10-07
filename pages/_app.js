@@ -44,7 +44,6 @@ const CATEGORIES = [
     perm: "launching",
     items: [
       { href: "/product-launching", label: "Product Pipeline", icon: "🚀" },
-      { href: "/funnel-metrics", label: "Funnel Metrics", icon: "📈" },
       { href: "/ab-test", label: "A/B Tests", icon: "🧪" },
     ],
   },
@@ -61,7 +60,6 @@ const CATEGORIES = [
     items: [
       { href: "/video-editor", label: "Video Editor", icon: "🎬" },
       { href: "/graphic-designer", label: "Graphic Designer", icon: "🎨" },
-      { href: "/creatives-data", label: "Creatives Data", icon: "📊" },
     ],
   },
   {

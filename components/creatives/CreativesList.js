@@ -152,7 +152,7 @@ export default function CreativesList({
       (!fProduct || t.product?.title === fProduct) &&
       (!fDeadline || (t.deadline && new Date(t.deadline) <= new Date(`${fDeadline}T23:59:59`))) &&
       (!ql ||
-        [t.angle, t.product?.title, t.assigneeName, t.strategistName, t.countryCode, namingFor?.(t)]
+        [t.concept, t.mechanism, t.icp, t.angle, t.product?.title, t.assigneeName, t.strategistName, t.countryCode, namingFor?.(t)]
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
@@ -323,7 +323,7 @@ export default function CreativesList({
                       title={namingFor?.(t) || ""}
                     >
                       <div className="cl-tk">
-                        <div className="a">{t.angle || t.product?.title || (kind === "video" ? "New video task" : "New design task")}</div>
+                        <div className="a">{t.concept || t.angle || t.product?.title || (kind === "video" ? "New video task" : "New design task")}</div>
                         <div className="b">{subline(t) || "—"}</div>
                       </div>
                       <div className="cl-who">

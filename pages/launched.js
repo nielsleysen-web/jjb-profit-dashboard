@@ -32,7 +32,12 @@ const FUNNEL_FIELDS = [
 
 const CREATIVE_FIELDS = [
   { key: "product", label: "Product", get: (t) => t.product?.title },
-  { key: "angle", label: "Angle" },
+  { key: "concept", label: "Concept", get: (t) => t.concept || t.angle },
+  { key: "mechanism", label: "Angle (Mechanism)" },
+  { key: "icp", label: "ICP" },
+  { key: "awareness", label: "Awareness Stage" },
+  { key: "scriptStructure", label: "Script Structure" },
+  { key: "formatType", label: "Format Type" },
   { key: "market", label: "Market", get: (t) => (t.market ? `${t.market}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
   { key: "type", label: "Type" },
   { key: "strategistName", label: "Creative Strategist" },
@@ -253,7 +258,7 @@ export default function Launched() {
                 key={t.id}
                 title={`${t.product?.title || "Creative"}${t.type ? ` · ${t.type}` : ""}`}
                 image={t.product?.image}
-                sub={t.angle}
+                sub={t.concept || t.angle}
                 by={t.assigneeName}
                 date={t.launchedDate}
                 onClick={() => setDetail({ kind: "creative", task: t })}
