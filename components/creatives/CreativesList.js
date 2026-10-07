@@ -301,7 +301,7 @@ export default function CreativesList({
                 )}
               </div>
               {isClosed && !isOver ? null : (
-              <div className={`cl-list ${isOver ? "over" : ""}`} style={isOver ? { borderColor: STAGE_COLOR[status] } : undefined}>
+              <div className={`cl-list ${isOver ? "over" : ""}`} style={{ "--acc": STAGE_COLOR[status] || "var(--card)", ...(isOver ? { borderColor: STAGE_COLOR[status] } : {}) }}>
                 {(g.length === 0 || isClosed) && <div className="cl-empty">{isOver ? `Drop here to move to ${status}` : "No tasks"}</div>}
                 {!isClosed && g.map((t) => {
                   const d = dueInfo(t.deadline);
@@ -407,9 +407,9 @@ export default function CreativesList({
 }
 
 const CSS = `
-.cl{--bg:#fafafa;--surface:#fff;--line:#efefef;--line2:#e6e6e6;--hover:#fcfcfc;--ink:#111;--ink2:#555;--ink3:#999;--ink4:#c4c4c4;--red:#c62828;--btn:#111;--btntx:#fff;--seg:#f0f0f0;--shadow:0 10px 30px rgba(0,0,0,.12);
+.cl{--bg:#fafafa;--surface:#fff;--line:#efefef;--line2:#e6e6e6;--card:#d6d6da;--hover:#fcfcfc;--ink:#111;--ink2:#555;--ink3:#999;--ink4:#c4c4c4;--red:#c62828;--btn:#111;--btntx:#fff;--seg:#f0f0f0;--shadow:0 10px 30px rgba(0,0,0,.12);
   background:var(--bg);color:var(--ink);min-height:100vh;font-family:Inter,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;font-size:13px;color-scheme:light}
-.cl.cl-dark{--bg:#0f1012;--surface:#17181b;--line:#232428;--line2:#2d2e33;--hover:#1c1d21;--ink:#ececee;--ink2:#a6a7ad;--ink3:#74757b;--ink4:#4c4d52;--red:#f07171;--btn:#ececee;--btntx:#111;--seg:#202125;--shadow:0 10px 30px rgba(0,0,0,.5);color-scheme:dark}
+.cl.cl-dark{--bg:#0f1012;--surface:#17181b;--line:#232428;--line2:#2d2e33;--card:#3b3c42;--hover:#1c1d21;--ink:#ececee;--ink2:#a6a7ad;--ink3:#74757b;--ink4:#4c4d52;--red:#f07171;--btn:#ececee;--btntx:#111;--seg:#202125;--shadow:0 10px 30px rgba(0,0,0,.5);color-scheme:dark}
 .cl button{font-family:inherit}
 .cl-app{max-width:1440px;margin:0 auto;padding:28px 32px 60px}
 .cl-hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-right:58px}
@@ -452,7 +452,9 @@ body:has(.cl-dark){background:#0f1012}
 .cl-gadd{margin-left:auto;border:0;background:transparent;color:var(--ink3);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:6px}
 .cl-gadd:hover{color:var(--ink);background:var(--seg)}
 .cl-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
-.cl-list{background:var(--surface);border:1px solid var(--line);border-radius:14px;transition:border-color .15s}
+.cl-list{background:var(--surface);border:1px solid var(--card);border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:border-color .15s;position:relative}
+/* accentlijn bovenaan elk blok in de kleur van de status */
+.cl-list::before{content:"";position:absolute;inset:-1px;border-top:3px solid var(--acc);border-radius:14px;pointer-events:none;z-index:1}
 .cl-list.over{border-style:dashed}
 .cl-empty{padding:12px 18px;color:var(--ink4);font-size:12.5px}
 .cl-row{display:grid;grid-template-columns:minmax(0,1fr) 160px 150px 90px 32px;align-items:center;gap:20px;padding:12px 14px 12px 18px;border-top:1px solid var(--line);cursor:pointer;transition:background .12s;position:relative}
