@@ -5,7 +5,7 @@
 // Stripe — daar wordt niets verzonden.
 //
 // Stripe → Developers → Webhooks → endpoint: https://<dashboard>/api/stripe/webhook
-// Events: invoice.paid  (verplicht) · customer.subscription.deleted (optioneel: opzegging → Klaviyo)
+// Events: invoice.paid  (verplicht) · invoice.payment_failed (kortingsladder bij saldotekort + Klaviyo) · customer.subscription.deleted (opzegging → Klaviyo)
 // Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 // Shopify-scope: write_orders (naast de bestaande read-scopes)
 
@@ -20,6 +20,7 @@ import { registerMember, markRenewed, markCancelled, productMemberEvent } from "
 import { addUpsellToOrder } from "../../../lib/upsell";
 import { holdStartedMembership, releaseStartedMembership } from "../../../lib/upsell-gate";
 import { hasCheckoutBonus, clearCheckoutBonus, bonusLineItem } from "../../../lib/checkout-bonus";
+import { startDunning, paidAmount } from "../../../lib/stripe-dunning";
 
 export const config = { api: { bodyParser: false } }; // ruwe body nodig voor de handtekening
 
@@ -248,29 +249,32 @@ export default async function handler(req, res) {
         const product = getProduct(sub?.metadata?.product_key);
         if (!product.portal) {
           await productMemberEvent(product, "renewed", { paidAt: inv.created * 1000, email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
-            amountPaid: (inv.amount_paid || 0) / 100, nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
+            amountPaid: paidAmount(inv), nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
           return res.status(200).json({ received: true, renewal: true, product: product.key });
         }
         await syncRenewal({ email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
-          amountPaid: (inv.amount_paid || 0) / 100, nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
-        await markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: sub?.current_period_end ? sub.current_period_end * 1000 : null, amountPaid: (inv.amount_paid || 0) / 100 });
+          amountPaid: paidAmount(inv), nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
+        await markRenewed(inv.customer_email, { paidAt: inv.created * 1000, nextChargeAt: sub?.current_period_end ? sub.current_period_end * 1000 : null, amountPaid: paidAmount(inv) });
         return res.status(200).json({ received: true, renewal: true });
       }
     }
     if (event.type === "invoice.payment_failed") {
       // Mislukte rebill: het portaal deactiveert het lid (status live uit Stripe) → Klaviyo-event voor de herinneringsmail
       const inv = event.data.object;
+      // Saldotekort → kortingsladder (10/20/30%, lib/stripe-dunning.js); andere declines blijven bij Stripe's Smart Retries
+      let dunning = null;
+      if (inv.billing_reason === "subscription_cycle") dunning = await startDunning(inv).catch((e) => ({ started: false, reason: e.message }));
       if (inv.customer_email && inv.billing_reason === "subscription_cycle") {
         const fsubId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
         const fsub = fsubId ? await stripe.subscriptions.retrieve(fsubId).catch(() => null) : null;
         const fproduct = getProduct(fsub?.metadata?.product_key);
         if (!fproduct.portal) {
           await productMemberEvent(fproduct, "failed", { email: inv.customer_email, provider: "stripe", subscriptionId: fsubId, invoiceId: inv.id, amountPaid: (inv.amount_due || 0) / 100 });
-          return res.status(200).json({ received: true, paymentFailed: true, product: fproduct.key });
+          return res.status(200).json({ received: true, paymentFailed: true, product: fproduct.key, dunning });
         }
         await trackEvent("Membership Payment Failed", inv.customer_email, { provider: "stripe", subscription_id: typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id || "", amount: ((inv.amount_due || 0) / 100).toFixed(2).replace(".", ","), portal_url: `${PORTAL_URL}/riattiva` }, { uniqueId: `payfail-${inv.id}` }).catch(() => {});
       }
-      return res.status(200).json({ received: true, paymentFailed: true });
+      return res.status(200).json({ received: true, paymentFailed: true, dunning });
     }
     if (event.type === "customer.subscription.deleted") {
       const sub = event.data.object;

@@ -16,6 +16,7 @@
 import crypto from "crypto";
 import axios from "axios";
 import Stripe from "stripe";
+import { paidAmount } from "../../lib/stripe-dunning";
 import { MEMBERSHIP } from "../../lib/checkout";
 import { shopifyGraphql } from "../../lib/shopify-admin";
 import { pp, paypalConfigured } from "../../lib/paypal";
@@ -154,7 +155,8 @@ async function stripeData() {
     const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
     const pi = typeof inv.payment_intent === "object" ? inv.payment_intent : null;
     const err = pi?.last_payment_error;
-    if (inv.status === "paid" && inv.amount_paid) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: inv.amount_paid / 100, provider: "stripe", recovered: (inv.attempt_count || 1) > 1 });
+    // Kortingsladder (lib/stripe-dunning.js): factuur "paid out of band" → echt betaald bedrag in metadata, telt als recovered
+    if (inv.status === "paid" && inv.amount_paid) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: paidAmount(inv), provider: "stripe", recovered: (inv.attempt_count || 1) > 1 || !!inv.metadata?.jj_dunning_amount, discountPct: inv.metadata?.jj_dunning_amount ? Number(String(inv.metadata.jj_dunning_result || "").replace("paid-", "")) || null : null });
     else if (!inv.attempted && (inv.status === "draft" || inv.status === "open") && inv.amount_due) pending.push({ subId, at: iso(inv.created * 1000), amount: inv.amount_due / 100, provider: "stripe" });
     else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
   }
