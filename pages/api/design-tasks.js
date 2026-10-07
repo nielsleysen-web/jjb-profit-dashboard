@@ -6,6 +6,8 @@
 
 import axios from "axios";
 import crypto from "crypto";
+import { OPTION_LISTS, normOptions, addOption, removeOption } from "../../lib/creative-options";
+import { focusFor, weekStart } from "../../lib/creative-calendar";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
@@ -138,6 +140,21 @@ async function pushNotifications(items) {
   }
 }
 
+// Keuzelijsten (lib/creative-options): ICP per product (gedeeld met video), format type voor designs
+const TASK_LISTS = { icp: "icp", formatType: "formatTypeDesign" };
+
+// Angle/ICP-kalender: product gekozen en angle + ICP nog leeg → focus van deze week overnemen
+async function prefillFromCalendar(task, session) {
+  if (!task.product?.title || task.mechanism || task.icp) return false;
+  const cal = await readData("creative-calendar").catch(() => null);
+  const f = focusFor(cal, task.product.title)[0];
+  if (!f) return false;
+  task.mechanism = f.mechanism;
+  task.icp = f.icp;
+  addLog(task, session, `took angle "${f.mechanism}" and ICP "${f.icp}" from the calendar (week of ${weekStart()})`);
+  return true;
+}
+
 function addLog(task, session, text) {
   task.activity = task.activity || [];
   task.activity.push({ id: uid(), type: "log", author: session.name, email: session.email, text, at: new Date().toISOString() });
@@ -245,9 +262,11 @@ export default async function handler(req, res) {
         .filter((u) => (u.roles || []).includes("Graphic Designer"))
         .map((u) => ({ name: u.name, email: u.email }));
       const team = users.map((u) => ({ name: u.name, email: u.email }));
+      const options = normOptions(await readData("creative-options").catch(() => null));
       return res.status(200).json({
         success: true,
         tasks: viewTasks(store?.tasks || [], isAdmin).map(withFunnel),
+        options,
         creativeStrategists,
         graphicDesigners,
         team,
@@ -292,6 +311,7 @@ export default async function handler(req, res) {
     const FIELDS = [
       "product", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
       "angle", "advertorialLink", "market", "countryCode", "gender", "ageRange",
+      "concept", "mechanism", "icp", "awareness", "formatType",
       "batchType", "visualBriefing", "iterationType", "referenceAd", "creativeCopy",
       "topCompetitorCreative1", "topCompetitorCreative2", "topCompetitorCreative3", "topCompetitorCreative4", "topCompetitorCreative5",
       "frameioLink", "finalOutputLink",
@@ -311,6 +331,11 @@ export default async function handler(req, res) {
         assigneeName: "",
         status: STATUSES.includes(input?.status) ? input.status : "Task Start",
         angle: "",
+        concept: "",
+        mechanism: "",
+        icp: "",
+        awareness: "",
+        formatType: "",
         advertorialLink: "",
         market: "",
         countryCode: "",
@@ -329,6 +354,7 @@ export default async function handler(req, res) {
       };
       for (const f of FIELDS) if (input && f in input) t[f] = input[f] ?? "";
       addLog(t, session, "created this task");
+      await prefillFromCalendar(t, session).catch((e) => console.warn("calendar prefill:", e.message));
       const notifs = [];
       if (t.assigneeEmail && t.assigneeEmail !== session.email) {
         notifs.push({ email: t.assigneeEmail, text: `You've been assigned to a new design task${t.product?.title ? ` for "${t.product.title}"` : ""}` });
@@ -340,6 +366,17 @@ export default async function handler(req, res) {
       await writeData("design-tasks", store);
       await pushNotifications(notifs);
       return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin), createdId: t.id });
+    }
+
+    /* --- keuzelijst: waarde verwijderen (ICP per product, format type) --- */
+    if (action === "optionRemove") {
+      if (!canEdit) return res.status(403).json({ success: false, error: "No permission" });
+      const { list, value, product } = req.body || {};
+      if (!OPTION_LISTS[list]) return res.status(400).json({ success: false, error: "Unknown list" });
+      const opts = normOptions(await readData("creative-options"));
+      removeOption(opts, list, value, product);
+      await writeData("creative-options", opts);
+      return res.status(200).json({ success: true, options: opts });
     }
 
     const task = store.tasks.find((t) => t.id === taskId);
@@ -365,9 +402,22 @@ export default async function handler(req, res) {
         notifs.push({ email: task.assigneeEmail, text: `You've been assigned to the design task for "${task.product?.title || "a product"}"` });
       }
       if (changed.length) addLog(task, session, `updated ${changed.join(", ")}`);
+      if (changed.includes("product")) await prefillFromCalendar(task, session).catch((e) => console.warn("calendar prefill:", e.message));
       await writeData("design-tasks", store);
+      // Nieuwe ICP / format type → meteen in de keuzelijst
+      let options;
+      const newOpts = Object.keys(TASK_LISTS).filter((f) => changed.includes(f) && String(task[f] || "").trim());
+      if (newOpts.length) {
+        try {
+          const opts = normOptions(await readData("creative-options"));
+          let dirty = false;
+          for (const f of newOpts) dirty = addOption(opts, TASK_LISTS[f], task[f], task.product?.title) || dirty;
+          if (dirty) await writeData("creative-options", opts);
+          options = opts;
+        } catch (e) { console.warn("creative-options:", e.message); }
+      }
       await pushNotifications(notifs);
-      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin) });
+      return res.status(200).json({ success: true, tasks: viewTasks(store.tasks, isAdmin), ...(options ? { options } : {}) });
     }
 
     /* --- status --- */

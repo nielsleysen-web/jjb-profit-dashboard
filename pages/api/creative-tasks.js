@@ -8,6 +8,8 @@ import axios from "axios";
 import crypto from "crypto";
 import { ensureCreativeFolder, driveConfigured, todayHK } from "../../lib/gdrive";
 import { videoNaming } from "../../lib/creative-naming";
+import { OPTION_LISTS, normOptions, addOption, removeOption } from "../../lib/creative-options";
+import { focusFor, weekStart } from "../../lib/creative-calendar";
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "nielsleysen@gmail.com").toLowerCase();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
@@ -144,20 +146,18 @@ async function pushNotifications(items) {
 // PRODUCT | CONCEPT | ANGLE | ICP | AWARENESS | SCRIPT STRUCTURE | FORMAT TYPE | STRATEGIST | EDITOR | DEADLINE (lib/creative-naming.js)
 const namingConvention = videoNaming;
 
-/* ---------------- keuzelijsten (ICP per product, script structure, format type) ---------------- */
-// Wat iemand intypt komt automatisch in de lijst; verwijderen kan via action "optionRemove".
-const OPTION_LISTS = { icp: "icp", scriptStructure: "scriptStructure", formatType: "formatType" };
-const productKey = (title) => String(title || "").trim().toLowerCase() || "_none";
-function normOptions(o) {
-  return { icp: o?.icp && typeof o.icp === "object" ? o.icp : {}, scriptStructure: Array.isArray(o?.scriptStructure) ? o.scriptStructure : [], formatType: Array.isArray(o?.formatType) ? o.formatType : [] };
-}
-function addOption(opts, list, value, product) {
-  const v = String(value || "").trim();
-  if (!v) return false;
-  const arr = list === "icp" ? (opts.icp[productKey(product)] = opts.icp[productKey(product)] || []) : opts[list];
-  if (arr.some((x) => x.toLowerCase() === v.toLowerCase())) return false;
-  arr.push(v);
-  arr.sort((a, b) => a.localeCompare(b));
+/* ---------------- keuzelijsten: lib/creative-options.js (gedeeld met design-tasks) ---------------- */
+const TASK_LISTS = ["icp", "scriptStructure", "formatType"];
+
+// Angle/ICP-kalender: product gekozen en angle + ICP nog leeg → focus van deze week overnemen
+async function prefillFromCalendar(task, session) {
+  if (!task.product?.title || task.mechanism || task.icp) return false;
+  const cal = await readData("creative-calendar").catch(() => null);
+  const f = focusFor(cal, task.product.title)[0];
+  if (!f) return false;
+  task.mechanism = f.mechanism;
+  task.icp = f.icp;
+  addLog(task, session, `took angle "${f.mechanism}" and ICP "${f.icp}" from the calendar (week of ${weekStart()})`);
   return true;
 }
 
@@ -333,6 +333,7 @@ export default async function handler(req, res) {
       };
       for (const f of FIELDS) if (input && f in input) t[f] = input[f] ?? "";
       addLog(t, session, "created this task");
+      await prefillFromCalendar(t, session).catch((e) => console.warn("calendar prefill:", e.message));
       const notifs = [];
       if (t.assigneeEmail && t.assigneeEmail !== session.email) {
         notifs.push({ email: t.assigneeEmail, text: `You've been assigned to a new video task${t.product?.title ? ` for "${t.product.title}"` : ""}` });
@@ -352,9 +353,7 @@ export default async function handler(req, res) {
       const { list, value, product } = req.body || {};
       if (!OPTION_LISTS[list]) return res.status(400).json({ success: false, error: "Unknown list" });
       const opts = normOptions(await readData("creative-options"));
-      const v = String(value || "").toLowerCase();
-      if (list === "icp") { const k = productKey(product); opts.icp[k] = (opts.icp[k] || []).filter((x) => x.toLowerCase() !== v); }
-      else opts[list] = opts[list].filter((x) => x.toLowerCase() !== v);
+      removeOption(opts, list, value, product);
       await writeData("creative-options", opts);
       return res.status(200).json({ success: true, options: opts });
     }
@@ -385,7 +384,8 @@ export default async function handler(req, res) {
       await writeData("creative-tasks", store);
       // Nieuwe ICP / script structure / format type → meteen in de keuzelijst
       let options;
-      const newOpts = Object.keys(OPTION_LISTS).filter((f) => changed.includes(f) && String(task[f] || "").trim());
+      if (changed.includes("product")) await prefillFromCalendar(task, session).catch((e) => console.warn("calendar prefill:", e.message));
+      const newOpts = TASK_LISTS.filter((f) => changed.includes(f) && String(task[f] || "").trim());
       if (newOpts.length) {
         try {
           const opts = normOptions(await readData("creative-options"));

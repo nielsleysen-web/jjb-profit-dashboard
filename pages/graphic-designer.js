@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import CreativesList from "../components/creatives/CreativesList";
+import { designNaming, AWARENESS_STAGES } from "../lib/creative-naming";
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(false);
@@ -133,12 +134,8 @@ const deadlineColor = (iso, status) => {
   return "#334155";
 };
 
-// Naming: PRODUCT | CREATIVE STRATEGIST | ASSIGNEE | ANGLE | NET NEW/ITERATION | DEADLINE
-const namingConvention = (t) =>
-  [t.product?.title, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.batchType, fmtDeadlineDate(t.deadline)]
-    .filter(Boolean)
-    .map((s) => String(s).toUpperCase())
-    .join(" | ");
+// Naming: PRODUCT | CONCEPT | ANGLE | ICP | AWARENESS STAGE | FORMAT TYPE | STRATEGIST | DESIGNER | DEADLINE
+const namingConvention = designNaming;
 
 const NAMING_FROM_STATUS = "Ready To Work";
 const taskTitle = (t) => {
@@ -158,8 +155,18 @@ export default function GraphicDesigner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
+  const [options, setOptions] = useState({ icp: {}, formatTypeDesign: [] });
+  const [calendar, setCalendar] = useState({ entries: [], week: "" });
   const [creating, setCreating] = useState(false);
   const isMobile = useIsMobile();
+
+  // ?task=<id> in de URL (bv. vanuit de Creative Heatmap) → die taak meteen openen
+  useEffect(() => {
+    try {
+      const id = new URLSearchParams(window.location.search).get("task");
+      if (id) setOpenTaskId(id);
+    } catch {}
+  }, []);
 
   const load = () =>
     fetch("/api/design-tasks")
@@ -171,6 +178,7 @@ export default function GraphicDesigner() {
         setEditors(res.graphicDesigners);
         setTeam(res.team);
         setMe(res.me);
+        if (res.options) setOptions(res.options);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -178,6 +186,8 @@ export default function GraphicDesigner() {
   useEffect(() => {
     load();
     const iv = setInterval(load, 45000);
+    // Angle/ICP-kalender: focus van deze week per product
+    fetch("/api/creative-calendar").then((r) => r.json()).then((res) => res?.success && setCalendar({ entries: res.entries || [], week: res.week || "" })).catch(() => {});
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -192,7 +202,8 @@ export default function GraphicDesigner() {
       alert(res.error || "Something went wrong");
       return null;
     }
-    setTasks(res.tasks);
+    if (res.tasks) setTasks(res.tasks);
+    if (res.options) setOptions(res.options);
     return res;
   };
 
@@ -266,6 +277,8 @@ export default function GraphicDesigner() {
           team={team}
           avatars={avatars}
           voices={voices}
+          options={options}
+          calendar={calendar}
           post={post}
           onClose={() => setOpenTaskId(null)}
           isMobile={isMobile}
@@ -454,16 +467,144 @@ function CreativeCopySection({ taskId, canEdit }) {
   );
 }
 
-function Section({ title, children }) {
+// Angle/ICP-kalender: wat deze week de focus is voor dit product, met één klik over te nemen op de taak
+function CalendarFocus({ t, calendar, canEdit, post }) {
+  const title = (t.product?.title || "").trim().toLowerCase();
+  if (!title || !calendar?.week) return null;
+  const focus = (calendar.entries || []).filter((e) => e.week === calendar.week && String(e.product || "").trim().toLowerCase() === title);
+  if (!focus.length) return null;
+  const same = (e) => (t.mechanism || "") === e.mechanism && (t.icp || "") === e.icp;
   return (
-    <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "14px", padding: "14px 18px", marginBottom: "14px" }}>
-      <div style={{ fontSize: "11.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: "6px" }}>
-        {title}
-      </div>
-      {children}
+    <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", fontSize: "12px", color: "#64748b" }}>
+      <span>Focus this week:</span>
+      {focus.map((e) => (
+        <span key={e.id} style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: same(e) ? "#ecfdf5" : "#f8fafc", border: `1px solid ${same(e) ? "#a7f3d0" : "#e2e8f0"}`, borderRadius: "999px", padding: "3px 10px", color: "#0f172a", fontWeight: 600 }}>
+          {e.mechanism} <span style={{ color: "#94a3b8", fontWeight: 400 }}>×</span> {e.icp}
+          {canEdit && !same(e) && (
+            <button type="button" onClick={() => post({ action: "update", taskId: t.id, task: { mechanism: e.mechanism, icp: e.icp } })}
+              style={{ border: 0, background: "#0f172a", color: "#fff", borderRadius: "999px", padding: "2px 8px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+              Use
+            </button>
+          )}
+          {same(e) && <span style={{ color: "#166534", fontSize: "11px" }}>✓ on this task</span>}
+        </span>
+      ))}
     </div>
   );
 }
+
+// Inklapbare sectie: klik op de titel of het pijltje. De keuze wordt per sectie onthouden (deze browser).
+function Section({ title, children }) {
+  const key = `jj-gd-sec:${title}`;
+  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    try { if (localStorage.getItem(key) === "0") setOpen(false); } catch {}
+  }, [key]);
+  const toggle = () => {
+    setOpen((o) => {
+      try { localStorage.setItem(key, o ? "0" : "1"); } catch {}
+      return !o;
+    });
+  };
+  return (
+    <div style={{ background: "#ffffff", border: "1px solid #eceef2", borderRadius: "14px", padding: open ? "12px 18px 14px" : "12px 18px", marginBottom: "14px" }}>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: 0, padding: 0, cursor: "pointer", marginBottom: open ? "6px" : 0 }}
+      >
+        <span style={{ fontSize: "11.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.7px" }}>{title}</span>
+        <span style={{ width: "22px", height: "22px", borderRadius: "6px", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform .15s" }}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </span>
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
+// Dropdown waarin je ook kunt typen: nieuwe waarden komen automatisch in de lijst (server), met × verwijder je een waarde uit de lijst.
+function ComboField({ value, options, onSave, onRemove, disabled, placeholder, emptyHint }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(value || "");
+  const inputRef = useRef(null);
+  useEffect(() => { if (!open) setText(value || ""); }, [value, open]);
+  if (disabled) return value ? <span style={{ fontSize: "13px" }}>{value}</span> : <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>;
+  const q = text.trim().toLowerCase();
+  const list = options || [];
+  const shown = q && q !== String(value || "").toLowerCase() ? list.filter((o) => o.toLowerCase().includes(q)) : list;
+  const exact = list.some((o) => o.toLowerCase() === q);
+  const choose = (v) => {
+    setOpen(false);
+    setText(v);
+    if (v !== (value || "")) onSave(v);
+    inputRef.current?.blur();
+  };
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
+        <input
+          ref={inputRef}
+          style={{ ...ui.input, padding: "7px 30px 7px 10px" }}
+          value={text}
+          placeholder={placeholder || "Select or type…"}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setText(e.target.value); setOpen(true); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); choose(text.trim()); }
+            if (e.key === "Escape") { setText(value || ""); setOpen(false); e.target.blur(); }
+          }}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          onMouseDown={(e) => { e.preventDefault(); setOpen((o) => !o); inputRef.current?.focus(); }}
+          style={{ position: "absolute", right: "6px", border: 0, background: "none", color: "#94a3b8", cursor: "pointer", fontSize: "10px", padding: "4px" }}
+        >
+          {open ? "▲" : "▼"}
+        </button>
+      </div>
+      {open && (
+        <>
+          <div onMouseDown={() => { if (text.trim() !== (value || "")) choose(text.trim()); else setOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+          <div style={{ position: "absolute", top: "40px", left: 0, right: 0, background: "#ffffff", border: "1px solid #eceef2", borderRadius: "12px", boxShadow: "0 12px 32px rgba(15,23,42,0.16)", padding: "6px", zIndex: 50, maxHeight: "260px", overflowY: "auto" }}>
+            {q && !exact && (
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); choose(text.trim()); }}
+                style={{ display: "flex", width: "100%", alignItems: "center", gap: "8px", padding: "8px 10px", border: 0, background: "#f0f7ff", color: "#1d4ed8", borderRadius: "8px", cursor: "pointer", fontSize: "12.5px", fontWeight: 600, textAlign: "left" }}>
+                + Add “{text.trim()}”
+              </button>
+            )}
+            {shown.map((o) => (
+              <div key={o} style={{ display: "flex", alignItems: "center", borderRadius: "8px", background: o === value ? "#f1f5f9" : "transparent" }}>
+                <button type="button" onMouseDown={(e) => { e.preventDefault(); choose(o); }}
+                  style={{ flex: 1, padding: "8px 10px", border: 0, background: "none", textAlign: "left", cursor: "pointer", fontSize: "12.5px", fontWeight: o === value ? 700 : 500, color: "#0f172a" }}>
+                  {o}
+                </button>
+                {onRemove && (
+                  <button type="button" title="Remove from list"
+                    onMouseDown={(e) => { e.preventDefault(); if (confirm(`Remove “${o}” from this list?`)) onRemove(o); }}
+                    style={{ border: 0, background: "none", color: "#94a3b8", cursor: "pointer", fontSize: "14px", padding: "4px 10px", lineHeight: 1 }}>
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {!shown.length && !q && <div style={{ padding: "8px 10px", fontSize: "12px", color: "#94a3b8" }}>{emptyHint || "No options yet — type to add one."}</div>}
+            {value && (
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); choose(""); }}
+                style={{ display: "block", width: "100%", marginTop: "4px", padding: "7px 10px", border: 0, borderTop: "1px solid #f1f5f9", background: "none", textAlign: "left", cursor: "pointer", fontSize: "12px", color: "#94a3b8" }}>
+                Clear selection
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+
 
 function Field({ label, children, last }) {
   return (
@@ -1405,7 +1546,7 @@ function DeadlinePicker({ value, onChange }) {
   );
 }
 
-function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, onClose, isMobile, allTasks, openTaskById }) {
+function TaskModal({ t, me, strategists, editors, team, avatars, voices, options, calendar, post, onClose, isMobile, allTasks, openTaskById }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
@@ -1672,15 +1813,63 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
               ) : (
                 <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
               )}
+              <CalendarFocus t={t} calendar={calendar} canEdit={canEdit} post={post} />
+            </Section>
+
+            {/* General Info */}
+            <Section title="🌍 General Info">
+              <Field label="Advertorial Link">
+                <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
+              </Field>
+              <Field label="Market">
+                {canEdit ? (
+                  <select
+                    value={t.market || ""}
+                    onChange={(e) => post({ action: "update", taskId: t.id, task: { market: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || t.countryCode } })}
+                    style={selectStyle}
+                  >
+                    <option value="">—</option>
+                    {MARKETS.map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                ) : (
+                  <span style={{ fontSize: "13px" }}>{t.market || "—"}</span>
+                )}
+              </Field>
+              <Field label="Country Code" last>
+                <SelectField value={t.countryCode} options={CODES} onSave={(v) => save("countryCode", v)} disabled={!canEdit} />
+              </Field>
             </Section>
 
             {/* Creative */}
             <Section title="🎨 Creative">
-              <Field label="Angle">
-                <TextField value={t.angle} disabled={!canEdit} onSave={(v) => save("angle", v)} />
+              <Field label="Concept (Pain Point)">
+                <TextField value={t.concept || t.angle} disabled={!canEdit} onSave={(v) => post({ action: "update", taskId: t.id, task: { concept: v, ...(t.angle ? { angle: "" } : {}) } })} placeholder="The pain point this creative is about" />
               </Field>
-              <Field label="Advertorial Link">
-                <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
+              <Field label="Angle (Mechanism)">
+                <TextField value={t.mechanism} disabled={!canEdit} onSave={(v) => save("mechanism", v)} placeholder="The mechanism / why it works" />
+              </Field>
+              <Field label="ICP (Ideal Customer Persona)">
+                <ComboField
+                  value={t.icp}
+                  options={options?.icp?.[(t.product?.title || "").trim().toLowerCase() || "_none"] || []}
+                  disabled={!canEdit}
+                  onSave={(v) => save("icp", v)}
+                  onRemove={(v) => post({ action: "optionRemove", list: "icp", value: v, product: t.product?.title || "" })}
+                  placeholder={t.product ? "Select or type a persona…" : "Choose a product first, or type…"}
+                  emptyHint={t.product ? `No personas for ${t.product.title} yet — type to add one.` : "Personas are saved per product."}
+                />
+              </Field>
+              <Field label="Awareness Stage">
+                <SelectField value={t.awareness} options={AWARENESS_STAGES} onSave={(v) => save("awareness", v)} disabled={!canEdit} />
+              </Field>
+              <Field label="Format Type">
+                <ComboField
+                  value={t.formatType}
+                  options={options?.formatTypeDesign || []}
+                  disabled={!canEdit}
+                  onSave={(v) => save("formatType", v)}
+                  onRemove={(v) => post({ action: "optionRemove", list: "formatTypeDesign", value: v })}
+                />
               </Field>
               <Field label="Batch Type">
                 <SelectField value={t.batchType} options={BATCH_TYPES} onSave={(v) => save("batchType", v)} disabled={!canEdit} />
@@ -1731,27 +1920,6 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, post, o
                 </div>
               ) : null}
               <FunnelInfoBlock taskId={t.id} productTitle={t.product?.title} />
-            </Section>
-
-            {/* Market */}
-            <Section title="🌍 Market">
-              <Field label="Market">
-                {canEdit ? (
-                  <select
-                    value={t.market || ""}
-                    onChange={(e) => post({ action: "update", taskId: t.id, task: { market: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || t.countryCode } })}
-                    style={selectStyle}
-                  >
-                    <option value="">—</option>
-                    {MARKETS.map((m) => <option key={m}>{m}</option>)}
-                  </select>
-                ) : (
-                  <span style={{ fontSize: "13px" }}>{t.market || "—"}</span>
-                )}
-              </Field>
-              <Field label="Country Code" last>
-                <SelectField value={t.countryCode} options={CODES} onSave={(v) => save("countryCode", v)} disabled={!canEdit} />
-              </Field>
             </Section>
 
             {/* Audience */}

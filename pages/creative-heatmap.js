@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { weekStart, addDays, isoWeek } from "../lib/creative-calendar";
 
 const DIMS = {
   concept: "Concept",
@@ -54,10 +55,15 @@ export default function CreativeHeatmap() {
   const [rowDim, setRowDim] = useState("concept");
   const [colDim, setColDim] = useState("icp");
   const [adsF, setAdsF] = useState("all");
+  const [kindF, setKindF] = useState("all");
+  const [calendar, setCalendar] = useState({ entries: [], backlog: [], week: "", options: { icp: {} }, canEdit: false });
+  const [score90, setScore90] = useState(null); // rows van de laatste 90 dagen → scorebord
+  const [calEdit, setCalEdit] = useState(null); // { id?, product, week, mechanism, icp, note }
+  const [calBusy, setCalBusy] = useState(false);
   const [sel, setSel] = useState(null);
   const [tip, setTip] = useState(null);
   const [tab, setTab] = useState("heatmap");
-  useEffect(() => { try { const t = localStorage.getItem("jj-heatmap-tab"); if (t === "ladder") setTab(t); } catch {} }, []);
+  useEffect(() => { try { const t = localStorage.getItem("jj-heatmap-tab"); if (t === "ladder" || t === "calendar") setTab(t); } catch {} }, []);
   useEffect(() => { try { localStorage.setItem("jj-heatmap-tab", tab); } catch {} }, [tab]);
   const [openAngles, setOpenAngles] = useState({});
 
@@ -82,10 +88,26 @@ export default function CreativeHeatmap() {
       .finally(() => !dead && setLoading(false));
     return () => { dead = true; };
   }, [win]);
-  useEffect(() => { setSel(null); }, [product, rowDim, colDim, win, adsF]);
+  useEffect(() => { setSel(null); }, [product, rowDim, colDim, win, adsF, kindF]);
 
-  // Alleen video-taken (daar leven de velden) met een gekoppelde ad
-  const videoRows = useMemo(() => (data?.rows || []).filter((r) => r.kind === "video"), [data]);
+  // Angle/ICP-kalender
+  const loadCalendar = () => fetch("/api/creative-calendar").then((r) => r.json()).then((res) => res?.success && setCalendar({ entries: res.entries || [], backlog: res.backlog || [], week: res.week || weekStart(), options: res.options || { icp: {} }, canEdit: !!res.canEdit })).catch(() => {});
+  useEffect(() => {
+    loadCalendar();
+    fetch("/api/creatives-data?days=90").then((r) => r.json()).then((res) => res?.success && setScore90(res.rows || [])).catch(() => {});
+  }, []);
+  const calPost = async (payload) => {
+    setCalBusy(true);
+    try {
+      const res = await fetch("/api/creative-calendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).then((r) => r.json());
+      if (!res.success) { alert(res.error || "Something went wrong"); return false; }
+      setCalendar((c) => ({ ...c, entries: res.entries || [], backlog: res.backlog || c.backlog }));
+      return true;
+    } finally { setCalBusy(false); }
+  };
+
+  // Gekoppelde ads van video- en design-taken (beide hebben de velden), met filter
+  const videoRows = useMemo(() => (data?.rows || []).filter((r) => kindF === "all" ? true : r.kind === kindF), [data, kindF]);
   const products = useMemo(() => {
     const m = {};
     for (const r of videoRows) { const k = r.product || "—"; m[k] = (m[k] || 0) + r.spend; }
@@ -136,6 +158,42 @@ export default function CreativeHeatmap() {
 
   const missing = concepts.filter((c) => c.missing.length).sort((a, b) => b.spend - a.spend);
   const board = concepts.filter((c) => !sel || (c[rowDim] === sel[0] && c[colDim] === sel[1])).sort((a, b) => b.spend - a.spend).slice(0, 10);
+
+  // ---- Status per product × angle × ICP over álle producten (voor de kalender) ----
+  const statusMap = useMemo(() => {
+    const m = {};
+    for (const r of videoRows.filter((r) => (adsF === "all" ? true : adsF === "live" ? r.live : !r.live))) {
+      const k = [r.product, val(r, "mechanism"), val(r, "icp")].map((x) => String(x || "").trim().toLowerCase()).join("|");
+      const o = m[k] || (m[k] = { s: 0, r: 0, n: new Set(), product: r.product, mechanism: val(r, "mechanism"), icp: val(r, "icp") });
+      o.s += r.spend; o.r += r.revenue; o.n.add(r.taskId);
+    }
+    const out = {};
+    for (const [k, o] of Object.entries(m)) out[k] = { product: o.product, mechanism: o.mechanism, icp: o.icp, spend: o.s, roas: o.s > 0 ? o.r / o.s : NaN, concepts: o.n.size, status: ladderStatus(o.s, o.s > 0 ? o.r / o.s : NaN) };
+    return out;
+  }, [videoRows, adsF]);
+  const scoreboard = useMemo(() => {
+    const m = {};
+    for (const r of score90 || []) {
+      const mech = val(r, "mechanism"), icp = val(r, "icp");
+      if (mech === NOT_SET || icp === NOT_SET) continue;
+      const k = [r.product, mech, icp].map((x) => String(x || "").trim().toLowerCase()).join("|");
+      const o = m[k] || (m[k] = { product: r.product, mechanism: mech, icp, s: 0, r: 0 });
+      o.s += r.spend; o.r += r.revenue;
+    }
+    const byProduct = {};
+    for (const o of Object.values(m)) {
+      const roas = o.s > 0 ? o.r / o.s : NaN, status = ladderStatus(o.s, roas);
+      const p = byProduct[o.product] || (byProduct[o.product] = { working: [], failed: [], testing: [] });
+      const item = { ...o, roas, status };
+      if (status === "proven" || status === "promising") p.working.push(item);
+      else if (status === "failed") p.failed.push(item);
+      else p.testing.push(item);
+    }
+    for (const p of Object.values(byProduct)) { p.working.sort((a, b) => b.roas - a.roas); p.failed.sort((a, b) => b.s - a.s); p.testing.sort((a, b) => b.s - a.s); }
+    return Object.entries(byProduct).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [score90]);
+
+  const calStatus = (e) => statusMap[[e.product, e.mechanism, e.icp].map((x) => String(x || "").trim().toLowerCase()).join("|")] || null;
 
   // ---- Testing ladder: angle × ICP → formats ----
   const ladder = useMemo(() => {
@@ -192,18 +250,40 @@ export default function CreativeHeatmap() {
       <div className="hm-tabs">
         <button className={tab === "heatmap" ? "on" : ""} onClick={() => setTab("heatmap")}>Heatmap</button>
         <button className={tab === "ladder" ? "on" : ""} onClick={() => setTab("ladder")}>Testing ladder</button>
+        <button className={tab === "calendar" ? "on" : ""} onClick={() => setTab("calendar")}>Calendar</button>
       </div>
 
       <div className="hm-bar">
         <div className="hm-seg">{WINDOWS.map(([k, l]) => <button key={k} className={win === k ? "on" : ""} onClick={() => setWin(k)}>{l}</button>)}</div>
+        {tab === "calendar" && <div className="hm-rule">One angle × ICP per product per week · status comes from the ads in the selected window</div>}
         {tab === "ladder" && <div className="hm-rule">Proven = ≥ <b>{eur(LADDER.minSpend)}</b> spend and ROAS ≥ <b>{x2(LADDER.minRoas)}</b></div>}
         {tab === "heatmap" && <label className="hm-pick">Rows <select value={rowDim} onChange={(e) => setRowDim(e.target.value)}>{Object.entries(DIMS).filter(([k]) => k !== colDim).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>}
         {tab === "heatmap" && <label className="hm-pick">Columns <select value={colDim} onChange={(e) => setColDim(e.target.value)}>{Object.entries(DIMS).filter(([k]) => k !== rowDim).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>}
         <div className="hm-sp" />
-        <label className="hm-pick">Ads <select value={adsF} onChange={(e) => setAdsF(e.target.value)}><option value="all">All</option><option value="live">Delivering</option><option value="off">Paused</option></select></label>
+        {tab !== "calendar" && <label className="hm-pick">Type <select value={kindF} onChange={(e) => setKindF(e.target.value)}><option value="all">Video + image</option><option value="video">Video</option><option value="image">Image</option></select></label>}
+        {tab !== "calendar" && <label className="hm-pick">Ads <select value={adsF} onChange={(e) => setAdsF(e.target.value)}><option value="all">All</option><option value="live">Delivering</option><option value="off">Paused</option></select></label>}
       </div>
 
       {error && <div className="hm-card hm-box" style={{ color: "var(--r2)" }}>Error: {error}</div>}
+
+      {tab === "calendar" && (
+        <CalendarView
+          calendar={calendar}
+          products={[...new Set([...products, ...calendar.entries.map((e) => e.product), ...calendar.backlog.map((e) => e.product)])]}
+          allProducts={[...new Set((data?.rows || []).map((r) => r.product).filter(Boolean))]}
+          knownAngles={[...new Set([...(data?.rows || []).map((r) => r.mechanism).filter(Boolean), ...calendar.entries.map((e) => e.mechanism), ...calendar.backlog.map((e) => e.mechanism)])]}
+          backlogPost={calPost}
+          calStatus={calStatus}
+          statusMap={statusMap}
+          scoreboard={scoreboard}
+          scoreLoaded={!!score90}
+          edit={calEdit}
+          setEdit={setCalEdit}
+          busy={calBusy}
+          onSave={async (e) => { const ok = await calPost(e.id ? { action: "update", id: e.id, entry: e } : { action: "add", entry: e }); if (ok) setCalEdit(null); }}
+          onDelete={async (id) => { if (confirm("Remove this focus from the calendar?")) await calPost({ action: "delete", id }); }}
+        />
+      )}
 
       {tab === "ladder" && (
         <>
@@ -397,6 +477,188 @@ export default function CreativeHeatmap() {
   );
 }
 
+const lc = (x) => String(x || "").trim().toLowerCase();
+const sameProduct = (a, b) => lc(a) === lc(b);
+const sameKey = (a, b) => sameProduct(a.product, b.product) && lc(a.mechanism) === lc(b.mechanism) && lc(a.icp) === lc(b.icp);
+
+// ---- Angle/ICP-kalender: rijen = producten, kolommen = weken ----
+function CalendarView({ calendar, products, allProducts, knownAngles, calStatus, statusMap, scoreboard, scoreLoaded, edit, setEdit, busy, onSave, onDelete, backlogPost }) {
+  const [idea, setIdea] = useState(null); // { product, mechanism, icp, note }
+  const thisWeek = calendar.week || weekStart();
+  const [offset, setOffset] = useState(0);
+  const [newProduct, setNewProduct] = useState("");
+  const weeks = Array.from({ length: 6 }, (_, i) => addDays(thisWeek, (i - 1 + offset) * 7));
+  const rows = products.length ? products : [];
+  const entriesAt = (p, w) => calendar.entries.filter((e) => e.week === w && String(e.product || "").trim().toLowerCase() === String(p).trim().toLowerCase());
+  const label = (w) => { const d = new Date(`${w}T12:00:00Z`); return `${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`; };
+  const canEdit = calendar.canEdit;
+  const icpsFor = (p) => calendar.options?.icp?.[String(p || "").trim().toLowerCase() || "_none"] || [];
+  const extraProducts = allProducts.filter((p) => !products.includes(p));
+
+  // Wat is al getest? (alle angle × ICP met spend, per product) → tracker onder de kalender
+  const planned = new Set(calendar.entries.map((e) => [e.product, e.mechanism, e.icp].map((x) => String(x || "").trim().toLowerCase()).join("|")));
+
+  return (
+    <>
+      <div className="hm-card hm-cal">
+        <div className="hm-calh">
+          <div><h2>Angle × ICP per week</h2><p>Click a cell to plan the focus for that product and week. Colour = status of that angle × ICP in the ads so far.</p></div>
+          <div className="hm-seg"><button onClick={() => setOffset(offset - 3)}>‹</button><button onClick={() => setOffset(0)} className={offset === 0 ? "on" : ""}>This week</button><button onClick={() => setOffset(offset + 3)}>›</button></div>
+        </div>
+        <div className="hm-scroll">
+          <table className="hm-ct">
+            <thead><tr><th className="rl" />{weeks.map((w) => <th key={w} className={w === thisWeek ? "now" : ""}>W{isoWeek(w)}<small>{label(w)}</small></th>)}</tr></thead>
+            <tbody>
+              {rows.map((p) => (
+                <tr key={p}>
+                  <td className="rl">{p}</td>
+                  {weeks.map((w) => {
+                    const es = entriesAt(p, w);
+                    return (
+                      <td key={w} className={w === thisWeek ? "now" : ""}>
+                        <div className="cell">
+                          {es.map((e) => { const st = calStatus(e); return (
+                            <button key={e.id} type="button" className={`chip ${st ? st.status : "planned"}`} onClick={() => canEdit && setEdit({ ...e })}
+                              title={st ? `${eur(st.spend)} · ROAS ${x2(st.roas)} · ${st.concepts} concept${st.concepts > 1 ? "s" : ""}` : "No matched ads yet"}>
+                              <b>{e.mechanism}</b><span>{e.icp}</span>{st && <em>{x2(st.roas)}</em>}
+                            </button>
+                          ); })}
+                          {canEdit && <button type="button" className="add" onClick={() => setEdit({ product: p, week: w, mechanism: "", icp: "", note: "" })}>+</button>}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {!rows.length && <tr><td className="rl" colSpan={weeks.length + 1} style={{ color: "var(--ink3)", padding: "20px 0" }}>No products yet. Add one below.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {canEdit && (
+          <div className="hm-caladd">
+            <span className="hm-muted">Add a product row:</span>
+            {extraProducts.map((p) => <button key={p} type="button" className="hm-chipbtn" onClick={() => setEdit({ product: p, week: thisWeek, mechanism: "", icp: "", note: "" })}>{p}</button>)}
+            <input value={newProduct} onChange={(e) => setNewProduct(e.target.value)} placeholder="Other product name…" onKeyDown={(e) => { if (e.key === "Enter" && newProduct.trim()) { setEdit({ product: newProduct.trim(), week: thisWeek, mechanism: "", icp: "", note: "" }); setNewProduct(""); } }} />
+          </div>
+        )}
+        <datalist id="hm-angles">{knownAngles.map((a) => <option key={a} value={a} />)}</datalist>
+        <div className="hm-callegend"><span><i className="proven" />proven</span><span><i className="promising" />promising</span><span><i className="testing" />testing</span><span><i className="failed" />failed</span><span><i className="planned" />planned, no ads yet</span></div>
+      </div>
+
+      {edit && (
+        <div className="hm-modal" onClick={() => setEdit(null)}>
+          <div className="hm-card hm-form" onClick={(e) => e.stopPropagation()}>
+            <h3>{edit.id ? "Edit focus" : "Plan focus"} <small>{edit.product} · week {isoWeek(edit.week)} ({label(edit.week)})</small></h3>
+            <label>Week <input type="date" value={edit.week} onChange={(e) => setEdit({ ...edit, week: weekStart(e.target.value) })} /></label>
+            <label>Angle (mechanism)
+              <input list="hm-angles" value={edit.mechanism} onChange={(e) => setEdit({ ...edit, mechanism: e.target.value })} placeholder="e.g. Calms the auditory nerve" autoFocus />
+            </label>
+            <label>ICP
+              <input list="hm-icps" value={edit.icp} onChange={(e) => setEdit({ ...edit, icp: e.target.value })} placeholder="e.g. Retired man 65+" />
+              <datalist id="hm-icps">{icpsFor(edit.product).map((a) => <option key={a} value={a} />)}</datalist>
+            </label>
+            <label>Note <input value={edit.note || ""} onChange={(e) => setEdit({ ...edit, note: e.target.value })} placeholder="optional" /></label>
+            <div className="act">
+              {edit.id && <button type="button" className="del" onClick={() => { onDelete(edit.id); setEdit(null); }}>Remove</button>}
+              <span style={{ flex: 1 }} />
+              <button type="button" className="b2" onClick={() => setEdit(null)}>Cancel</button>
+              <button type="button" className="b1" disabled={busy || !edit.mechanism.trim() || !edit.icp.trim()} onClick={() => onSave(edit)}>{busy ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Backlog: ideeën die nog ingepland moeten worden */}
+      <div className="hm-card hm-box" style={{ marginTop: 16 }}>
+        <h3>Backlog · angles × ICPs to test <small>add ideas now, plan them into a week later · {calendar.backlog.filter((b) => !calendar.entries.some((e) => sameKey(e, b))).length} still open</small></h3>
+        {!calendar.backlog.length && <div className="hm-muted" style={{ marginBottom: 8 }}>No ideas yet.</div>}
+        {products.filter((p) => calendar.backlog.some((b) => sameProduct(b.product, p))).map((p) => (
+          <div key={p} className="hm-bl">
+            <div className="p">{p}</div>
+            <div className="items">
+              {calendar.backlog.filter((b) => sameProduct(b.product, p)).map((b) => {
+                const planned = calendar.entries.filter((e) => sameKey(e, b)).sort((x, y) => x.week.localeCompare(y.week));
+                const st = calStatus(b);
+                const state = st ? st.status : planned.length ? "planned" : "open";
+                return (
+                  <div key={b.id} className={`it ${state}`}>
+                    <span className="nm"><b>{b.mechanism}</b> × {b.icp}{b.note ? <small> · {b.note}</small> : null}</span>
+                    <span className="meta">
+                      {st ? <em className={st.status}>{STATUS_LABEL[st.status]} · {x2(st.roas)}</em> : planned.length ? <em>planned W{planned.map((e) => isoWeek(e.week)).join(", W")}</em> : <em className="open">not planned</em>}
+                    </span>
+                    {canEdit && (
+                      <span className="act">
+                        {!planned.length && <button type="button" className="hm-chipbtn" onClick={() => setEdit({ product: b.product, week: thisWeek, mechanism: b.mechanism, icp: b.icp, note: b.note || "" })}>Plan</button>}
+                        <button type="button" className="x" title="Remove from backlog" onClick={() => { if (confirm("Remove this idea from the backlog?")) backlogPost({ action: "backlogDelete", id: b.id }); }}>×</button>
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {canEdit && (
+          <div className="hm-caladd" style={{ marginTop: 10 }}>
+            <button type="button" className="hm-chipbtn" onClick={() => setIdea({ product: products[0] || "", mechanism: "", icp: "", note: "" })}>+ Add idea</button>
+          </div>
+        )}
+      </div>
+
+      {idea && (
+        <div className="hm-modal" onClick={() => setIdea(null)}>
+          <div className="hm-card hm-form" onClick={(e) => e.stopPropagation()}>
+            <h3>Add to backlog <small>an angle × ICP to test later</small></h3>
+            <label>Product
+              <input list="hm-products" value={idea.product} onChange={(e) => setIdea({ ...idea, product: e.target.value })} placeholder="Product name" />
+              <datalist id="hm-products">{[...new Set([...products, ...allProducts])].map((p) => <option key={p} value={p} />)}</datalist>
+            </label>
+            <label>Angle (mechanism)
+              <input list="hm-angles" value={idea.mechanism} onChange={(e) => setIdea({ ...idea, mechanism: e.target.value })} placeholder="e.g. Calms the auditory nerve" autoFocus />
+            </label>
+            <label>ICP
+              <input list="hm-icps-idea" value={idea.icp} onChange={(e) => setIdea({ ...idea, icp: e.target.value })} placeholder="e.g. Retired man 65+" />
+              <datalist id="hm-icps-idea">{icpsFor(idea.product).map((a) => <option key={a} value={a} />)}</datalist>
+            </label>
+            <label>Note <input value={idea.note || ""} onChange={(e) => setIdea({ ...idea, note: e.target.value })} placeholder="optional" /></label>
+            <div className="act">
+              <span style={{ flex: 1 }} />
+              <button type="button" className="b2" onClick={() => setIdea(null)}>Cancel</button>
+              <button type="button" className="b1" disabled={busy || !idea.product.trim() || !idea.mechanism.trim() || !idea.icp.trim()} onClick={async () => { const ok = await backlogPost({ action: "backlogAdd", entry: idea }); if (ok) setIdea(null); }}>{busy ? "Saving…" : "Add"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="hm-card hm-box" style={{ marginTop: 16 }}>
+        <h3>Tested angles × ICPs <small>last 90 days · working = ROAS ≥ {x2(LADDER.minRoas)} · failed = ≥ {eur(LADDER.minSpend)} spend under the bar · ◆ = on the calendar</small></h3>
+        {!scoreLoaded && <div className="hm-muted">Loading…</div>}
+        {scoreLoaded && !scoreboard.length && <div className="hm-muted">No angle × ICP with ads yet. Fill in Angle and ICP on the tasks.</div>}
+        {scoreboard.map(([product, p]) => (
+          <div key={product} className="hm-score">
+            <div className="p">{product}</div>
+            <div className="col">
+              <div className="h ok">✓ Working <span>{p.working.length}</span></div>
+              {p.working.map((i) => <div key={i.mechanism + i.icp} className="it"><span><b>{i.mechanism}</b> × {i.icp}{planned.has([i.product, i.mechanism, i.icp].map((x) => String(x || "").trim().toLowerCase()).join("|")) ? " ◆" : ""}</span><em className="ok">{x2(i.roas)}{i.status === "promising" ? " · under €2k" : ""}</em></div>)}
+              {!p.working.length && <div className="none">none yet</div>}
+            </div>
+            <div className="col">
+              <div className="h bad">✕ Failed <span>{p.failed.length}</span></div>
+              {p.failed.map((i) => <div key={i.mechanism + i.icp} className="it"><span><b>{i.mechanism}</b> × {i.icp}</span><em className="bad">{x2(i.roas)}</em></div>)}
+              {!p.failed.length && <div className="none">none</div>}
+            </div>
+            <div className="col">
+              <div className="h">… Still testing <span>{p.testing.length}</span></div>
+              {p.testing.map((i) => <div key={i.mechanism + i.icp} className="it"><span><b>{i.mechanism}</b> × {i.icp}</span><em>{eur(i.s)} · {x2(i.roas)}</em></div>)}
+              {!p.testing.length && <div className="none">none</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 const CSS = `
 .hm{--bg:#fafafa;--surface:#fff;--card:#d6d6da;--line:#efefef;--line2:#e6e6e6;--ink:#111;--ink2:#555;--ink3:#999;--seg:#f2f2f3;--acc:#7f9ccb;
   --g2:#178a5f;--g1:#8fd3b4;--n:#ecebe8;--r1:#f4b0a0;--r2:#d4483f;
@@ -535,5 +797,66 @@ i.unset{background:var(--line2)!important}
 .hm-row .v{text-align:right;color:var(--ink2)}
 .hm-pill{justify-self:end;font-size:11.5px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap}
 .hm-clear{border:0;background:none;color:var(--ink2);text-decoration:underline;cursor:pointer;font-size:12px;padding:0}
-@media (max-width:900px){.hm-sum,.hm-grid{grid-template-columns:1fr}.hm-tile{border-left:0;border-top:1px solid var(--line)}.hm-tile:first-child{border-top:0}.hm-ac .meters{grid-template-columns:1fr 1fr;gap:10px}.hm-lr{grid-template-columns:18px minmax(0,1fr) auto auto auto;gap:6px 8px}.hm-lr .nm,.hm-lr .sub{white-space:normal}.hm-lr .v,.hm-lr .ro,.hm-lr .hm-st{grid-row:2;align-self:center}.hm-lr .v{grid-column:2;justify-self:start}.hm-lr .ro{grid-column:3}.hm-lr .hm-st{grid-column:4/6}.hm-lr>div:nth-child(2){grid-column:2/6}.hm-next{padding-left:26px}.hm{padding:18px 14px 40px}.hm-kpis{grid-template-columns:repeat(2,1fr)}.hm-kpi:nth-child(3){border-left:0}.hm-kpi:nth-child(n+3){border-top:1px solid var(--line)}.hm-two{grid-template-columns:1fr}.hm-t th.rl,.hm-t td.rl{width:130px}.hm-row{grid-template-columns:40px minmax(0,1fr) 70px 56px;gap:8px}}
+.hm-cal{padding:18px 20px 14px}
+.hm-calh{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.hm-calh h2{margin:0;font-size:15px}.hm-calh p{margin:2px 0 0;color:var(--ink3);font-size:12px}
+.hm-ct{border-collapse:separate;border-spacing:4px;width:100%;table-layout:fixed;min-width:760px}
+.hm-ct th{font-weight:600;color:var(--ink2);font-size:12px;padding:4px 4px 6px;text-align:center;vertical-align:bottom}
+.hm-ct th small{display:block;font-weight:400;color:var(--ink3);font-size:11px}
+.hm-ct th.now{color:var(--ink)}
+.hm-ct th.rl,.hm-ct td.rl{text-align:left;width:150px;font-weight:600;color:var(--ink);font-size:12.5px;padding-left:2px;vertical-align:middle}
+.hm-ct td{padding:0;vertical-align:top}
+.hm-ct td.now .cell{background:var(--seg)}
+.hm-ct .cell{min-height:64px;border:1px dashed var(--line2);border-radius:10px;padding:5px;display:flex;flex-direction:column;gap:4px}
+.hm-ct td.now .cell{border-style:solid}
+.hm-ct .chip{border:0;border-left:3px solid var(--ink3);background:var(--surface);border-radius:7px;padding:5px 7px;text-align:left;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:0 6px;box-shadow:0 1px 2px rgba(0,0,0,.06);color:var(--ink)}
+.hm-ct .chip b{font-size:11.5px;font-weight:600;line-height:1.25;grid-column:1}
+.hm-ct .chip span{font-size:10.5px;color:var(--ink3);line-height:1.25;grid-column:1}
+.hm-ct .chip em{font-style:normal;font-size:11px;font-weight:700;grid-column:2;grid-row:1/3;align-self:center}
+.hm-ct .chip.proven{border-left-color:var(--g2)}.hm-ct .chip.proven em{color:var(--g2)}
+.hm-ct .chip.promising{border-left-color:#3b82f6}.hm-ct .chip.promising em{color:#3b82f6}
+.hm-ct .chip.testing{border-left-color:#b8bcc6}
+.hm-ct .chip.failed{border-left-color:var(--r2)}.hm-ct .chip.failed em{color:var(--r2)}
+.hm-ct .chip.planned{border-left-color:var(--ink3);border-left-style:dashed}
+.hm-ct .add{border:0;background:none;color:var(--ink3);font-size:14px;cursor:pointer;padding:2px;line-height:1;opacity:.5;margin-top:auto}
+.hm-ct .cell:hover .add{opacity:1}
+.hm-caladd{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;font-size:12px}
+.hm-caladd input{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:8px;height:30px;padding:0 10px;font:inherit;font-size:12.5px;outline:none;min-width:200px}
+.hm-chipbtn{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 11px;font:inherit;font-size:12px;cursor:pointer}
+.hm-callegend{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:12px;font-size:11.5px;color:var(--ink3)}
+.hm-callegend i{display:inline-block;width:3px;height:11px;border-radius:2px;margin-right:6px;vertical-align:-1px;background:var(--ink3)}
+.hm-callegend i.proven{background:var(--g2)}.hm-callegend i.promising{background:#3b82f6}.hm-callegend i.testing{background:#b8bcc6}.hm-callegend i.failed{background:var(--r2)}.hm-callegend i.planned{background:none;border-left:3px dashed var(--ink3);width:0}
+.hm-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+.hm-form{width:min(440px,100%);padding:18px 20px}
+.hm-form h3{margin:0 0 12px;font-size:15px}.hm-form h3 small{display:block;font-weight:400;color:var(--ink3);font-size:12px;margin-top:2px}
+.hm-form label{display:block;font-size:11.5px;color:var(--ink3);margin:10px 0 0}
+.hm-form input{display:block;width:100%;margin-top:4px;border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:9px;height:34px;padding:0 10px;font:inherit;font-size:13px;outline:none;box-sizing:border-box}
+.hm-form .act{display:flex;gap:8px;align-items:center;margin-top:16px}
+.hm-form .b1{border:0;background:var(--ink);color:var(--surface);border-radius:9px;height:32px;padding:0 16px;font:inherit;font-weight:600;cursor:pointer}
+.hm-form .b1:disabled{opacity:.4;cursor:default}
+.hm-form .b2{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:9px;height:32px;padding:0 14px;font:inherit;cursor:pointer}
+.hm-form .del{border:0;background:none;color:var(--r2);font:inherit;font-size:12px;cursor:pointer;padding:0}
+.hm-bl{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:10px 0;border-top:1px solid var(--line)}
+.hm-bl:first-of-type{border-top:0}
+.hm-bl .p{font-weight:700;font-size:13.5px}
+.hm-bl .it{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px}
+.hm-bl .it:first-child{border-top:0}
+.hm-bl .it .nm b{font-weight:600}.hm-bl .it .nm small{color:var(--ink3)}
+.hm-bl .it.open .nm{color:var(--ink)}
+.hm-bl .it em{font-style:normal;font-size:11.5px;color:var(--ink3);white-space:nowrap}
+.hm-bl .it em.open{color:#b7791f;font-weight:600}.hm-bl .it em.proven,.hm-bl .it em.promising{color:var(--g2);font-weight:600}.hm-bl .it em.failed{color:var(--r2);font-weight:600}
+.hm-bl .act{display:flex;gap:6px;align-items:center}
+.hm-bl .x{border:0;background:none;color:var(--ink3);font-size:15px;cursor:pointer;padding:0 4px;line-height:1}
+.hm-score{display:grid;grid-template-columns:150px repeat(3,1fr);gap:14px;padding:12px 0;border-top:1px solid var(--line)}
+.hm-score:first-of-type{border-top:0}
+.hm-score .p{font-weight:700;font-size:13.5px}
+.hm-score .h{font-size:11.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.hm-score .h span{font-weight:500;margin-left:4px}
+.hm-score .h.ok{color:var(--g2)}.hm-score .h.bad{color:var(--r2)}
+.hm-score .it{font-size:12.5px;padding:5px 0;border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:baseline}
+.hm-score .it b{font-weight:600}
+.hm-score .it em{font-style:normal;font-size:11.5px;color:var(--ink3);white-space:nowrap}
+.hm-score .it em.ok{color:var(--g2);font-weight:700}.hm-score .it em.bad{color:var(--r2);font-weight:700}
+.hm-score .none{font-size:12px;color:var(--ink3);font-style:italic}
+@media (max-width:900px){.hm-score,.hm-bl{grid-template-columns:1fr;gap:8px}.hm-sum,.hm-grid{grid-template-columns:1fr}.hm-tile{border-left:0;border-top:1px solid var(--line)}.hm-tile:first-child{border-top:0}.hm-ac .meters{grid-template-columns:1fr 1fr;gap:10px}.hm-lr{grid-template-columns:18px minmax(0,1fr) auto auto auto;gap:6px 8px}.hm-lr .nm,.hm-lr .sub{white-space:normal}.hm-lr .v,.hm-lr .ro,.hm-lr .hm-st{grid-row:2;align-self:center}.hm-lr .v{grid-column:2;justify-self:start}.hm-lr .ro{grid-column:3}.hm-lr .hm-st{grid-column:4/6}.hm-lr>div:nth-child(2){grid-column:2/6}.hm-next{padding-left:26px}.hm{padding:18px 14px 40px}.hm-kpis{grid-template-columns:repeat(2,1fr)}.hm-kpi:nth-child(3){border-left:0}.hm-kpi:nth-child(n+3){border-top:1px solid var(--line)}.hm-two{grid-template-columns:1fr}.hm-t th.rl,.hm-t td.rl{width:130px}.hm-row{grid-template-columns:40px minmax(0,1fr) 70px 56px;gap:8px}}
 `;

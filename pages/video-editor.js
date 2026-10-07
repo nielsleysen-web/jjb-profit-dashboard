@@ -150,6 +150,7 @@ export default function VideoEditor() {
   const [error, setError] = useState("");
   const [openTaskId, setOpenTaskId] = useState(null);
   const [options, setOptions] = useState({ icp: {}, scriptStructure: [], formatType: [] });
+  const [calendar, setCalendar] = useState({ entries: [], week: "" });
   const [creating, setCreating] = useState(false);
   const isMobile = useIsMobile();
 
@@ -179,6 +180,8 @@ export default function VideoEditor() {
   useEffect(() => {
     load();
     const iv = setInterval(load, 45000);
+    // Angle/ICP-kalender: focus van deze week per product
+    fetch("/api/creative-calendar").then((r) => r.json()).then((res) => res?.success && setCalendar({ entries: res.entries || [], week: res.week || "" })).catch(() => {});
     // HeyGen avatars (gecachet op de server)
     fetch("/api/heygen-avatars").then((r) => r.json()).then((res) => res?.success && setAvatars(res.avatars)).catch(() => {});
     return () => clearInterval(iv);
@@ -270,6 +273,7 @@ export default function VideoEditor() {
           team={team}
           avatars={avatars}
           options={options}
+          calendar={calendar}
           post={post}
           onClose={() => setOpenTaskId(null)}
           isMobile={isMobile}
@@ -280,6 +284,32 @@ export default function VideoEditor() {
 }
 
 /* ================= herbruikbare componenten ================= */
+
+// Angle/ICP-kalender: wat deze week de focus is voor dit product, met één klik over te nemen op de taak
+function CalendarFocus({ t, calendar, canEdit, post }) {
+  const title = (t.product?.title || "").trim().toLowerCase();
+  if (!title || !calendar?.week) return null;
+  const focus = (calendar.entries || []).filter((e) => e.week === calendar.week && String(e.product || "").trim().toLowerCase() === title);
+  if (!focus.length) return null;
+  const same = (e) => (t.mechanism || "") === e.mechanism && (t.icp || "") === e.icp;
+  return (
+    <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center", fontSize: "12px", color: "#64748b" }}>
+      <span>Focus this week:</span>
+      {focus.map((e) => (
+        <span key={e.id} style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: same(e) ? "#ecfdf5" : "#f8fafc", border: `1px solid ${same(e) ? "#a7f3d0" : "#e2e8f0"}`, borderRadius: "999px", padding: "3px 10px", color: "#0f172a", fontWeight: 600 }}>
+          {e.mechanism} <span style={{ color: "#94a3b8", fontWeight: 400 }}>×</span> {e.icp}
+          {canEdit && !same(e) && (
+            <button type="button" onClick={() => post({ action: "update", taskId: t.id, task: { mechanism: e.mechanism, icp: e.icp } })}
+              style={{ border: 0, background: "#0f172a", color: "#fff", borderRadius: "999px", padding: "2px 8px", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}>
+              Use
+            </button>
+          )}
+          {same(e) && <span style={{ color: "#166534", fontSize: "11px" }}>✓ on this task</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // Inklapbare sectie: klik op de titel of het pijltje. De keuze wordt per sectie onthouden (deze browser).
 function Section({ title, children }) {
@@ -1209,7 +1239,7 @@ function DeadlinePicker({ value, onChange }) {
   );
 }
 
-function TaskModal({ t, me, strategists, editors, team, avatars, options, post, onClose, isMobile, allTasks, openTaskById }) {
+function TaskModal({ t, me, strategists, editors, team, avatars, options, calendar, post, onClose, isMobile, allTasks, openTaskById }) {
   const [chatInput, setChatInput] = useState("");
   const [copied, setCopied] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
@@ -1477,6 +1507,7 @@ function TaskModal({ t, me, strategists, editors, team, avatars, options, post, 
               ) : (
                 <span style={{ fontSize: "13px", color: "#cbd5e1" }}>—</span>
               )}
+              <CalendarFocus t={t} calendar={calendar} canEdit={canEdit} post={post} />
             </Section>
 
             {/* Briefing — los en opvallend, zodat editors hem niet missen */}

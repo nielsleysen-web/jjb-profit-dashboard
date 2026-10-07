@@ -58,7 +58,11 @@ const CREATIVE_FIELDS = [
 
 const DESIGN_FIELDS = [
   { key: "product", label: "Product", get: (t) => t.product?.title },
-  { key: "angle", label: "Angle" },
+  { key: "concept", label: "Concept", get: (t) => t.concept || t.angle },
+  { key: "mechanism", label: "Angle (Mechanism)" },
+  { key: "icp", label: "ICP" },
+  { key: "awareness", label: "Awareness Stage" },
+  { key: "formatType", label: "Format Type" },
   { key: "market", label: "Market", get: (t) => (t.market ? `${t.market}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
   { key: "batchType", label: "Batch Type" },
   { key: "iterationType", label: "Iteration Type" },
@@ -277,7 +281,7 @@ export default function Launched() {
                 key={t.id}
                 title={`${t.product?.title || "Design"}${t.batchType ? ` · ${t.batchType}` : ""}`}
                 image={t.product?.image}
-                sub={t.angle}
+                sub={t.concept || t.angle}
                 by={t.assigneeName}
                 date={t.launchedDate}
                 onClick={() => setDetail({ kind: "design", task: t })}

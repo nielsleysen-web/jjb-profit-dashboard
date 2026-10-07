@@ -15,7 +15,7 @@
 import axios from "axios";
 import crypto from "crypto";
 import { driveConfigured, folderIdFromLink, findCreativeFile } from "../../lib/gdrive";
-import { videoNaming, videoConcept } from "../../lib/creative-naming";
+import { videoNaming, designNaming, videoConcept } from "../../lib/creative-naming";
 
 export const config = { maxDuration: 60 };
 
@@ -295,9 +295,9 @@ function taskProfile(t, kind) {
   const strategist = norm(firstName(t.strategistName));
   const deadline = fmtDeadlineDate(t.deadline);
   // Concept + angle (mechanism) zijn de kenmerkende woorden in de ad-naam; oudere taken hebben alleen "angle"
-  const concept = kind === "video" ? videoConcept(t) : t.angle || "";
+  const concept = videoConcept(t);
   const angle = norm(concept);
-  const angleWords = [...new Set(wordsOf(`${concept} ${kind === "video" ? t.mechanism || "" : ""}`).filter((w) => !productWords.includes(w)))];
+  const angleWords = [...new Set(wordsOf(`${concept} ${t.mechanism || ""}`).filter((w) => !productWords.includes(w)))];
   return {
     id: t.id,
     kind, // "video" | "image"
@@ -313,23 +313,18 @@ function taskProfile(t, kind) {
     angle,
     angleWords,
     concept,
-    mechanism: kind === "video" ? t.mechanism || "" : "",
-    icp: kind === "video" ? t.icp || "" : "",
-    awareness: kind === "video" ? t.awareness || "" : "",
+    mechanism: t.mechanism || "",
+    icp: t.icp || "",
+    awareness: t.awareness || "",
     scriptStructure: kind === "video" ? t.scriptStructure || "" : "",
-    formatType: kind === "video" ? t.formatType || "" : "",
+    formatType: t.formatType || "",
     type: t.type || t.batchType || "",
     deadline,
     deadlineVariants: deadlineVariants(t.deadline),
     deadlineMs: t.deadline ? new Date(t.deadline).getTime() : 0,
     status: t.status || "",
     outputLink: t.finalOutputLink || t.frameioLink || "",
-    naming: kind === "video"
-      ? videoNaming(t)
-      : [productTitle, firstName(t.strategistName), firstName(t.assigneeName), t.angle, t.batchType, deadline]
-          .filter(Boolean)
-          .map((s) => String(s).toUpperCase())
-          .join(" | "),
+    naming: kind === "video" ? videoNaming(t) : designNaming(t),
   };
 }
 
