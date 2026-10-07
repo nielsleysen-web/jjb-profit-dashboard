@@ -477,6 +477,51 @@ export default function CreativeHeatmap() {
   );
 }
 
+// Productkiezer zoals in de taken: Shopify-zoekveld + snelle keuze uit bekende producten
+function ProductPicker({ value, onChange, known }) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/products-search?q=${encodeURIComponent(q)}`).then((r) => r.json());
+        if (res.success) setResults((res.products || []).slice(0, 8));
+      } catch {} finally { setSearching(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  if (value) {
+    return (
+      <div className="hm-pp-sel">
+        {value.image ? <img src={value.image} alt="" /> : <span className="ph" />}
+        <b>{value.title}</b>
+        <button type="button" onClick={() => onChange(null)}>change</button>
+      </div>
+    );
+  }
+  return (
+    <div className="hm-pp">
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your Shopify products…" autoFocus />
+      {!q.trim() && known.length > 0 && (
+        <div className="hm-pp-known">{known.map((k) => <button key={k} type="button" onClick={() => onChange({ title: k, image: "" })}>{k}</button>)}</div>
+      )}
+      {searching && <div className="hm-muted" style={{ marginTop: 6 }}>Searching…</div>}
+      {results.length > 0 && (
+        <div className="hm-pp-res">
+          {results.map((p) => (
+            <button key={p.id} type="button" onClick={() => { onChange({ title: p.title, image: p.image || "" }); setQ(""); setResults([]); }}>
+              {p.image ? <img src={p.image} alt="" /> : <span className="ph" />}<span>{p.title}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const lc = (x) => String(x || "").trim().toLowerCase();
 const sameProduct = (a, b) => lc(a) === lc(b);
 const sameKey = (a, b) => sameProduct(a.product, b.product) && lc(a.mechanism) === lc(b.mechanism) && lc(a.icp) === lc(b.icp);
@@ -486,7 +531,7 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
   const [idea, setIdea] = useState(null); // { product, mechanism, icp, note }
   const thisWeek = calendar.week || weekStart();
   const [offset, setOffset] = useState(0);
-  const [newProduct, setNewProduct] = useState("");
+  const [newProduct, setNewProduct] = useState(false);
   const weeks = Array.from({ length: 6 }, (_, i) => addDays(thisWeek, (i - 1 + offset) * 7));
   const rows = products.length ? products : [];
   const entriesAt = (p, w) => calendar.entries.filter((e) => e.week === w && String(e.product || "").trim().toLowerCase() === String(p).trim().toLowerCase());
@@ -537,8 +582,11 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
         {canEdit && (
           <div className="hm-caladd">
             <span className="hm-muted">Add a product row:</span>
-            {extraProducts.map((p) => <button key={p} type="button" className="hm-chipbtn" onClick={() => setEdit({ product: p, week: thisWeek, mechanism: "", icp: "", note: "" })}>{p}</button>)}
-            <input value={newProduct} onChange={(e) => setNewProduct(e.target.value)} placeholder="Other product name…" onKeyDown={(e) => { if (e.key === "Enter" && newProduct.trim()) { setEdit({ product: newProduct.trim(), week: thisWeek, mechanism: "", icp: "", note: "" }); setNewProduct(""); } }} />
+            {newProduct ? (
+              <div style={{ flex: 1, minWidth: 260 }}><ProductPicker value={null} onChange={(p) => { setNewProduct(false); if (p) setEdit({ product: p.title, week: thisWeek, mechanism: "", icp: "", note: "" }); }} known={extraProducts} /></div>
+            ) : (
+              <button type="button" className="hm-chipbtn" onClick={() => setNewProduct(true)}>+ Product</button>
+            )}
           </div>
         )}
         <datalist id="hm-angles">{knownAngles.map((a) => <option key={a} value={a} />)}</datalist>
@@ -600,7 +648,7 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
         ))}
         {canEdit && (
           <div className="hm-caladd" style={{ marginTop: 10 }}>
-            <button type="button" className="hm-chipbtn" onClick={() => setIdea({ product: products[0] || "", mechanism: "", icp: "", note: "" })}>+ Add idea</button>
+            <button type="button" className="hm-chipbtn" onClick={() => setIdea({ product: "", mechanism: "", icp: "", note: "" })}>+ Add idea</button>
           </div>
         )}
       </div>
@@ -609,10 +657,10 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
         <div className="hm-modal" onClick={() => setIdea(null)}>
           <div className="hm-card hm-form" onClick={(e) => e.stopPropagation()}>
             <h3>Add to backlog <small>an angle × ICP to test later</small></h3>
-            <label>Product
-              <input list="hm-products" value={idea.product} onChange={(e) => setIdea({ ...idea, product: e.target.value })} placeholder="Product name" />
-              <datalist id="hm-products">{[...new Set([...products, ...allProducts])].map((p) => <option key={p} value={p} />)}</datalist>
-            </label>
+            {/* géén <label>: die zou een klik op een resultaat doorsturen naar de "change"-knop */}
+            <div className="hm-form-field">Product
+              <ProductPicker value={idea.product ? { title: idea.product, image: idea.productImage || "" } : null} onChange={(p) => setIdea({ ...idea, product: p?.title || "", productImage: p?.image || "" })} known={[...new Set([...products, ...allProducts])]} />
+            </div>
             <label>Angle (mechanism)
               <input list="hm-angles" value={idea.mechanism} onChange={(e) => setIdea({ ...idea, mechanism: e.target.value })} placeholder="e.g. Calms the auditory nerve" autoFocus />
             </label>
@@ -829,13 +877,23 @@ i.unset{background:var(--line2)!important}
 .hm-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
 .hm-form{width:min(440px,100%);padding:18px 20px}
 .hm-form h3{margin:0 0 12px;font-size:15px}.hm-form h3 small{display:block;font-weight:400;color:var(--ink3);font-size:12px;margin-top:2px}
-.hm-form label{display:block;font-size:11.5px;color:var(--ink3);margin:10px 0 0}
+.hm-form label,.hm-form .hm-form-field{display:block;font-size:11.5px;color:var(--ink3);margin:10px 0 0}
 .hm-form input{display:block;width:100%;margin-top:4px;border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:9px;height:34px;padding:0 10px;font:inherit;font-size:13px;outline:none;box-sizing:border-box}
 .hm-form .act{display:flex;gap:8px;align-items:center;margin-top:16px}
 .hm-form .b1{border:0;background:var(--ink);color:var(--surface);border-radius:9px;height:32px;padding:0 16px;font:inherit;font-weight:600;cursor:pointer}
 .hm-form .b1:disabled{opacity:.4;cursor:default}
 .hm-form .b2{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:9px;height:32px;padding:0 14px;font:inherit;cursor:pointer}
 .hm-form .del{border:0;background:none;color:var(--r2);font:inherit;font-size:12px;cursor:pointer;padding:0}
+.hm-pp input{display:block;width:100%;margin-top:4px;border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:9px;height:34px;padding:0 10px;font:inherit;font-size:13px;outline:none;box-sizing:border-box}
+.hm-pp-known{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.hm-pp-known button{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 11px;font:inherit;font-size:12px;cursor:pointer}
+.hm-pp-res{display:grid;gap:4px;margin-top:6px}
+.hm-pp-res button{display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface);border:1px solid var(--line2);border-radius:9px;cursor:pointer;text-align:left;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink)}
+.hm-pp-res img,.hm-pp-sel img{width:26px;height:26px;border-radius:6px;object-fit:cover}
+.hm-pp-res .ph,.hm-pp-sel .ph{width:26px;height:26px;border-radius:6px;background:var(--seg);display:inline-block}
+.hm-pp-sel{display:flex;align-items:center;gap:10px;margin-top:4px;background:var(--seg);border-radius:9px;padding:6px 10px;font-size:13px;color:var(--ink)}
+.hm-pp-sel b{flex:1}
+.hm-pp-sel button{border:0;background:none;color:var(--ink3);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline}
 .hm-bl{display:grid;grid-template-columns:150px 1fr;gap:14px;padding:10px 0;border-top:1px solid var(--line)}
 .hm-bl:first-of-type{border-top:0}
 .hm-bl .p{font-weight:700;font-size:13.5px}
