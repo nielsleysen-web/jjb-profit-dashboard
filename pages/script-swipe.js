@@ -142,6 +142,8 @@ export default function ScriptSwipe() {
   const [open, setOpen] = useState(null);   // script object
   const [saved, setSaved] = useState("");   // "Saved", "Saving…"
   const [showOrig, setShowOrig] = useState(false); // panel with the untouched transcript
+  const [dragOver, setDragOver] = useState(null);  // line number a dragged row hovers over
+  const dragFrom = useRef(null);
   const dirty = useRef(false);
   const timer = useRef(null);
   const [narrow, setNarrow] = useState(false);
@@ -183,6 +185,13 @@ export default function ScriptSwipe() {
     const row = { t: null, text: "", mine: "", added: true };
     schedule({ ...open, sentences: renum([...open.sentences.slice(0, pos), row, ...open.sentences.slice(pos)]) });
     setTimeout(() => document.querySelector(`[data-row="${pos + 1}"] textarea`)?.focus(), 50);
+  };
+  const moveRow = (fromI, toI) => {
+    if (fromI === toI) return;
+    const arr = [...open.sentences]; const k = arr.findIndex((s) => s.i === fromI); const j = arr.findIndex((s) => s.i === toI);
+    if (k < 0 || j < 0) return;
+    const [row] = arr.splice(k, 1); arr.splice(j, 0, row);
+    schedule({ ...open, sentences: renum(arr) });
   };
   const removeRow = (i) => { if (open.sentences.length <= 1) return; schedule({ ...open, sentences: renum(open.sentences.filter((s) => s.i !== i)) }); };
   const restoreOriginal = async () => {
@@ -235,7 +244,7 @@ export default function ScriptSwipe() {
                 </form>
                 <button style={{ ...ui.btn(false), color: "#b91c1c", borderColor: "#fecaca" }} onClick={() => del(open.id)}>Delete</button>
               </div>
-              <div style={{ fontSize: 12, color: "#8a92a3", marginBottom: 10 }}>{open.sentences.length} lines · {done} rewritten · changes save automatically · both columns are editable</div>
+              <div style={{ fontSize: 12, color: "#8a92a3", marginBottom: 10 }}>{open.sentences.length} lines · {done} rewritten · saves automatically · edit either column, drag ⠿ to move a line, + ⤵ ✕ to insert, join or remove</div>
               {showOrig && open.original?.length > 0 && (
                 <div data-orig style={{ background: "#f8fafc", border: "1px solid #e2e6ec", borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
@@ -250,12 +259,17 @@ export default function ScriptSwipe() {
                   </div>
                 </div>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr 1fr" : "34px 48px 1fr 1fr", gap: "0 10px", alignItems: "start" }}>
-                {!narrow && <div style={ui.label}>#</div>}{!narrow && <div style={ui.label}>Time</div>}<div style={ui.label}>Original</div><div style={ui.label}>Our version</div>
-                {open.sentences.map((s) => (
-                  <RowFragment key={`${s.i}-${open.sentences.length}`} s={s} narrow={narrow} last={s.i === open.sentences.length} onChange={(v) => setMine(s.i, v)} onText={(v) => setText(s.i, v)} onMerge={() => mergeNext(s.i)} onInsert={(w) => insertAt(s.i, w)} onRemove={() => removeRow(s.i)} />
-                ))}
+              <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "0 0 6px", borderBottom: "1px solid #eceef2" }}>
+                {!narrow && <div style={{ width: 22 }} />}{!narrow && <div style={{ ...ui.label, width: 26 }}>#</div>}{!narrow && <div style={{ ...ui.label, width: 44 }}>Time</div>}
+                <div style={{ ...ui.label, flex: 1 }}>Original</div><div style={{ ...ui.label, flex: 1 }}>Our version</div>{!narrow && <div style={{ width: 84 }} />}
               </div>
+              {open.sentences.map((s) => (
+                <Row key={`${s.i}-${open.sentences.length}`} s={s} narrow={narrow} last={s.i === open.sentences.length} over={dragOver === s.i}
+                  onChange={(v) => setMine(s.i, v)} onText={(v) => setText(s.i, v)} onMerge={() => mergeNext(s.i)} onInsert={() => insertAt(s.i, "below")} onRemove={() => removeRow(s.i)}
+                  onDragStart={() => { dragFrom.current = s.i; }} onDragOver={() => { if (dragFrom.current != null && dragOver !== s.i) setDragOver(s.i); }}
+                  onDrop={() => { const from = dragFrom.current; dragFrom.current = null; setDragOver(null); if (from != null) moveRow(from, s.i); }} onDragEnd={() => { dragFrom.current = null; setDragOver(null); }} />
+              ))}
+              <button onClick={() => insertAt(open.sentences[0]?.i, "above")} style={{ background: "none", border: 0, color: "#64748b", fontSize: 12.5, cursor: "pointer", padding: "10px 0 0", textAlign: "left" }}>+ Add a line at the top (hook)</button>
             </>
           )}
         </div>
@@ -264,28 +278,38 @@ export default function ScriptSwipe() {
   );
 }
 
-function RowFragment({ s, narrow, last, onChange, onText, onMerge, onInsert, onRemove }) {
-  const cell = { padding: "8px 0", borderTop: "1px solid #f1f3f6" };
-  const act = { border: "1px solid #e2e6ec", background: "#fff", color: "#64748b", borderRadius: 6, fontSize: 11, padding: "2px 7px", cursor: "pointer", lineHeight: 1.4 };
-  const actions = (
-    <div className="ss-actions" style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
-      <button style={act} title="Insert an extra line (hook) above this one" onClick={() => onInsert("above")}>+ above</button>
-      <button style={act} title="Insert an extra line below this one" onClick={() => onInsert("below")}>+ below</button>
-      {!last && <button style={act} title="Join this line with the next one" onClick={onMerge}>⤵ merge with next</button>}
-      <button style={{ ...act, color: "#b91c1c", borderColor: "#fecaca" }} title="Remove this line (both columns)" onClick={onRemove}>✕ remove</button>
-    </div>
-  );
+function Row({ s, narrow, last, over, onChange, onText, onMerge, onInsert, onRemove, onDragStart, onDragOver, onDrop, onDragEnd }) {
+  const rowRef = useRef(null);
+  const ic = { width: 26, height: 26, border: "1px solid #e2e6ec", background: "#fff", color: "#64748b", borderRadius: 7, fontSize: 13, cursor: "pointer", lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0 };
   return (
-    <>
-      {!narrow && <div className="ss-num" style={{ ...cell, fontSize: 12.5, color: s.added ? "#d97706" : "#8a92a3", paddingTop: 17 }}>{s.added ? "★" : s.i}</div>}
-      {!narrow && <div style={{ ...cell, fontSize: 12.5, color: "#8a92a3", paddingTop: 17, fontVariantNumeric: "tabular-nums" }}>{fmtT(s.t)}</div>}
-      <div className="ss-orig" style={{ ...cell, fontSize: 14, lineHeight: 1.5, paddingTop: 8, paddingRight: 6 }}>
-        {narrow && <span style={{ color: "#8a92a3", fontSize: 12 }}>{s.added ? "★" : s.i}{s.t != null ? ` · ${fmtT(s.t)}` : ""} · </span>}
-        <AutoTextarea value={s.text} onChange={onText} plain placeholder={s.added ? "Extra line (hook, transition…) — note on the left is optional" : "Original line"} />
-        {actions}
+    <div ref={rowRef} className="ss-row" data-line={s.i} onDragOver={(e) => { e.preventDefault(); onDragOver(); }} onDrop={(e) => { e.preventDefault(); onDrop(); }}
+      style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0", borderTop: `2px solid ${over ? "#0f172a" : "transparent"}`, borderBottom: "1px solid #f1f3f6", background: over ? "#f8fafc" : "transparent" }}>
+      {!narrow && (
+        <div className="ss-grab" draggable title="Drag to move this line" onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", String(s.i)); } catch {} if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 10, 20); onDragStart(); }} onDragEnd={onDragEnd}
+          style={{ width: 22, alignSelf: "stretch", display: "flex", alignItems: "center", justifyContent: "center", color: "#b4bac6", fontSize: 16, cursor: "grab", userSelect: "none", borderRadius: 6 }}>⠿</div>
+      )}
+      {!narrow && <div className="ss-num" style={{ width: 26, paddingTop: 10, fontSize: 12.5, color: s.added ? "#d97706" : "#8a92a3" }}>{s.added ? "★" : s.i}</div>}
+      {!narrow && <div style={{ width: 44, paddingTop: 10, fontSize: 12.5, color: "#8a92a3", fontVariantNumeric: "tabular-nums" }}>{fmtT(s.t)}</div>}
+      <div className="ss-orig" style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.5 }}>
+        {narrow && <div style={{ color: "#8a92a3", fontSize: 12, marginBottom: 2 }}>{s.added ? "★" : s.i}{s.t != null ? ` · ${fmtT(s.t)}` : ""}</div>}
+        <AutoTextarea value={s.text} onChange={onText} plain placeholder={s.added ? "Extra line (hook, transition…)" : "Original line"} />
       </div>
-      <div data-row={s.i} style={cell}><AutoTextarea value={s.mine} onChange={onChange} placeholder={s.added ? "Write the hook…" : "Write our version…"} /></div>
-      <style jsx>{`.ss-orig .ss-actions{opacity:.55;transition:opacity .15s}.ss-orig:hover .ss-actions,.ss-orig:focus-within .ss-actions{opacity:1}`}</style>
-    </>
+      <div data-row={s.i} style={{ flex: 1, minWidth: 0 }}><AutoTextarea value={s.mine} onChange={onChange} placeholder={s.added ? "Write the hook…" : "Write our version…"} /></div>
+      {!narrow && (
+        <div className="ss-actions" style={{ width: 84, display: "flex", gap: 3, paddingTop: 9, justifyContent: "flex-end" }}>
+          <button style={ic} title="Insert a line below (hook)" onClick={onInsert}>+</button>
+          <button style={{ ...ic, visibility: last ? "hidden" : "visible" }} title="Join with the next line" onClick={onMerge}>⤵</button>
+          <button style={{ ...ic, color: "#b91c1c" }} title="Remove this line" onClick={onRemove}>✕</button>
+        </div>
+      )}
+      {narrow && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingTop: 9 }}>
+          <button style={ic} title="Insert a line below" onClick={onInsert}>+</button>
+          {!last && <button style={ic} title="Join with the next line" onClick={onMerge}>⤵</button>}
+          <button style={{ ...ic, color: "#b91c1c" }} title="Remove this line" onClick={onRemove}>✕</button>
+        </div>
+      )}
+      <style jsx>{`.ss-row .ss-actions{opacity:.35;transition:opacity .15s}.ss-row:hover .ss-actions,.ss-row:focus-within .ss-actions{opacity:1}.ss-row:hover .ss-grab{color:#475569;background:#f1f5f9}.ss-grab:active{cursor:grabbing}`}</style>
+    </div>
   );
 }
