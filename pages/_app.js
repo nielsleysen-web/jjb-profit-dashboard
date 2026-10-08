@@ -61,6 +61,7 @@ const CATEGORIES = [
       { href: "/video-editor", label: "Video Editor", icon: "🎬" },
       { href: "/graphic-designer", label: "Graphic Designer", icon: "🎨" },
       { href: "/creative-heatmap", label: "Creative Heatmap", icon: "🧭" },
+      { href: "/script-swipe", label: "Script Swipe", icon: "📝" },
     ],
   },
   {
