@@ -1,6 +1,7 @@
 // pages/script-swipe.js — Script Swipe: drop a competitor's video, get the script line by line, write our version
-// next to each line. Transcription runs in the browser (Whisper via transformers.js): no API key, no upload.
-// Fallback: paste a transcript. Storage: /api/script-swipe (Shopify metaobjects).
+// next to each line. Both columns are editable; lines can be merged, inserted (hooks) and removed. The untouched
+// transcript is kept separately ("Original transcript" panel, with restore). Transcription runs in the browser
+// (Whisper via transformers.js): no API key, no upload. Fallback: paste a transcript. Storage: /api/script-swipe.
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
 
@@ -21,10 +22,11 @@ async function api(body) {
   return d;
 }
 
-function AutoTextarea({ value, onChange, placeholder }) {
+function AutoTextarea({ value, onChange, placeholder, plain }) {
   const ref = useRef(null);
   useEffect(() => { const el = ref.current; if (!el) return; el.style.height = "0px"; el.style.height = Math.max(44, el.scrollHeight + 2) + "px"; }, [value]);
-  return <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", boxSizing: "border-box", border: "1px solid transparent", borderRadius: "8px", padding: "9px 10px", font: "inherit", fontSize: "14px", lineHeight: 1.5, resize: "none", background: value ? "#f0fdf4" : "#fafafa", outline: "none" }} onFocus={(e) => (e.target.style.borderColor = "#0f172a")} onBlur={(e) => (e.target.style.borderColor = "transparent")} />;
+  const bg = plain ? "transparent" : value ? "#f0fdf4" : "#fafafa";
+  return <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ width: "100%", boxSizing: "border-box", border: "1px solid transparent", borderRadius: "8px", padding: "9px 10px", font: "inherit", fontSize: "14px", lineHeight: 1.5, resize: "none", background: bg, outline: "none", color: "inherit" }} onFocus={(e) => { e.target.style.borderColor = "#0f172a"; if (plain) e.target.style.background = "#fafafa"; }} onBlur={(e) => { e.target.style.borderColor = "transparent"; e.target.style.background = bg; }} />;
 }
 
 // ---- Transcriptie in de browser (Whisper via transformers.js, geen API-sleutel) ----
@@ -139,6 +141,7 @@ export default function ScriptSwipe() {
   const [err, setErr] = useState("");
   const [open, setOpen] = useState(null);   // script object
   const [saved, setSaved] = useState("");   // "Saved", "Saving…"
+  const [showOrig, setShowOrig] = useState(false); // panel with the untouched transcript
   const dirty = useRef(false);
   const timer = useRef(null);
   const [narrow, setNarrow] = useState(false);
@@ -149,7 +152,7 @@ export default function ScriptSwipe() {
 
   const openScript = async (id) => {
     setErr("");
-    try { const r = await fetch(`/api/script-swipe?id=${id}`).then((x) => x.json()); if (!r.success) throw new Error(r.error); setOpen(r.script); setSaved(""); }
+    try { const r = await fetch(`/api/script-swipe?id=${id}`).then((x) => x.json()); if (!r.success) throw new Error(r.error); setOpen(r.script); setSaved(""); setShowOrig(false); }
     catch (e) { setErr(e.message); }
   };
 
@@ -158,7 +161,7 @@ export default function ScriptSwipe() {
     setOpen(next); dirty.current = true; setSaved("Unsaved changes");
     clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      try { setSaved("Saving…"); await api({ action: "save", id: next.id, name: next.name, sentences: next.sentences.map((s) => ({ t: s.t, text: s.text, mine: s.mine, added: !!s.added })) }); dirty.current = false; setSaved("Saved"); load(); }
+      try { setSaved("Saving…"); await api({ action: "save", id: next.id, name: next.name, sentences: next.sentences.map((s) => ({ i: s.i, t: s.t, text: s.text, mine: s.mine, added: !!s.added })) }); dirty.current = false; setSaved("Saved"); load(); }
       catch (e) { setSaved("Save failed: " + e.message); }
     }, 1200);
   };
@@ -182,6 +185,12 @@ export default function ScriptSwipe() {
     setTimeout(() => document.querySelector(`[data-row="${pos + 1}"] textarea`)?.focus(), 50);
   };
   const removeRow = (i) => { if (open.sentences.length <= 1) return; schedule({ ...open, sentences: renum(open.sentences.filter((s) => s.i !== i)) }); };
+  const restoreOriginal = async () => {
+    if (!window.confirm("Put the original transcript lines back? Your edits to the Original column, merges and removed lines are undone; 'Our version' stays per line number.")) return;
+    clearTimeout(timer.current); dirty.current = false;
+    try { setSaved("Restoring…"); const d = await api({ action: "save", id: open.id, restore: true }); setOpen(d.script); setSaved("Original restored"); load(); }
+    catch (e) { setSaved("Restore failed: " + e.message); }
+  };
   const copyMine = async () => { const txt = open.sentences.map((s) => s.mine).filter(Boolean).join("\n"); try { await navigator.clipboard.writeText(txt); setSaved("Copied our version to clipboard"); } catch {} };
   const del = async (id) => { if (!window.confirm("Delete this script?")) return; await api({ action: "delete", id }); if (open?.id === id) setOpen(null); load(); };
   const done = open ? open.sentences.filter((s) => s.mine).length : 0;
@@ -219,13 +228,28 @@ export default function ScriptSwipe() {
                 <input value={open.name} onChange={(e) => schedule({ ...open, name: e.target.value })} style={{ ...ui.input, fontWeight: 800, fontSize: 16, flex: 1, minWidth: 220, border: "1px solid transparent", background: "transparent" }} onFocus={(e) => (e.target.style.borderColor = "#e2e6ec")} onBlur={(e) => (e.target.style.borderColor = "transparent")} />
                 <span style={{ fontSize: 12, color: saved.startsWith("Save failed") ? "#991b1b" : "#8a92a3" }}>{saved}</span>
                 {open.source && <a href={open.source} target="_blank" rel="noreferrer" style={ui.btn(false)}>▶ Open video</a>}
+                {open.original?.length > 0 && <button style={ui.btn(showOrig)} onClick={() => setShowOrig((v) => !v)}>Original transcript</button>}
                 <button style={ui.btn(false)} onClick={copyMine} disabled={!done}>Copy our version</button>
                 <form method="POST" action="/api/script-swipe" style={{ display: "inline" }} onSubmit={(e) => { e.preventDefault(); fetch("/api/script-swipe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "csv", id: open.id }) }).then((r) => r.blob()).then((bl) => { const a = document.createElement("a"); a.href = URL.createObjectURL(bl); a.download = `${open.name.replace(/[^\w\-]+/g, "_")}.csv`; a.click(); }); }}>
                   <button style={ui.btn(false)} type="submit">Export CSV</button>
                 </form>
                 <button style={{ ...ui.btn(false), color: "#b91c1c", borderColor: "#fecaca" }} onClick={() => del(open.id)}>Delete</button>
               </div>
-              <div style={{ fontSize: 12, color: "#8a92a3", marginBottom: 10 }}>{open.sentences.length} lines · {done} rewritten · changes save automatically</div>
+              <div style={{ fontSize: 12, color: "#8a92a3", marginBottom: 10 }}>{open.sentences.length} lines · {done} rewritten · changes save automatically · both columns are editable</div>
+              {showOrig && open.original?.length > 0 && (
+                <div data-orig style={{ background: "#f8fafc", border: "1px solid #e2e6ec", borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
+                    <div style={ui.label}>Original transcript · {open.original.length} lines · kept as transcribed, never changes</div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button style={ui.btn(false)} onClick={async () => { try { await navigator.clipboard.writeText(open.original.map((x) => x.text).join("\n")); setSaved("Copied original transcript"); } catch {} }}>Copy</button>
+                      <button style={{ ...ui.btn(false), color: "#b45309", borderColor: "#fde68a" }} onClick={restoreOriginal}>Restore these lines</button>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.6, maxHeight: 260, overflow: "auto" }}>
+                    {open.original.map((x, k) => <div key={k} style={{ display: "flex", gap: 8 }}><span style={{ color: "#8a92a3", fontSize: 12, minWidth: 54, fontVariantNumeric: "tabular-nums", paddingTop: 2 }}>{k + 1}{x.t != null ? ` · ${fmtT(x.t)}` : ""}</span><span>{x.text}</span></div>)}
+                  </div>
+                </div>
+              )}
               <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr 1fr" : "34px 48px 1fr 1fr", gap: "0 10px", alignItems: "start" }}>
                 {!narrow && <div style={ui.label}>#</div>}{!narrow && <div style={ui.label}>Time</div>}<div style={ui.label}>Original</div><div style={ui.label}>Our version</div>
                 {open.sentences.map((s) => (
@@ -248,20 +272,20 @@ function RowFragment({ s, narrow, last, onChange, onText, onMerge, onInsert, onR
       <button style={act} title="Insert an extra line (hook) above this one" onClick={() => onInsert("above")}>+ above</button>
       <button style={act} title="Insert an extra line below this one" onClick={() => onInsert("below")}>+ below</button>
       {!last && <button style={act} title="Join this line with the next one" onClick={onMerge}>⤵ merge with next</button>}
-      <button style={{ ...act, color: "#b91c1c" }} title="Remove this line" onClick={onRemove}>✕</button>
+      <button style={{ ...act, color: "#b91c1c", borderColor: "#fecaca" }} title="Remove this line (both columns)" onClick={onRemove}>✕ remove</button>
     </div>
   );
   return (
     <>
       {!narrow && <div className="ss-num" style={{ ...cell, fontSize: 12.5, color: s.added ? "#d97706" : "#8a92a3", paddingTop: 17 }}>{s.added ? "★" : s.i}</div>}
       {!narrow && <div style={{ ...cell, fontSize: 12.5, color: "#8a92a3", paddingTop: 17, fontVariantNumeric: "tabular-nums" }}>{fmtT(s.t)}</div>}
-      <div className="ss-orig" style={{ ...cell, fontSize: 14, lineHeight: 1.5, paddingTop: s.added ? 8 : 17, paddingRight: 6 }}>
+      <div className="ss-orig" style={{ ...cell, fontSize: 14, lineHeight: 1.5, paddingTop: 8, paddingRight: 6 }}>
         {narrow && <span style={{ color: "#8a92a3", fontSize: 12 }}>{s.added ? "★" : s.i}{s.t != null ? ` · ${fmtT(s.t)}` : ""} · </span>}
-        {s.added ? <AutoTextarea value={s.text} onChange={onText} placeholder="Extra line (hook, transition…) — note on the left is optional" /> : s.text}
+        <AutoTextarea value={s.text} onChange={onText} plain placeholder={s.added ? "Extra line (hook, transition…) — note on the left is optional" : "Original line"} />
         {actions}
       </div>
       <div data-row={s.i} style={cell}><AutoTextarea value={s.mine} onChange={onChange} placeholder={s.added ? "Write the hook…" : "Write our version…"} /></div>
-      <style jsx>{`.ss-orig .ss-actions{opacity:.25;transition:opacity .15s}.ss-orig:hover .ss-actions,.ss-orig:focus-within .ss-actions{opacity:1}`}</style>
+      <style jsx>{`.ss-orig .ss-actions{opacity:.55;transition:opacity .15s}.ss-orig:hover .ss-actions,.ss-orig:focus-within .ss-actions{opacity:1}`}</style>
     </>
   );
 }

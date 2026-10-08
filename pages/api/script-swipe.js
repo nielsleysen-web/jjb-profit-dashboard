@@ -5,7 +5,9 @@
 //   POST { action: "create", name, source?, chunks? | text? }  → zinnen (lib/script-swipe.js) → opgeslagen script
 //     chunks = segmenten met starttijd uit de browser-transcriptie (Whisper in de browser, pages/script-swipe.js)
 //   GET → { scripts: [{ id, name, … }] } · GET ?id= → één script met zinnen
-//   POST { action: "save", id, name?, sentences: [{ t, text, mine, added? }] } (volledige lijst) · { action: "delete", id } · { action: "csv", id }
+//   POST { action: "save", id, name?, sentences: [{ i, t, text, mine, added? }] } (volledige lijst; text/mine allebei bewerkbaar) · { action: "save", id, restore: true } (originele regels terug)
+//   POST { action: "delete", id } · { action: "csv", id }
+//   Elk script bewaart ook "original": het onaangeroerde transcript, los van de bewerkbare regels.
 // Opslag: Shopify metaobject jjb_dashboard_data, handle "swipe-index" (lijst) + "swipe-<id>" (per script).
 // Toegang: admin en Creative Strategist.
 
@@ -96,6 +98,7 @@ export default async function handler(req, res) {
         id, name: clean(b.name, 120) || `Script ${new Date().toISOString().slice(0, 10)}`,
         source: clean(b.source, 500), createdAt: new Date().toISOString(), createdBy: by, updatedAt: new Date().toISOString(),
         sentences,
+        original: sentences.map((x) => ({ t: x.t, text: x.text })), // onaangeroerde kopie van het transcript
       };
       await writeData(`swipe-${id}`, script);
       const idx = (await readData(INDEX)) || { scripts: [] };
@@ -109,11 +112,23 @@ export default async function handler(req, res) {
       const s = await readData(`swipe-${id}`);
       if (!s) return res.status(404).json({ success: false, error: "Not found" });
       if (b.name != null) s.name = clean(b.name, 120) || s.name;
+      // Het oorspronkelijke transcript blijft altijd bewaard (apart van de bewerkbare regels)
+      if (!Array.isArray(s.original) && (s.sentences || []).some((x) => x.text)) s.original = s.sentences.map((x) => ({ t: x.t ?? null, text: x.text }));
       if (Array.isArray(b.sentences)) {
-        // Volledige lijst: regels kunnen samengevoegd, ingevoegd (hooks) of verwijderd zijn → opnieuw nummeren
-        s.sentences = b.sentences.slice(0, 2000).map((x, k) => ({
-          i: k + 1, t: Number.isFinite(x?.t) ? x.t : null, text: clean(x?.text, 4000), mine: clean(x?.mine, 4000), ...(x?.added ? { added: true } : {}),
-        })).filter((x) => x.text || x.mine || x.added);
+        // Volledige lijst: regels kunnen bewerkt, samengevoegd, ingevoegd (hooks) of verwijderd zijn → opnieuw nummeren.
+        // Een rij zonder "text"-veld (oudere pagina die alleen "mine" stuurt) houdt de bestaande originele tekst/tijd op dat nummer.
+        const prev = new Map((s.sentences || []).map((x) => [x.i, x]));
+        s.sentences = b.sentences.slice(0, 2000).map((x, k) => {
+          const old = prev.get(Number(x?.i)) || null;
+          const text = x && "text" in x ? clean(x.text, 4000) : clean(old?.text, 4000);
+          const t = x && "text" in x ? (Number.isFinite(x.t) ? x.t : null) : (old?.t ?? null);
+          return { i: k + 1, t, text, mine: clean(x?.mine, 4000), ...(x?.added ? { added: true } : {}) };
+        }).filter((x) => x.text || x.mine || x.added);
+      }
+      if (b.restore === true && Array.isArray(s.original) && s.original.length) {
+        // Originele regels terugzetten; "onze versie" blijft staan per regelnummer
+        const mine = new Map((s.sentences || []).map((x) => [x.i, x.mine]));
+        s.sentences = s.original.map((x, k) => ({ i: k + 1, t: x.t ?? null, text: x.text, mine: mine.get(k + 1) || "" }));
       }
       s.updatedAt = new Date().toISOString(); s.updatedBy = by;
       await writeData(`swipe-${id}`, s);
