@@ -1,4 +1,5 @@
-// pages/api/paypal/upsell.js — upsell (1+1 gratis, €29,95) na een PayPal-aankoop
+// pages/api/paypal/upsell.js — upsell (1+1 gratis: NeuroTone €29,95 / LubriSense €34,95) na een PayPal-aankoop
+// Het product volgt uit custom_id van het abonnement (lib/paypal.js unpackCustom → lib/checkout.js upsellFor).
 //
 // PayPal-abonnementen hebben geen bewaarde betaalmethode die wij zelf mogen belasten; de klant bevestigt
 // met één tik in de PayPal-knop op /checkout/offerta. Flow (PayPal JS SDK, intent=capture):
@@ -6,8 +7,8 @@
 //   POST { action: "capture", pp: "I-…", orderId: "…" } → capture → 2x NeuroTone op de Shopify-order van de aankoop
 // Alleen binnen 2 uur na de aankoop (UPSELL.windowMin); dubbele upsell wordt via de ordertag tegengehouden.
 
-import { paypalConfigured, pp, ppTag } from "../../../lib/paypal";
-import { UPSELL, PRODUCT_TITLE } from "../../../lib/checkout";
+import { paypalConfigured, pp, ppTag, unpackCustom } from "../../../lib/paypal";
+import { upsellFor, getProduct } from "../../../lib/checkout";
 import { waitForOrder, addUpsellToOrder, findOrderByTag } from "../../../lib/upsell";
 import { releaseStartedMembership } from "../../../lib/upsell-gate";
 import { queueUpsell, dequeueUpsell } from "../../../lib/upsell-queue";
@@ -25,6 +26,9 @@ export default async function handler(req, res) {
 
   try {
     const sub = await pp("get", `/v1/billing/subscriptions/${id}`);
+    const product = getProduct(unpackCustom(sub.custom_id).product);
+    const UPSELL = upsellFor(product.key);
+    const PRODUCT_TITLE = product.title;
     const ageMin = (Date.now() - new Date(sub.create_time || 0).getTime()) / 60000;
     if (ageMin > UPSELL.windowMin) return res.status(410).json({ error: "Questa offerta non è più disponibile." });
     if (sub.status !== "ACTIVE") return res.status(409).json({ error: "Il pagamento del tuo ordine non risulta ancora confermato." });
@@ -64,13 +68,13 @@ export default async function handler(req, res) {
       if (pu.custom_id !== `upsell:${id}` || capture.amount?.value !== eur(UPSELL.price)) return res.status(400).json({ error: "Riferimento non valido" });
 
       // Betaald → wachtrij + mail 1 (met upsellregel), daarna de order aanvullen; mislukt dat, dan doet de cron het later
-      const item = { provider: "paypal", ref: id, tag: ppTag(id), reference: `PayPal ${capture.id}`, email: sub.subscriber?.email_address || "", firstName: sub.subscriber?.name?.given_name || "" };
+      const item = { provider: "paypal", ref: id, tag: ppTag(id), reference: `PayPal ${capture.id}`, email: sub.subscriber?.email_address || "", firstName: sub.subscriber?.name?.given_name || "", product: product.key };
       await queueUpsell(item).catch((e) => console.warn("upsell queue:", e.message));
       await releaseStartedMembership(id, { upsellAdded: true }).catch((e) => console.warn("mail1 release:", e.message));
       try {
         const order = existing || (await waitForOrder(ppTag(id), { tries: 12 }));
         if (!order) { console.warn("paypal/upsell: order nog niet gevonden, in wachtrij", id); return res.status(200).json({ ok: true, pending: true, capture: capture.id }); }
-        const r = await addUpsellToOrder(order, { reference: item.reference, email: order.email || item.email, firstName: order.customer?.firstName || item.firstName });
+        const r = await addUpsellToOrder(order, { reference: item.reference, email: order.email || item.email, firstName: order.customer?.firstName || item.firstName, product: product.key });
         await dequeueUpsell(id).catch(() => {});
         return res.status(200).json({ ok: true, order: r.order.name });
       } catch (e) {

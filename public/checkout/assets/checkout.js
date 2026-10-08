@@ -31,7 +31,7 @@ const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || /^lubrisense$/i.te
 const PRODUCT_CONFIG = {
   lubrisense: {
     PRODUCT_NAME: 'LubriSense',
-    SUCCESS_PATH: '/checkout/grazie', // (nog) geen upsellpagina voor LubriSense
+    SUCCESS_PATH: '/checkout/offerta', // post-purchase upsell 1+1 (€34,95); daarna /checkout/grazie
     MEMBERSHIP_NAME: 'Just Jenny Intimate Care Membership',
     META_CONTENT_IDS: ['10597036163338'],
   },

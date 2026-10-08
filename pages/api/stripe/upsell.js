@@ -1,4 +1,5 @@
-// pages/api/stripe/upsell.js — one-click upsell (1+1 gratis, €29,95) na een Stripe-aankoop
+// pages/api/stripe/upsell.js — one-click upsell (1+1 gratis: NeuroTone €29,95 / LubriSense €34,95) na een Stripe-aankoop
+// Het product volgt uit subscription.metadata.product_key (lib/checkout.js upsellFor).
 //
 // POST { sub: "sub_…" }            → afschrijven op de bewaarde betaalmethode van het abonnement (off-session),
 //                                     daarna 2x NeuroTone aan de Shopify-order van die aankoop toevoegen
@@ -9,7 +10,7 @@
 // Antwoord: { ok, order, pending } · { requires_action, client_secret } · { error }
 
 import Stripe from "stripe";
-import { UPSELL, PRODUCT_TITLE } from "../../../lib/checkout";
+import { upsellFor, getProduct } from "../../../lib/checkout";
 import { waitForOrder, addUpsellToOrder } from "../../../lib/upsell";
 import { releaseStartedMembership } from "../../../lib/upsell-gate";
 import { queueUpsell, dequeueUpsell } from "../../../lib/upsell-queue";
@@ -25,9 +26,12 @@ const invTag = (invoiceId) => `stripe-inv-${invoiceId}`.slice(0, 40);
 async function afterPaid(sub, pi) {
   const inv = sub.latest_invoice && typeof sub.latest_invoice === "object" ? sub.latest_invoice : null;
   const customer = typeof sub.customer === "object" ? sub.customer : null;
+  const productKey = getProduct(sub.metadata?.product_key).key;
+  const UPSELL = upsellFor(productKey);
   const item = {
     provider: "stripe", ref: sub.id, tag: inv ? invTag(inv.id) : "", orderId: sub.metadata?.shopify_order_id || null,
     reference: `Stripe ${pi.id}`, email: customer?.email || "", firstName: String(customer?.shipping?.name || customer?.name || "").split(" ")[0] || "",
+    product: productKey,
   };
   await queueUpsell(item).catch((e) => console.warn("upsell queue:", e.message));
   await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, upsell_pi: pi.id, upsell_qty: String(UPSELL.qty) } }).catch(() => {});
@@ -35,7 +39,7 @@ async function afterPaid(sub, pi) {
   try {
     const order = inv ? await waitForOrder(item.tag, { orderId: item.orderId }) : null;
     if (!order) { console.warn("stripe/upsell: order nog niet gevonden, in wachtrij", sub.id, item.tag); return { pending: true }; }
-    const r = await addUpsellToOrder(order, { reference: item.reference, email: order.email || item.email, firstName: order.customer?.firstName || item.firstName });
+    const r = await addUpsellToOrder(order, { reference: item.reference, email: order.email || item.email, firstName: order.customer?.firstName || item.firstName, product: productKey });
     await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, upsell_pi: pi.id, upsell_qty: String(UPSELL.qty), upsell_order: "1", shopify_order: order.name, shopify_order_id: order.id } }).catch(() => {});
     await dequeueUpsell(sub.id).catch(() => {});
     return { order: r.order?.name || order.name };
@@ -54,6 +58,8 @@ export default async function handler(req, res) {
 
   try {
     const sub = await stripe.subscriptions.retrieve(subId, { expand: ["customer", "default_payment_method", "latest_invoice.payment_intent"] });
+    const product = getProduct(sub.metadata?.product_key);
+    const UPSELL = upsellFor(product.key);
     const ageMin = (Date.now() / 1000 - sub.created) / 60;
     if (ageMin > UPSELL.windowMin) return res.status(410).json({ error: "Questa offerta non è più disponibile." });
     const customer = typeof sub.customer === "object" ? sub.customer : null;
@@ -111,9 +117,9 @@ export default async function handler(req, res) {
           payment_method: pm.id,
           off_session: true,
           confirm: true,
-          description: `${PRODUCT_TITLE} — ${UPSELL.label} (upsell post-acquisto)`,
+          description: `${product.title} — ${UPSELL.label} (upsell post-acquisto)`,
           receipt_email: customer?.email || undefined,
-          metadata: { source: "jjb-checkout", kind: "upsell", upsell: UPSELL.tag, qty: String(UPSELL.qty), subscription_id: sub.id, invoice_id: inv.id, shopify_order: sub.metadata?.shopify_order || "" },
+          metadata: { source: "jjb-checkout", kind: "upsell", upsell: UPSELL.tag, qty: String(UPSELL.qty), subscription_id: sub.id, invoice_id: inv.id, shopify_order: sub.metadata?.shopify_order || "", product_key: product.key },
         },
         { idempotencyKey: `jjup_${sub.id}_${attempt}` }
       );

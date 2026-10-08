@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { SHIPPING, fmtEur, UPSELL, getProduct, pickBundleFor, BUNDLE_GIFT } from "../../lib/checkout";
+import { SHIPPING, fmtEur, upsellFor, getProduct, pickBundleFor, BUNDLE_GIFT } from "../../lib/checkout";
 
 // Enquête (post-purchase quiz). Antwoorden → Google Sheet via /api/checkout-quiz.
 // Vragen aanpassen kan hier; de volgorde moet gelijk blijven aan de kolommen in de Sheet.
@@ -266,6 +266,7 @@ export default function Grazie() {
   const buyAgain = `${CHECKOUT_PATH[product.key] || "/checkout?"}b=`;
   const bundle = pickBundleFor(product, data?.qty || q?.b);
   const ship = SHIPPING[data?.shipping] || SHIPPING.insured;
+  const UPSELL = upsellFor(product.key);
   const hasUpsell = !!(data?.order?.upsell || q?.up);
   const total = (data?.amountPaid ?? bundle.price + ship.price) + (hasUpsell ? UPSELL.price : 0);
   const date = fmtDate(data?.created || Math.floor(Date.now() / 1000));
@@ -335,7 +336,7 @@ export default function Grazie() {
             {q.up && (
               <div className="gz-card" style={{ background: "#eef8f1", borderColor: "#cfe6d6", display: "flex", gap: "10px" }}>
                 <span style={{ fontSize: "16px", lineHeight: "20px", color: GREEN }}>✓</span>
-                <div style={{ fontSize: "14.5px" }}><b>1+1 GRATIS aggiunto:</b> 2 flaconi extra di NeuroTone (29,95 €) partono insieme a questo ordine.</div>
+                <div style={{ fontSize: "14.5px" }}><b>1+1 GRATIS aggiunto:</b> 2 flaconi extra di {product.title} ({fmtEur(UPSELL.price)}) partono insieme a questo ordine.</div>
               </div>
             )}
 
@@ -386,7 +387,7 @@ export default function Grazie() {
               {hasUpsell && (
                 <div style={{ display: "flex", gap: "14px", alignItems: "flex-start", marginTop: "16px" }}>
                   <div style={{ position: "relative", width: "64px", height: "64px", border: "1px solid #e3e3e3", borderRadius: "10px", background: "#f7f7f7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <img src={BUNDLE_IMG[2]} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                    <img src={(IMGS[product.key] || BUNDLE_IMG)[2]} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
                     <span style={{ position: "absolute", top: "-8px", right: "-8px", background: "#111", color: "#fff", borderRadius: "999px", minWidth: "21px", height: "21px", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>1</span>
                   </div>
                   <div style={{ flex: 1, fontSize: "14.5px", paddingTop: "14px" }}>

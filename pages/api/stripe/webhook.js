@@ -199,7 +199,7 @@ export default async function handler(req, res) {
           try {
             const upi = await stripe.paymentIntents.retrieve(subscription.metadata.upsell_pi);
             if (upi.status === "succeeded") {
-              await addUpsellToOrder({ ...order, tags: [], email: customer?.email || inv.customer_email, statusPageUrl: "" }, { reference: `Stripe ${upi.id}`, email: customer?.email || inv.customer_email || "", firstName: String(customer?.shipping?.name || customer?.name || "").split(" ")[0] || "" });
+              await addUpsellToOrder({ ...order, tags: [], email: customer?.email || inv.customer_email, statusPageUrl: "" }, { reference: `Stripe ${upi.id}`, email: customer?.email || inv.customer_email || "", firstName: String(customer?.shipping?.name || customer?.name || "").split(" ")[0] || "", product: subscription.metadata?.product_key || "" });
               await stripe.subscriptions.update(subscription.id, { metadata: { ...subscription.metadata, shopify_order: order.name, shopify_order_id: order.id, upsell_order: "1" } }).catch(() => {});
               upsellAppliedEarly = true;
             }

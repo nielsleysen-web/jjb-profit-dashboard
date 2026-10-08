@@ -1,26 +1,115 @@
-// pages/checkout/offerta.js — post-purchase upsell "1+1 gratis" (€29,95), tussen de betaling en de bedankpagina
+// pages/checkout/offerta.js — post-purchase upsell "1+1 gratis", tussen de betaling en de bedankpagina
 //
 // De checkout stuurt de klant hierheen (return_url / PayPal-redirect) met dezelfde query als de bedankpagina:
-//   Stripe: ?sub=sub_…&b=<bundel>&redirect_status=…   PayPal: ?pp=I-…&b=<bundel>
-// Groene knop (Stripe) → POST /api/stripe/upsell: afschrijving op de bewaarde kaart + 2x NeuroTone op de order.
+//   Stripe: ?sub=sub_…&b=<bundel>&redirect_status=…   PayPal: ?pp=I-…&b=<bundel>   (+ &p=lubrisense voor LubriSense)
+// Groene knop (Stripe) → POST /api/stripe/upsell: afschrijving op de bewaarde kaart + upsell-variant op de order.
 // PayPal → gele PayPal-knop (één tik) → /api/paypal/upsell create/capture → idem.
 // "No grazie" of klaar → /checkout/grazie met dezelfde query (+ &up=1 na een upsell).
-// Zonder ?sub=/?pp= draait de pagina als preview.
+// Zonder ?sub=/?pp= draait de pagina als preview (?p=lubrisense voor de LubriSense-versie).
+// Teksten, prijzen en beelden per product staan in CONTENT; de bedragen moeten gelijk zijn aan upsellFor() in lib/checkout.js.
 
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
 
-const IMG = {
-  logo: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114",
-  product: "/checkout/upsell/neurotone-1plus1.webp",
-  ingredients: "/checkout/upsell/neurotone-ingredienti.webp",
-  badges: "/checkout/upsell/badges-it.webp",
-  seal: "/checkout/upsell/garanzia-90.webp",
-  doctor: "/checkout/upsell/dott-ferretti.jpg",
+const LOGO = "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Layer_1.png?v=1749455114";
+
+const CONTENT = {
+  neurotone: {
+    key: "neurotone",
+    theme: { page: "#f3efd8", peach: "#fde2cc", peach2: "#fdf3ea", terra: "#e0855e" },
+    img: {
+      product: "/checkout/upsell/neurotone-1plus1.webp",
+      ingredients: "/checkout/upsell/neurotone-ingredienti.webp",
+      badges: "/checkout/upsell/badges-it.webp",
+      seal: "/checkout/upsell/garanzia-90.webp",
+      doctor: "/checkout/upsell/dott-ferretti.jpg",
+    },
+    name: "NeuroTone", nameLong: "NeuroTone Drops", nameAlt: "le Neurotone Drops",
+    price: "29,95 €", perBottle: "14,98 €", listPrice: "60 €",
+    doctor: "Dott.ssa Ferretti",
+    deal: "Fai scorta di NeuroTone adesso!",
+    lowest: "È il prezzo più basso in assoluto che vedrai mai per le NeuroTone Drops.",
+    stock2: "puoi fare scorta di NeuroTone aggiungendo",
+    doneLine: "2 flaconi extra di NeuroTone (29,95 €) partiranno insieme al tuo ordine.",
+    guarantee1: "Se il fischio o il ronzio costante nelle tue orecchie non sparisce, non paghi NULLA!",
+    guarantee2: "La tua decisione di investire nelle Neurotone Drops di Just Jenny è completamente senza rischi. E se cambi idea, ti basta chiamare o scrivere un'email all'assistenza clienti per ricevere il rimborso completo, senza domande.",
+    decline: "No grazie. Capisco che questa è la mia unica occasione per accedere a questa offerta speciale, e accetto di perderla. Se invece, come migliaia di persone prima di me, resterò colpito dai risultati che otterrò con NeuroTone, in futuro riordinerò semplicemente a 60 € a flacone, invece dei 14,98 € a flacone che mi vengono offerti oggi. Rinuncio per sempre a questa occasione.",
+    letter: [
+      "Molte persone mi scrivono preoccupate di non riuscire più a trovare le Neurotone Drops in futuro...",
+      "Le Neurotone Drops contengono ingredienti studiati clinicamente come l'Astragalo e la Nitrosigina...",
+      "Ingredienti che arrivano solo dalle fonti più pure, che spesso si trovano dall'altra parte del mondo.",
+      "Sono orgogliosa che il team di Just Jenny non abbia badato a spese per mettere insieme questa formula...",
+      "Compreso viaggiare in lungo e in largo per trovare le forme migliori di ogni ingrediente rigenerante contenuto nelle Neurotone Drops di Just Jenny.",
+      "Ma l'unico rovescio della medaglia nell'usare solo le forme più pure di OGNI ingrediente delle Neurotone Drops di Just Jenny",
+      "è che ogni volta che c'è un conflitto internazionale, una guerra commerciale o anche solo una brutta tempesta...",
+      "Le nostre forniture di molti ingredienti chiave possono bloccarsi...",
+      "E se a questo aggiungi...",
+      "Che i nostri clienti ordinano sempre più flaconi di Neurotone Drops di Just Jenny alla volta...",
+    ],
+    letter2: [
+      "È facile capire perché sono sempre preoccupata che le Neurotone Drops di Just Jenny possano andare esaurite per diversi mesi...",
+      "Ricorda: per ottenere il massimo dalle Neurotone Drops di Just Jenny è importante usarle ogni singolo giorno...",
+      "Anche quando ti accorgi che riesci di nuovo ad addormentarti senza musica di sottofondo, e a seguire una conversazione normale.",
+      "Dopo aver cambiato completamente il tuo udito con le Neurotone Drops di Just Jenny...",
+      "L'ultima cosa che vorresti è smettere di usare le Neurotone Drops e tornare a come stavi prima, giusto?",
+      "Il problema è che queste gocce non si trovano in nessun negozio",
+      "E l'ultima cosa che vorrei è che tu, proprio quando senti finalmente di nuovo il silenzio...",
+      "E non sei più sfinito tutto il tempo...",
+      "...scopra che siamo esauriti.",
+      "Questa è la cattiva notizia.",
+      "La buona notizia è che, grazie alla quantità di Neurotone Drops di Just Jenny che hai appena ordinato...",
+    ],
+  },
+  lubrisense: {
+    key: "lubrisense",
+    theme: { page: "#f6eef1", peach: "#fbe3ea", peach2: "#fdf3f6", terra: "#d9668a" },
+    img: {
+      product: "/checkout/upsell/lubrisense-1plus1.webp",
+      ingredients: "/checkout/upsell/lubrisense-ingredienti.webp",
+      badges: "/checkout/upsell/badges-it-gin-rosa.webp",
+      seal: "/checkout/upsell/garanzia-90-rosa.webp",
+      doctor: "/checkout/upsell/dott-moretti.jpg",
+    },
+    name: "LubriSense", nameLong: "LubriSense", nameAlt: "LubriSense",
+    price: "34,95 €", perBottle: "17,48 €", listPrice: "34,95 €",
+    doctor: "Dott.ssa Moretti",
+    deal: "Fai scorta di LubriSense adesso!",
+    lowest: "È il prezzo più basso in assoluto che vedrai mai per il LubriSense.",
+    stock2: "puoi fare scorta di LubriSense aggiungendo",
+    doneLine: "2 flaconi extra di LubriSense (34,95 €) partiranno insieme al tuo ordine.",
+    guarantee1: "Se la secchezza e il fastidio intimo non migliorano, non paghi NULLA!",
+    guarantee2: "La tua decisione di investire in LubriSense di Just Jenny è completamente senza rischi. E se cambi idea, ti basta chiamare o scrivere un'email all'assistenza clienti per ricevere il rimborso completo, senza domande.",
+    decline: "No grazie. Capisco che questa è la mia unica occasione per accedere a questa offerta speciale, e accetto di perderla. Se invece, come migliaia di donne prima di me, resterò colpita dai risultati che otterrò con LubriSense, in futuro riordinerò semplicemente a 34,95 € a flacone, invece dei 17,48 € a flacone che mi vengono offerti oggi. Rinuncio per sempre a questa occasione.",
+    letter: [
+      "Molte donne mi scrivono preoccupate di non riuscire più a trovare il LubriSense in futuro...",
+      "LubriSense contiene ingredienti selezionati con cura, delicati sulla pelle più sensibile e studiati per ripristinare in modo definitivo la sensibilità dei nervi vaginali...",
+      "Ingredienti che arrivano solo dalle fonti più pure, che spesso si trovano dall'altra parte del mondo.",
+      "Sono orgogliosa che il team di Just Jenny non abbia badato a spese per mettere insieme questa formula...",
+      "Compreso viaggiare in lungo e in largo per trovare le forme migliori di ogni ingrediente contenuto in LubriSense di Just Jenny.",
+      "Ma l'unico rovescio della medaglia nell'usare solo le forme più pure di OGNI ingrediente di LubriSense di Just Jenny",
+      "è che ogni volta che c'è un conflitto internazionale, una guerra commerciale o anche solo una brutta tempesta...",
+      "Le nostre forniture di molti ingredienti chiave possono bloccarsi...",
+      "E se a questo aggiungi...",
+      "Che le nostre clienti ordinano sempre più flaconi di LubriSense di Just Jenny alla volta...",
+    ],
+    letter2: [
+      "È facile capire perché sono sempre preoccupata che LubriSense di Just Jenny possa andare esaurito per diversi mesi...",
+      "Ricorda: per ottenere il massimo da LubriSense di Just Jenny è importante usarlo con costanza, ogni giorno...",
+      "Anche quando ti accorgi che non senti più quella sensazione di secchezza e bruciore durante i rapporti, quella di cui hai sempre voluto liberarti...",
+      "Dopo aver ritrovato la tua vita intima con LubriSense di Just Jenny...",
+      "L'ultima cosa che vorresti è smettere di usarlo e tornare a evitare tuo marito, giusto?",
+      "Il problema è che LubriSense non si trova in nessun negozio",
+      "E l'ultima cosa che vorrei è che tu, proprio quando ti senti finalmente a tuo agio nel ritrovare l'intimità...",
+      "E non senti più come se migliaia di schegge di vetro ti tagliassero durante i rapporti...",
+      "...scopra che siamo esauriti.",
+      "Questa è la cattiva notizia.",
+      "La buona notizia è che, grazie alla quantità di LubriSense di Just Jenny che hai appena ordinato...",
+    ],
+  },
 };
 
 const css = `
-:root{--page:#f3efd8;--peach:#fde2cc;--peach2:#fdf3ea;--terra:#e0855e;--fg:#222;--red:#ff1a1a;--green:#1fb833;--green-d:#179a2a;--fh:"Roboto",Arial,Helvetica,sans-serif;--fb:Arial,Helvetica,sans-serif}
+:root{--fg:#222;--red:#ff1a1a;--green:#1fb833;--green-d:#179a2a;--fh:"Roboto",Arial,Helvetica,sans-serif;--fb:Arial,Helvetica,sans-serif}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--page);color:var(--fg);font-family:var(--fb);line-height:1.5;font-size:17px;-webkit-font-smoothing:antialiased}
 .col{max-width:600px;margin:0 auto;padding:0 0 32px}
@@ -67,32 +156,6 @@ h1,h2,h3{font-family:var(--fh);margin:0;line-height:1.18}
 @media (max-width:640px){.guar{flex-direction:column;align-items:flex-start;gap:18px;padding:34px 22px 30px}.guar h2{font-size:30px;line-height:1.2;margin-bottom:6px}.guar p{font-size:19px;margin:0 0 20px}.guar p:last-child{margin:0 0 6px}.seal{width:230px;height:230px;align-self:center}}
 `;
 
-const LETTER = [
-  "Molte persone mi scrivono preoccupate di non riuscire più a trovare le Neurotone Drops in futuro...",
-  "Le Neurotone Drops contengono ingredienti studiati clinicamente come l'Astragalo e la Nitrosigina...",
-  "Ingredienti che arrivano solo dalle fonti più pure, che spesso si trovano dall'altra parte del mondo.",
-  "Sono orgogliosa che il team di Just Jenny non abbia badato a spese per mettere insieme questa formula...",
-  "Compreso viaggiare in lungo e in largo per trovare le forme migliori di ogni ingrediente rigenerante contenuto nelle Neurotone Drops di Just Jenny.",
-  "Ma l'unico rovescio della medaglia nell'usare solo le forme più pure di OGNI ingrediente delle Neurotone Drops di Just Jenny",
-  "è che ogni volta che c'è un conflitto internazionale, una guerra commerciale o anche solo una brutta tempesta...",
-  "Le nostre forniture di molti ingredienti chiave possono bloccarsi...",
-  "E se a questo aggiungi...",
-  "Che i nostri clienti ordinano sempre più flaconi di Neurotone Drops di Just Jenny alla volta...",
-];
-const LETTER2 = [
-  "È facile capire perché sono sempre preoccupata che le Neurotone Drops di Just Jenny possano andare esaurite per diversi mesi...",
-  "Ricorda: per ottenere il massimo dalle Neurotone Drops di Just Jenny è importante usarle ogni singolo giorno...",
-  "Anche quando ti accorgi che riesci di nuovo ad addormentarti senza musica di sottofondo, e a seguire una conversazione normale.",
-  "Dopo aver cambiato completamente il tuo udito con le Neurotone Drops di Just Jenny...",
-  "L'ultima cosa che vorresti è smettere di usare le Neurotone Drops e tornare a come stavi prima, giusto?",
-  "Il problema è che queste gocce non si trovano in nessun negozio",
-  "E l'ultima cosa che vorrei è che tu, proprio quando senti finalmente di nuovo il silenzio...",
-  "E non sei più sfinito tutto il tempo...",
-  "...scopra che siamo esauriti.",
-  "Questa è la cattiva notizia.",
-  "La buona notizia è che, grazie alla quantità di Neurotone Drops di Just Jenny che hai appena ordinato...",
-];
-
 const Lock = () => (
   <svg width="18" height="20" viewBox="0 0 30 34" aria-hidden="true"><rect x="2" y="14" width="26" height="18" rx="4" fill="#f58a1f" /><path d="M8 14V10a7 7 0 0 1 14 0v4" fill="none" stroke="#f58a1f" strokeWidth="4" /><path d="M10 23l3.5 3.5L20 20" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
@@ -121,8 +184,10 @@ export default function Offerta() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const sub = p.get("sub") || p.get("pp") || "";
-    setQ({ sub, paypal: !!p.get("pp"), search: window.location.search, failed: p.get("redirect_status") === "failed", skip: p.get("skip") === "1" });
+    setQ({ sub, paypal: !!p.get("pp"), search: window.location.search, failed: p.get("redirect_status") === "failed", skip: p.get("skip") === "1", product: CONTENT[String(p.get("p") || "").toLowerCase()] ? String(p.get("p")).toLowerCase() : "neurotone" });
   }, []);
+  const C = CONTENT[q?.product] || CONTENT.neurotone;
+  const themeCss = `:root{--page:${C.theme.page};--peach:${C.theme.peach};--peach2:${C.theme.peach2};--terra:${C.theme.terra}}` + (C.key === "lubrisense" ? ".deal h2{margin-bottom:4px}.deal img{width:66%;max-width:290px;margin:0 auto 8px}" : "");
 
   const grazie = (extra) => {
     if (!q) return;
@@ -234,18 +299,18 @@ export default function Offerta() {
         <meta name="robots" content="noindex" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;0,900;1,700&display=swap" />
-        <style dangerouslySetInnerHTML={{ __html: css }} />
+        <style dangerouslySetInnerHTML={{ __html: themeCss + css }} />
       </Head>
 
       {done ? (
         <div className="col done">
           <div className="ok"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg></div>
           <h1>Aggiunto al tuo ordine!</h1>
-          <p>2 flaconi extra di NeuroTone (29,95 €) partiranno insieme al tuo ordine.<br />Ti portiamo al riepilogo dell’ordine…</p>
+          <p>{C.doneLine}<br />Ti portiamo al riepilogo dell’ordine…</p>
         </div>
       ) : (
         <div className="col">
-          <div className="hdr"><img className="logo" src={IMG.logo} alt="Just Jenny" /></div>
+          {C.key === "neurotone" && <div className="hdr"><img className="logo" src={LOGO} alt="Just Jenny" /></div>}
 
           <div className="blk white wait c">
             <h1>Aspetta… il tuo ordine non è ancora completo!</h1>
@@ -255,38 +320,38 @@ export default function Offerta() {
           <div className="pair">
             <div className="blk peach deal c">
               <h2>Un'offerta speciale solo per i nuovi clienti Just Jenny!</h2>
-              <img src={IMG.product} alt="NeuroTone Drops 1+1 gratis" />
-              <img className="badges" src={IMG.badges} alt="Soddisfazione garantita 90 giorni · Assistenza clienti 24/7 · Approvato dai dermatologi" />
+              <img src={C.img.product} alt={`${C.nameLong} 1+1 gratis`} />
+              <img className="badges" src={C.img.badges} alt={`Soddisfazione garantita 90 giorni · Assistenza clienti 24/7 · ${C.key === "lubrisense" ? "Approvato dai ginecologi" : "Approvato dai dermatologi"}`} />
             </div>
             <div className="blk peach2 stock c">
-              <h2>Fai scorta di NeuroTone adesso!</h2>
+              <h2>{C.deal}</h2>
               <p className="red">Compra 1 flacone, il 2° è GRATIS</p>
-              <p>È il prezzo più basso in assoluto che vedrai mai per le NeuroTone Drops.</p>
+              <p>{C.lowest}</p>
               <p>Ti protegge dai futuri aumenti di prezzo e dagli esaurimenti di scorte…</p>
-              <p>Risparmio: 29,95 € sul prezzo normale.</p>
+              <p>Risparmio: {C.price} sul prezzo normale.</p>
               <p>Leggi di più qui sotto.</p>
               {err && <p className="err">{err}</p>}
               {cta("pp-btn-1")}
-              {!q?.paypal && last4 && <p style={{ fontSize: "12.5px", color: "#555", margin: "0 0 10px" }}>Addebito di 29,95 € sulla stessa carta ····{last4}. Nessun dato da inserire.</p>}
+              {!q?.paypal && last4 && C.key === "neurotone" && <p style={{ fontSize: "12.5px", color: "#555", margin: "0 0 10px" }}>Addebito di {C.price} sulla stessa carta ····{last4}. Nessun dato da inserire.</p>}
               <Secure />
             </div>
           </div>
 
           <div className="blk white letter">
-            <h3>Ciao, sono di nuovo la Dott.ssa Ferretti.</h3>
-            <img className="avatar" src={IMG.doctor} alt="Dott.ssa Ferretti" />
+            <h3>Ciao, sono di nuovo la {C.doctor}.</h3>
+            <img className="avatar" src={C.img.doctor} alt={C.doctor} />
             <div>
-              {LETTER.map((t, i) => <p key={i}>{t}</p>)}
-              <img className="prod" src={IMG.ingredients} alt="NeuroTone Drops" />
-              {LETTER2.map((t, i) => <p key={i}>{t}</p>)}
+              {C.letter.map((t, i) => <p key={i}>{t}</p>)}
+              <img className="prod" src={C.img.ingredients} alt={C.nameLong} />
+              {C.letter2.map((t, i) => <p key={i}>{t}</p>)}
             </div>
           </div>
 
           <div className="blk peach2 stock2 c">
             <p className="small">Solo su questa pagina privata,</p>
-            <h2>puoi fare scorta di NeuroTone aggiungendo</h2>
-            <p className="red">1 flacone al tuo ordine e ricevendone 1 GRATIS.<br />2 flaconi a soli 29,95 €.</p>
-            <p>Risparmi così 29,95 € sul prezzo di listino originale.</p>
+            <h2>{C.stock2}</h2>
+            <p className="red">1 flacone al tuo ordine e ricevendone 1 GRATIS.<br />2 flaconi a soli {C.price}.</p>
+            <p>Risparmi così {C.price} sul prezzo di listino originale.</p>
             <div className="free">
               <svg width="52" height="36" viewBox="0 0 52 36" fill="#222" aria-hidden="true"><rect x="0" y="6" width="30" height="20" rx="2" /><path d="M30 12h11l9 8v6H30z" /><circle cx="10" cy="29" r="5" /><circle cx="10" cy="29" r="2" fill="#fff" /><circle cx="40" cy="29" r="5" /><circle cx="40" cy="29" r="2" fill="#fff" /><text x="4" y="21" fontSize="11" fontWeight="900" fill="#fff" fontFamily="Roboto,Arial">FREE</text></svg>
               <b>In più, la spedizione aggiuntiva è GRATIS: la copriamo noi.</b>
@@ -295,22 +360,22 @@ export default function Offerta() {
             {err && <p className="err">{err}</p>}
             {cta("pp-btn-2")}
             <Secure />
-            <img src={IMG.product} alt="NeuroTone Drops 1+1 gratis" />
-            <img className="badges" src={IMG.badges} alt="" />
+            <img src={C.img.product} alt={`${C.nameLong} 1+1 gratis`} />
+            <img className="badges" src={C.img.badges} alt="" />
           </div>
 
           <div className="blk white guar">
             <div className="gt">
               <h2>Garanzia soddisfatti o rimborsati di 90 giorni <span>Rimborso al 100%</span></h2>
-              <p>Se il fischio o il ronzio costante nelle tue orecchie non sparisce, non paghi NULLA!</p>
-              <p>La tua decisione di investire nelle Neurotone Drops di Just Jenny è completamente senza rischi. E se cambi idea, ti basta chiamare o scrivere un'email all'assistenza clienti per ricevere il rimborso completo, senza domande.</p>
+              <p>{C.guarantee1}</p>
+              <p>{C.guarantee2}</p>
               <p>Nessuna complicazione. Nessun rischio. Solo risultati. Tutto garantito per 3 mesi interi.</p>
             </div>
-            <img className="seal" src={IMG.seal} alt="Soddisfazione garantita 90 giorni" />
+            <img className="seal" src={C.img.seal} alt="Soddisfazione garantita 90 giorni" />
           </div>
 
           <div className="blk peach2 decl">
-            <p><a onClick={() => grazie(false)}>No grazie. Capisco che questa è la mia unica occasione per accedere a questa offerta speciale, e accetto di perderla. Se invece, come migliaia di persone prima di me, resterò colpito dai risultati che otterrò con NeuroTone, in futuro riordinerò semplicemente a 60 € a flacone, invece dei 14,98 € a flacone che mi vengono offerti oggi. Rinuncio per sempre a questa occasione.</a></p>
+            <p><a onClick={() => grazie(false)}>{C.decline}</a></p>
           </div>
         </div>
       )}
