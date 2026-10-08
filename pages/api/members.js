@@ -3,6 +3,8 @@
 // GET /api/members            → { success, members: [...], summary, generatedAt }
 // GET /api/members?email=…    → { success, member, log }   (detail + tijdlijn)
 // GET /api/members?suggestions=1 → { success, suggestions }  (ideeën van leden uit het portaal)
+// Elke variant accepteert ?brand=neurotone|lubrisense (standaard neurotone): de hele request draait dan in
+// dat ledenportaal (lib/portal-brand.js → eigen Redis-prefix, eigen bundels/membership, eigen Shopify-tags).
 //
 // Bronnen: ledenrecords in Redis (portal) · live abonnementen uit /api/subscriptions (Stripe + PayPal) ·
 // Shopify-orders met tag portal-order (gratis producten) en upsell-1plus1.
@@ -14,8 +16,9 @@ import { listSuggestions, getStreak } from "../../lib/portal-home";
 import { redis, getJson, storeConfigured } from "../../lib/portal-store";
 import { shopifyGraphql } from "../../lib/shopify-admin";
 import { normEmail } from "../../lib/portal-auth";
-import { BUNDLES, MEMBERSHIP } from "../../lib/checkout";
+import { getProduct } from "../../lib/checkout";
 import { canMembership } from "../../lib/dashboard-session";
+import { BRANDS, runWithBrand, currentBrand } from "../../lib/portal-brand";
 
 export const config = { maxDuration: 60 };
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
@@ -32,14 +35,15 @@ function getSession(req) {
 }
 
 // Live abonnementenlijst van de Membership-pagina (zelfde deployment, cookie doorgeven)
-async function liveSubscriptions(req) {
+async function liveSubscriptions(req, productKey) {
   try {
     const proto = req.headers["x-forwarded-proto"] || "https";
     const host = req.headers["x-forwarded-host"] || req.headers.host;
     const r = await fetch(`${proto}://${host}/api/subscriptions?range=all`, { headers: { cookie: req.headers.cookie || "" } });
     const d = await r.json();
     const by = {};
-    for (const m of d.members || []) { const e = normEmail(m.email); if (e && !by[e]) by[e] = m; }
+    // Abonnement van dít product heeft voorrang (iemand kan NeuroTone én LubriSense hebben)
+    for (const m of d.members || []) { const e = normEmail(m.email); if (!e) continue; if (!by[e] || (m.product === productKey && by[e].product !== productKey)) by[e] = m; }
     return by;
   } catch (e) { console.warn("members: live subs:", e.message); return {}; }
 }
@@ -47,6 +51,8 @@ async function liveSubscriptions(req) {
 // Shopify: portaalorders (gratis producten) en upsells, gegroepeerd per e-mail
 async function shopifyActivity() {
   const out = { claims: {}, upsell: {} };
+  // Orders van een ander product dragen de product-tag (lib/checkout.js: tag "lubrisense"); NeuroTone-orders hebben die niet
+  const brandTag = currentBrand().key === "neurotone" ? "-tag:lubrisense" : `tag:${currentBrand().key}`;
   try {
     const q = async (query) => {
       const d = await shopifyGraphql(
@@ -55,14 +61,14 @@ async function shopifyActivity() {
       );
       return d.orders.nodes;
     };
-    for (const o of await q("tag:portal-order")) {
+    for (const o of await q(`tag:portal-order ${brandTag}`)) {
       const e = normEmail(o.email); if (!e) continue;
       const slug = (o.customAttributes || []).find((a) => a.key === "portal_product")?.value || "";
       const c = (out.claims[e] ||= { count: 0, last: null, slugs: [], fees: 0 });
       c.count++; c.slugs.push(slug); c.fees += parseFloat(o.totalPriceSet?.shopMoney?.amount || "0");
       if (!c.last || o.createdAt > c.last) c.last = o.createdAt;
     }
-    for (const o of await q("tag:upsell-1plus1")) {
+    for (const o of await q(`tag:upsell-1plus1 ${brandTag}`)) {
       const e = normEmail(o.email); if (!e) continue;
       out.upsell[e] = { order: o.name, at: o.createdAt };
     }
@@ -70,7 +76,7 @@ async function shopifyActivity() {
   return out;
 }
 
-function tenure(m, now) {
+function tenure(m, now, MEMBERSHIP) {
   const start = Date.parse(m.startedAt || m.createdAt || 0) || now;
   const days = Math.max(0, Math.floor((now - start) / DAY));
   const cycle = days < MEMBERSHIP.trialDays ? 0 : 1 + Math.floor((days - MEMBERSHIP.trialDays) / MEMBERSHIP.intervalDays);
@@ -82,7 +88,14 @@ export default async function handler(req, res) {
   const s = getSession(req);
   if (!canMembership(s)) return res.status(401).json({ success: false, error: "No access" });
   if (!storeConfigured()) return res.status(500).json({ success: false, error: "Portal store not configured" });
+  const brandKey = BRANDS[String(req.query.brand || "").toLowerCase()] ? String(req.query.brand).toLowerCase() : "neurotone";
+  return runWithBrand(brandKey, () => brandHandler(req, res, brandKey));
+}
+
+async function brandHandler(req, res, brandKey) {
   const now = Date.now();
+  const product = getProduct(BRANDS[brandKey].productKey);
+  const BUNDLES = product.bundles, MEMBERSHIP = product.membership;
 
   try {
     // ---- ideeën van leden ----
@@ -102,7 +115,7 @@ export default async function handler(req, res) {
 
     // ---- lijst ----
     const emails = (await listMemberEmails()).map(normEmail).filter(Boolean);
-    const [live, shop] = await Promise.all([liveSubscriptions(req), shopifyActivity()]);
+    const [live, shop] = await Promise.all([liveSubscriptions(req, product.key), shopifyActivity()]);
     const members = [];
     for (let i = 0; i < emails.length; i += 20) {
       const chunk = emails.slice(i, i + 20);
@@ -115,7 +128,7 @@ export default async function handler(req, res) {
       for (const { e, m, lib, gift, regift } of recs) {
         if (!m) continue;
         const L = live[e];
-        const t = tenure(m, now);
+        const t = tenure(m, now, MEMBERSHIP);
         const claims = shop.claims[e];
         const rg = regiftView(regift);
         const status = L?.status || ({ trialing: "trial", active: "active", cancelled: "canceled", past_due: "problem" }[m.status] || m.status || "trial");
@@ -153,7 +166,7 @@ export default async function handler(req, res) {
       withUpsell: members.filter((m) => !!m.upsell).length,
       liveSource: Object.keys(live).length > 0,
     };
-    return res.status(200).json({ success: true, members, summary, generatedAt: new Date(now).toISOString() });
+    return res.status(200).json({ success: true, brand: brandKey, product: product.title, members, summary, generatedAt: new Date(now).toISOString() });
   } catch (e) {
     console.error("members:", e.message);
     return res.status(500).json({ success: false, error: e.message });

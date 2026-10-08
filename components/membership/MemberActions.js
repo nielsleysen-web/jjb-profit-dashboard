@@ -144,14 +144,14 @@ export function CancellationInfo({ c, compact }) {
 }
 
 // "Send magic link" — sends the customer a fresh login link for the member portal
-export function MagicLinkButton({ email, small }) {
+export function MagicLinkButton({ email, small, brand }) {
   const [state, setState] = useState("idle"); // idle | busy | sent | error
   const [err, setErr] = useState("");
   const send = async (e) => {
     e.stopPropagation();
     if (state === "busy") return;
     setState("busy"); setErr("");
-    try { await act({ action: "magicLink", email }); setState("sent"); setTimeout(() => setState("idle"), 4000); }
+    try { await act({ action: "magicLink", email, brand }); setState("sent"); setTimeout(() => setState("idle"), 4000); }
     catch (x) { setErr(x.message); setState("error"); }
   };
   const label = state === "busy" ? "Sending…" : state === "sent" ? "✓ Sent" : "Send magic link";

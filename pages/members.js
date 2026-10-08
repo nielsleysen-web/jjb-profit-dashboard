@@ -1,5 +1,6 @@
 // pages/members.js — Members: who is a member, since when, who logs in, who orders (fully in English).
 // Source: /api/members (Redis member records + live Stripe/PayPal + Shopify portal orders).
+// Brand switch (NeuroTone / LubriSense): each product has its own member portal and member records (?brand=…).
 // Customer service can resend the portal login link ("Send magic link") per member.
 import { useState, useEffect, useMemo } from "react";
 import { MagicLinkButton, CancellationInfo } from "../components/membership/MemberActions";
@@ -19,6 +20,9 @@ const fmtDT = (s) => (s ? new Date(s).toLocaleString("en-GB", { day: "2-digit", 
 const ago = (s) => { if (!s) return "never"; const d = Math.floor((Date.now() - Date.parse(s)) / 86400000); return d === 0 ? "today" : d === 1 ? "yesterday" : `${d} d ago`; };
 const STATUS = { trial: ["Trial", "#fef9c3", "#854d0e"], active: ["Paying", "#dcfce7", "#166534"], canceled: ["Cancelled", "#f1f5f9", "#64748b"], problem: ["Payment issue", "#fee2e2", "#991b1b"], paused: ["Paused", "#e0e7ff", "#3730a3"] };
 const Pill = ({ s, stop }) => { const [t, bg, fg] = STATUS[s] || [s, "#f1f5f9", "#64748b"]; return <span style={{ background: bg, color: fg, fontWeight: 700, fontSize: "11px", padding: "3px 8px", borderRadius: "999px" }}>{t}{stop ? " · ends" : ""}</span>; };
+
+const BRAND_OPTS = [["neurotone", "NeuroTone"], ["lubrisense", "LubriSense"]];
+const BRAND_SUB = { neurotone: "members.getjustjenny.com", lubrisense: "intimate.getjustjenny.com" };
 
 const FILTERS = [
   ["all", "All"], ["trial", "Trial"], ["active", "Paying"], ["paused", "Paused"], ["problem", "Payment issue"], ["canceled", "Cancelled"],
@@ -72,9 +76,9 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-function Detail({ email, row, onClose }) {
+function Detail({ email, row, brand, onClose }) {
   const [d, setD] = useState(null);
-  useEffect(() => { setD(null); fetch(`/api/members?email=${encodeURIComponent(email)}`).then((r) => r.json()).then(setD).catch(() => setD({ success: false })); }, [email]);
+  useEffect(() => { setD(null); fetch(`/api/members?email=${encodeURIComponent(email)}&brand=${brand}`).then((r) => r.json()).then(setD).catch(() => setD({ success: false })); }, [email, brand]);
   const m = d?.member;
   const r = row || {};
   const addr = m?.address ? [m.address.address1, [m.address.zip, m.address.city].filter(Boolean).join(" "), m.address.province ? `(${m.address.province})` : ""].filter(Boolean).join(", ") : null;
@@ -88,7 +92,7 @@ function Detail({ email, row, onClose }) {
             <div style={{ fontSize: 12.5, color: "#8a92a3", marginBottom: 6 }}>{email}</div>
             {r.status && <Pill s={r.status} stop={r.cancelAtPeriodEnd} />}
           </div>
-          <span style={{ display: "flex", gap: 8, marginRight: 56 }}><MagicLinkButton email={email} /><button style={ui.btn(false)} onClick={onClose}>Close</button></span>
+          <span style={{ display: "flex", gap: 8, marginRight: 56 }}><MagicLinkButton email={email} brand={brand} /><button style={ui.btn(false)} onClick={onClose}>Close</button></span>
         </div>
         {!d && <div style={{ color: "#8a92a3" }}>Loading…</div>}
         {d && !d.success && <div style={{ color: "#991b1b" }}>Not found.</div>}
@@ -165,10 +169,19 @@ export default function Members() {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState(["startedAt", -1]);
   const [open, setOpen] = useState(null);
+  const [brand, setBrand] = useState("neurotone");
   const now = Date.now();
 
-  const load = () => { setData(null); setErr(""); fetch("/api/members").then((r) => r.json()).then((d) => (d.success ? setData(d) : setErr(d.error || "Error"))).catch((e) => setErr(e.message)); };
-  useEffect(load, []);
+  const load = () => { setData(null); setErr(""); fetch(`/api/members?brand=${brand}`).then((r) => r.json()).then((d) => (d.success ? setData(d) : setErr(d.error || "Error"))).catch((e) => setErr(e.message)); };
+  useEffect(load, [brand]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Remember the last chosen product (per browser); ?brand=lubrisense in the URL wins
+  useEffect(() => {
+    const u = new URLSearchParams(window.location.search).get("brand");
+    let saved = null; try { saved = localStorage.getItem("jj-members-brand"); } catch {}
+    const b = BRAND_OPTS.some(([k]) => k === u) ? u : BRAND_OPTS.some(([k]) => k === saved) ? saved : null;
+    if (b && b !== "neurotone") setBrand(b);
+  }, []);
+  const pickBrand = (b) => { setBrand(b); setOpen(null); setFilter("all"); try { localStorage.setItem("jj-members-brand", b); } catch {} };
   // Deep link from the Membership Dashboard: /members?email=… opens that member's timeline right away
   useEffect(() => { const e = new URLSearchParams(window.location.search).get("email"); if (e) { setOpen(e.toLowerCase()); setQ(e); } }, []);
 
@@ -181,14 +194,19 @@ export default function Members() {
   }, [data, filter, q, sort, now]);
 
   const S = data?.summary;
-  const download = () => { const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `members-${filter}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); };
+  const download = () => { const blob = new Blob([toCsv(rows)], { type: "text/csv;charset=utf-8" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `members-${brand}-${filter}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); };
   const th = (k, label) => <th key={k} style={ui.th} onClick={() => setSort(([pk, d]) => [k, pk === k ? -d : -1])}>{label}{sort[0] === k ? (sort[1] > 0 ? " ↑" : " ↓") : ""}</th>;
 
   return (
     <div style={ui.page}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
-        <div><h1 style={{ fontSize: "22px", fontWeight: 800, margin: 0 }}>Members</h1><div style={{ fontSize: "12.5px", color: "#8a92a3", marginTop: "3px" }}>Who is a member, since when, who logs in, who orders · member portal + Stripe/PayPal + Shopify{data?.generatedAt ? ` · updated ${fmtDT(data.generatedAt)}` : ""}</div></div>
-        <div style={{ display: "flex", gap: 8 }}><button style={ui.btn(false)} onClick={load}>Refresh</button><button style={ui.btn(true)} onClick={download} disabled={!rows.length}>Export CSV ({rows.length})</button></div>
+        <div><h1 style={{ fontSize: "22px", fontWeight: 800, margin: 0 }}>Members</h1><div style={{ fontSize: "12.5px", color: "#8a92a3", marginTop: "3px" }}>Who is a member, since when, who logs in, who orders · {BRAND_SUB[brand]} + Stripe/PayPal + Shopify{data?.generatedAt ? ` · updated ${fmtDT(data.generatedAt)}` : ""}</div></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "inline-flex", border: "1px solid #e2e6ec", borderRadius: "999px", padding: 3, background: "#fff", marginRight: 6 }}>
+            {BRAND_OPTS.map(([k, l]) => <button key={k} onClick={() => pickBrand(k)} style={{ padding: "6px 14px", borderRadius: "999px", border: "none", background: brand === k ? "#0f172a" : "transparent", color: brand === k ? "#fff" : "#334155", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}>{l}</button>)}
+          </div>
+          <button style={ui.btn(false)} onClick={load}>Refresh</button><button style={ui.btn(true)} onClick={download} disabled={!rows.length}>Export CSV ({rows.length})</button>
+        </div>
       </div>
       {err && <div style={{ ...ui.card, padding: 14, color: "#991b1b", marginBottom: 14 }}>{err}</div>}
       {!data && !err && <div style={{ color: "#8a92a3" }}>Loading… (Stripe, PayPal and Shopify are fetched live)</div>}
@@ -214,14 +232,14 @@ export default function Members() {
                   {rows.map((m) => (
                     <tr key={m.email} onClick={() => setOpen(m.email)} style={{ cursor: "pointer" }} onMouseEnter={(e) => (e.currentTarget.style.background = "#f8fafc")} onMouseLeave={(e) => (e.currentTarget.style.background = "")}>
                       <td style={ui.td}><div style={{ fontWeight: 700 }}>{m.name || "—"}</div><div style={{ fontSize: 11.5, color: "#8a92a3" }}>{m.email}{m.firstOrder ? ` · ${m.firstOrder}` : ""}</div></td>
-                      <td style={ui.td} onClick={(e) => e.stopPropagation()}><MagicLinkButton email={m.email} small /></td>
+                      <td style={ui.td} onClick={(e) => e.stopPropagation()}><MagicLinkButton email={m.email} small brand={brand} /></td>
                       <td style={ui.td}>{m.provider}</td>
                       <td style={ui.td}><Pill s={m.status} stop={m.cancelAtPeriodEnd} />{m.status === "paused" && m.pausedUntil ? <div style={{ fontSize: 11, color: "#8a92a3", marginTop: 3 }}>until {fmtD(m.pausedUntil)}</div> : null}</td>
                       <td style={ui.td}>{fmtD(m.trialEnd)}</td>
                       <td style={ui.td}>{eur(m.membershipRevenue)}</td>
                     </tr>
                   ))}
-                  {rows.length === 0 && <tr><td colSpan={COLS.length} style={{ ...ui.td, color: "#8a92a3" }}>No members in this selection.</td></tr>}
+                  {rows.length === 0 && <tr><td colSpan={COLS.length} style={{ ...ui.td, color: "#8a92a3" }}>{data?.members?.length ? "No members in this selection." : `No ${BRAND_OPTS.find(([k]) => k === brand)?.[1]} members yet.`}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -229,16 +247,16 @@ export default function Members() {
           </div>
         </>
       )}
-      <Suggestions />
-      {open && <Detail email={open} row={data?.members?.find((x) => x.email === open)} onClose={() => setOpen(null)} />}
+      <Suggestions brand={brand} />
+      {open && <Detail email={open} brand={brand} row={data?.members?.find((x) => x.email === open)} onClose={() => setOpen(null)} />}
     </div>
   );
 }
 
 // Ideas/requests members submit via "Hai un'idea…?" in the portal
-function Suggestions() {
+function Suggestions({ brand }) {
   const [list, setList] = useState(null);
-  useEffect(() => { fetch("/api/members?suggestions=1").then((r) => r.json()).then((d) => setList(d.success ? d.suggestions : [])).catch(() => setList([])); }, []);
+  useEffect(() => { setList(null); fetch(`/api/members?suggestions=1&brand=${brand}`).then((r) => r.json()).then((d) => setList(d.success ? d.suggestions : [])).catch(() => setList([])); }, [brand]);
   return (
     <div style={{ ...ui.card, padding: "18px 22px", marginTop: "20px" }}>
       <div style={{ fontWeight: 800, fontSize: "15px" }}>💡 Ideas from members</div>

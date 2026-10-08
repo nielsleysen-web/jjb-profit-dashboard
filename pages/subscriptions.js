@@ -142,7 +142,7 @@ function DueToday({ rows }) {
               return (
                 <tr key={i}>
                   <td style={ui.td}>{fmtT(r.at)}</td>
-                  <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "180px" }}><a href={`/members?email=${encodeURIComponent(r.member.email)}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{r.member.name || r.member.email || "—"}</a> <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.member.email}{r.member.order ? ` · ${r.member.order}` : ""}</span></td>
+                  <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "180px" }}><a href={`/members?email=${encodeURIComponent(r.member.email)}&brand=${r.member.product || "neurotone"}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{r.member.name || r.member.email || "—"}</a> <span style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.member.email}{r.member.order ? ` · ${r.member.order}` : ""}</span></td>
                   <td style={ui.td}>{r.member.provider === "paypal" ? "PayPal" : "Card"}</td>
                   <td style={ui.td}>Rebill {r.cycle}</td>
                   <td style={ui.td}><Chip tone={tone}>{t}{r.type === "failed" && r.reason ? ` · ${r.reason}` : ""}{r.type === "cancelled" && r.canceledAt ? ` · ${fmtT(r.canceledAt)}` : ""}</Chip>{r.type === "paid" && r.recovered ? <> <Chip tone="blue">recovered</Chip></> : null}</td>

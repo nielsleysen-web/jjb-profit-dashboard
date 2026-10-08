@@ -19,7 +19,7 @@ import Stripe from "stripe";
 import { paidAmount } from "../../lib/stripe-dunning";
 import { MEMBERSHIP } from "../../lib/checkout";
 import { shopifyGraphql } from "../../lib/shopify-admin";
-import { pp, paypalConfigured } from "../../lib/paypal";
+import { pp, paypalConfigured, unpackCustom } from "../../lib/paypal";
 import { canMembership } from "../../lib/dashboard-session";
 import { getPauses, getCancellations } from "../../lib/membership-actions";
 
@@ -145,6 +145,7 @@ async function stripeData() {
       cancelAtPeriodEnd: !!s.cancel_at_period_end, canceledAt: iso((s.canceled_at || s.ended_at || 0) * 1000),
       cancelReason: s.cancellation_details?.reason || null, cancelFeedback: s.cancellation_details?.feedback || null, cancelAt: iso((s.cancel_at || 0) * 1000),
       email: c.email || "", name: c.shipping?.name || c.name || "", cycles: 0, membershipRevenue: 0, rebillAt: [],
+      product: s.metadata?.product_key || "neurotone",
     });
   }
   const rebills = [], failed = [], pending = [];
@@ -190,6 +191,7 @@ async function paypalData(ids) {
         canceledAt: ended ? s.status_update_time || null : null, cancelReason: ended ? (s.status === "EXPIRED" ? "expired" : s.status_change_note ? "note" : "cancellation_requested") : null, cancelFeedback: s.status_change_note || null,
         email: s.subscriber?.email_address || "", name: [s.subscriber?.name?.given_name, s.subscriber?.name?.surname].filter(Boolean).join(" "),
         cycles, membershipRevenue: cycles * PRICE, rebillAt,
+        product: unpackCustom(s.custom_id).product || "neurotone",
       });
     }
   }
@@ -422,7 +424,7 @@ export default async function handler(req, res) {
       if (list.length === 0 && k > 3) { cycleRows.pop(); break; }
     }
 
-    const who = (m) => ({ id: m.id, name: m.name, email: m.email, provider: m.provider, order: m.order?.name || "", orderId: m.order?.id || "", status: m.status });
+    const who = (m) => ({ id: m.id, name: m.name, email: m.email, provider: m.provider, order: m.order?.name || "", orderId: m.order?.id || "", status: m.status, product: m.product || "neurotone" });
     /* ---- projectie komende 7 dagen: rebills die al gepland staan + de nieuwe subscribers van vandaag ----
        venster = nu t/m het einde van dag 7 (Brussel), zodat de proef van wie vandaag instapte (rebill op dag 7) er volledig in valt */
     const todayStr = dayStr(now);
