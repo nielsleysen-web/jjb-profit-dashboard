@@ -1268,6 +1268,7 @@ const COPY_GIFT = {
   bonusName: '1x Neurotone Drops',
   bonusVariant: 'In omaggio',
 };
+if (PRODUCT_KEY === 'lubrisense') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName = '1x LubriSense'; }
 const GIFT = params.get('gift') === '1';
 const BONUS = params.get('bonus') === '1'; // mail 2: 1 flacone in omaggio (+ regalo segreto)
 const _sentEmails = new Set();

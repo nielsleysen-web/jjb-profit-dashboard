@@ -133,7 +133,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   // Bundel met gratis cadeau (e-book, €0) → zelfde regel als de oude Shopify-cartlink
   if (bundle.gift) { order.lineItems.push(giftLineItem()); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
   const bonus = product.abandoned ? await hasCheckoutBonus(order.email) : false;
-  if (bonus) { order.lineItems.push(bonusLineItem()); order.tags.push("abandon-bonus"); order.note += " + 1x NeuroTone in omaggio (abandoned checkout)"; }
+  if (bonus) { order.lineItems.push(bonusLineItem(product.key)); order.tags.push("abandon-bonus"); order.note += ` + 1x ${product.title} in omaggio (abandoned checkout)`; }
 
   const d = await shopifyGraphql(
     `mutation Create($order: OrderCreateOrderInput!, $options: OrderCreateOptionsInput) {
