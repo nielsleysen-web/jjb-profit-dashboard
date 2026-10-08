@@ -1,20 +1,19 @@
-// pages/api/script-swipe.js — Script Swipe: video van een concurrent → transcript zin voor zin → eigen versie ernaast.
+// pages/api/script-swipe.js — Script Swipe: concurrent-video → transcript (in de browser) → zin voor zin → eigen versie ernaast.
+// Geen externe transcriptiedienst of API-sleutel nodig.
 //
 // Flow (pages/script-swipe.js):
-//   1. POST { action: "stage", filename, mimeType, size }  → Shopify staged upload (de browser uploadt het bestand
-//      rechtstreeks naar die URL, dus geen limiet van de API-route)
-//   2. POST { action: "transcribe", resourceUrl?, url?, name }  → bestand registreren in Shopify Files (CDN-URL) of een
-//      publieke video-URL gebruiken → ElevenLabs Scribe (speech-to-text, woordtijden) → zinnen → opgeslagen script
-//   3. GET → { scripts: [{ id, name, … }] } · GET ?id= → één script met zinnen
-//      POST { action: "save", id, name?, sentences: [{ mine }] }  · POST { action: "delete", id }
+//   POST { action: "create", name, source?, chunks? | text? }  → zinnen (lib/script-swipe.js) → opgeslagen script
+//     chunks = segmenten met starttijd uit de browser-transcriptie (Whisper in de browser, pages/script-swipe.js)
+//   GET → { scripts: [{ id, name, … }] } · GET ?id= → één script met zinnen
+//   POST { action: "save", id, name?, sentences: [{ mine }] } · { action: "delete", id } · { action: "csv", id }
 // Opslag: Shopify metaobject jjb_dashboard_data, handle "swipe-index" (lijst) + "swipe-<id>" (per script).
 // Toegang: admin en Creative Strategist.
 
 import axios from "axios";
 import crypto from "crypto";
-import { splitSentences } from "../../lib/script-swipe";
+import { splitText, splitChunks } from "../../lib/script-swipe";
 
-export const config = { api: { bodyParser: { sizeLimit: "2mb" } }, maxDuration: 300 };
+export const config = { api: { bodyParser: { sizeLimit: "2mb" } } };
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 
@@ -66,19 +65,6 @@ const INDEX = "swipe-index";
 const uid = () => crypto.randomBytes(6).toString("hex");
 const clean = (v, max = 200) => String(v || "").trim().slice(0, max);
 
-async function transcribe(url) {
-  const b = "----jjbstt" + crypto.randomBytes(6).toString("hex");
-  const field = (name, value) => Buffer.from(`--${b}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`);
-  const body = Buffer.concat([field("model_id", "scribe_v1"), field("cloud_storage_url", url), field("timestamps_granularity", "word"), field("diarize", "false"), field("tag_audio_events", "false"), Buffer.from(`--${b}--\r\n`)]);
-  const r = await axios.post("https://api.elevenlabs.io/v1/speech-to-text", body, {
-    headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY, "Content-Type": `multipart/form-data; boundary=${b}` },
-    maxBodyLength: Infinity, timeout: 280000,
-  });
-  return r.data || {};
-}
-
-const fmtTime = (s) => (s == null ? "" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`);
-
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   const session = getSession(req);
@@ -94,57 +80,26 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, script: s });
       }
       const idx = (await readData(INDEX)) || { scripts: [] };
-      return res.status(200).json({ success: true, scripts: idx.scripts || [], elevenlabs: !!process.env.ELEVENLABS_API_KEY });
+      return res.status(200).json({ success: true, scripts: idx.scripts || [] });
     }
     if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method not allowed" });
     const b = req.body || {};
 
-    if (b.action === "stage") {
-      const filename = clean(b.filename, 120).replace(/[^\w.\-]+/g, "_") || "video.mp4";
-      const mimeType = clean(b.mimeType, 80) || "video/mp4";
-      const d = await shopifyGraphql(
-        `mutation Stage($input: [StagedUploadInput!]!) { stagedUploadsCreate(input: $input) { stagedTargets { url resourceUrl parameters { name value } } userErrors { message } } }`,
-        { input: [{ filename, mimeType, resource: "FILE", fileSize: String(Math.max(1, parseInt(b.size, 10) || 1)), httpMethod: "POST" }] }
-      );
-      const errs = d?.stagedUploadsCreate?.userErrors || [];
-      if (errs.length) throw new Error(errs.map((e) => e.message).join(", "));
-      const t = d?.stagedUploadsCreate?.stagedTargets?.[0];
-      if (!t) throw new Error("Could not create upload target");
-      return res.status(200).json({ success: true, target: t });
-    }
-
-    if (b.action === "transcribe") {
-      if (!process.env.ELEVENLABS_API_KEY) return res.status(500).json({ success: false, error: "ELEVENLABS_API_KEY ontbreekt" });
-      let url = clean(b.url, 2000);
-      if (b.resourceUrl) {
-        // Geüpload bestand registreren → publieke CDN-URL
-        const created = await shopifyGraphql(`mutation Create($files: [FileCreateInput!]!) { fileCreate(files: $files) { files { id } userErrors { message } } }`, { files: [{ originalSource: clean(b.resourceUrl, 2000), contentType: "FILE" }] });
-        const errs = created?.fileCreate?.userErrors || [];
-        if (errs.length) throw new Error(errs.map((e) => e.message).join(", "));
-        const fileId = created?.fileCreate?.files?.[0]?.id;
-        url = "";
-        for (let i = 0; i < 25 && !url; i++) {
-          await new Promise((r) => setTimeout(r, i === 0 ? 500 : 1200));
-          const node = await shopifyGraphql(`query Get($id: ID!) { node(id: $id) { ... on GenericFile { url fileStatus } } }`, { id: fileId });
-          if (node?.node?.fileStatus === "FAILED") throw new Error("Shopify could not process this file");
-          url = node?.node?.url || "";
-        }
-        if (!url) throw new Error("File is still processing, try again in a minute");
-      }
-      if (!/^https?:\/\//i.test(url)) return res.status(400).json({ success: false, error: "Upload a video or paste a public video URL" });
-
-      const stt = await transcribe(url);
-      const sentences = splitSentences(stt.words, stt.text);
-      if (!sentences.length) return res.status(422).json({ success: false, error: "No speech found in this video" });
+    if (b.action === "create") {
+      const text = String(b.text || "").slice(0, 60000);
+      // chunks: [{ t, text }] van de browser-transcriptie (Whisper, per segment met starttijd); anders geplakte tekst
+      const chunks = Array.isArray(b.chunks) ? b.chunks.slice(0, 2000).map((c) => ({ t: Number.isFinite(c?.t) ? Math.round(c.t * 10) / 10 : null, text: String(c?.text || "").slice(0, 2000) })) : null;
+      const sentences = chunks ? splitChunks(chunks) : splitText(text);
+      if (!sentences.length) return res.status(400).json({ success: false, error: "Paste the transcript first" });
       const id = uid();
       const script = {
         id, name: clean(b.name, 120) || `Script ${new Date().toISOString().slice(0, 10)}`,
-        source: url, language: stt.language_code || "", createdAt: new Date().toISOString(), createdBy: by, updatedAt: new Date().toISOString(),
+        source: clean(b.source, 500), createdAt: new Date().toISOString(), createdBy: by, updatedAt: new Date().toISOString(),
         sentences,
       };
       await writeData(`swipe-${id}`, script);
       const idx = (await readData(INDEX)) || { scripts: [] };
-      idx.scripts = [{ id, name: script.name, language: script.language, createdAt: script.createdAt, createdBy: by, count: sentences.length, done: 0 }, ...(idx.scripts || [])].slice(0, 300);
+      idx.scripts = [{ id, name: script.name, createdAt: script.createdAt, createdBy: by, count: sentences.length, done: 0 }, ...(idx.scripts || [])].slice(0, 300);
       await writeData(INDEX, idx);
       return res.status(200).json({ success: true, script });
     }
@@ -179,6 +134,7 @@ export default async function handler(req, res) {
       const s = await readData(`swipe-${clean(b.id, 40)}`);
       if (!s) return res.status(404).json({ success: false, error: "Not found" });
       const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const fmtTime = (t) => (t == null ? "" : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`);
       const lines = [["#", "Time", "Original", "Our version"].map(esc).join(","), ...s.sentences.map((x) => [x.i, fmtTime(x.t), x.text, x.mine].map(esc).join(","))];
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${s.name.replace(/[^\w\-]+/g, "_")}.csv"`);
