@@ -5,13 +5,21 @@
 // zodat ook halve antwoorden bewaard blijven. Bij "completed" komen de antwoorden ook als
 // notitie op de Shopify-order.
 //
-// POST { sub, sid, first, answers: [..], questions: [..] }
+// POST { sub, sid, first, answers: [..], questions: [..], product? }
+// POST { standalone: true, product, sid, first, answers, questions }  ← losse pagina /sondaggio/<product> (anoniem, geen sub)
+//   product "lubrisense" → zelfde Sheet, tabblad "LubriSense" (wordt aangemaakt met kopregel) + Klaviyo-event
+//   "LubriSense Quiz Completed" bij afronding (om de herinneringsmail in Klaviyo te stoppen).
 // Env: QUIZ_SHEET_ID (ID uit de Sheet-URL), GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY, STRIPE_SECRET_KEY
 
 import Stripe from "stripe";
 import { upsertRow } from "../../lib/gsheets";
 import { shopifyGraphql, findOrderForInvoice } from "../../lib/shopify-admin";
 import { paypalConfigured, pp, findOrderForPaypal } from "../../lib/paypal";
+import { trackEvent, klaviyoConfigured } from "../../lib/klaviyo";
+import { getProduct } from "../../lib/checkout";
+
+// Per product: tabblad in de Sheet (leeg = eerste tabblad, zoals NeuroTone altijd al) + Klaviyo-prefix
+const QUIZ_TAB = { neurotone: "", lubrisense: "LubriSense" };
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 const MAX_Q = 11;
@@ -35,21 +43,29 @@ export default async function handler(req, res) {
   const answers = (Array.isArray(b.answers) ? b.answers : []).slice(0, MAX_Q).map((a) => String(a || "").trim().slice(0, 2000));
   const questions = (Array.isArray(b.questions) ? b.questions : []).slice(0, MAX_Q).map((q) => String(q || "").slice(0, 300));
   const first = Number(b.first) || Date.now();
+  const product = getProduct(b.product);
+  const tab = QUIZ_TAB[product.key] || "";
   const isPaypal = /^I-[A-Z0-9]{6,}$/.test(subId);
-  if ((!isPaypal && !/^sub_[A-Za-z0-9]{8,}$/.test(subId)) || !/^[0-9a-f]{18}$/.test(sid) || !answers.length) {
+  const standalone = b.standalone === true && product.key !== "neurotone"; // NeuroTone: la-tua-esperienza.vercel.app
+  if ((!standalone && !isPaypal && !/^sub_[A-Za-z0-9]{8,}$/.test(subId)) || !/^[0-9a-f]{18}$/.test(sid) || !answers.length) {
     return res.status(400).json({ error: "Richiesta non valida" });
   }
+  if (standalone && answers.some((a) => a.length > 2000)) return res.status(400).json({ error: "Richiesta non valida" });
 
   try {
     // Alleen echte, recente bestellingen mogen schrijven (Stripe of PayPal)
-    let sub = null;
-    if (isPaypal) {
+    let sub = null, email = "";
+    if (standalone) {
+      // anoniem (mail-link): geen bestelling erbij zoeken
+    } else if (isPaypal) {
       if (!paypalConfigured()) return res.status(500).json({ error: "Non configurato" });
       const ps = await pp("get", `/v1/billing/subscriptions/${subId}`);
       if (Date.now() - new Date(ps.create_time).getTime() > 30 * 86400000) return res.status(404).json({ error: "Non trovato" });
+      email = ps.subscriber?.email_address || "";
     } else {
-      sub = await stripe.subscriptions.retrieve(subId);
+      sub = await stripe.subscriptions.retrieve(subId, { expand: ["customer"] });
       if (Date.now() / 1000 - sub.created > 30 * 86400) return res.status(404).json({ error: "Non trovato" });
+      email = (typeof sub.customer === "object" && sub.customer?.email) || "";
     }
 
     const completed = answers.length >= MAX_Q;
@@ -62,9 +78,16 @@ export default async function handler(req, res) {
       "it",
       ...Array.from({ length: MAX_Q }, (_, k) => answers[k] || ""),
     ];
-    await upsertRow(process.env.QUIZ_SHEET_ID, sid, row);
+    if (standalone) row[5] = "it · email"; // onderscheid met de bedankpagina in de Sheet
+    const header = ["SID", "Stato", "Prima risposta", "Ultimo aggiornamento", "Ultima domanda", "Lingua", ...Array.from({ length: MAX_Q }, (_, k) => `${k + 1}. ${questions[k] || ""}`)];
+    await upsertRow(process.env.QUIZ_SHEET_ID, sid, row, { tab, header });
 
-    if (completed) {
+    if (completed && product.key !== "neurotone" && klaviyoConfigured() && email) {
+      // Herinneringsmail in Klaviyo stoppen: flow-filter "has not done LubriSense Quiz Completed"
+      await trackEvent(`${product.title} Quiz Completed`, email, { product: product.title, subscription_id: subId, sid }, { uniqueId: `quiz-done-${sid}` }).catch((e) => console.warn("checkout-quiz klaviyo:", e.message));
+    }
+
+    if (completed && !standalone) {
       try {
         const invId = sub ? (typeof sub.latest_invoice === "string" ? sub.latest_invoice : sub.latest_invoice?.id) : null;
         const order = isPaypal ? await findOrderForPaypal(subId) : invId ? await findOrderForInvoice(invId) : null;

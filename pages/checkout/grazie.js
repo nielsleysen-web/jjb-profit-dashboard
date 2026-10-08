@@ -9,28 +9,9 @@
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
 import { SHIPPING, fmtEur, upsellFor, getProduct, pickBundleFor, BUNDLE_GIFT } from "../../lib/checkout";
+import { QUIZ_INTRO, QUIZZES } from "../../lib/quiz";
 
-// Enquête (post-purchase quiz). Antwoorden → Google Sheet via /api/checkout-quiz.
-// Vragen aanpassen kan hier; de volgorde moet gelijk blijven aan de kolommen in de Sheet.
-const QUIZ_INTRO = {
-  title: "Rispondi alle seguenti domande (3 min) e potrai vincere un premio del valore di 10.000 €",
-  sub: "Le vostre risposte non saranno condivise con terze parti.",
-  done: "Grazie per le tue risposte!",
-};
-const QUIZ = [
-  "Come stanno andando i tuoi acufeni in questo momento? Come li vivi?",
-  "Cosa ti accorgi di evitare o di trovare difficile proprio a causa di questo?",
-  "Quando di notte non riesci a dormire e pensi a questo problema, qual è la cosa peggiore che ti passa per la testa?",
-  "Ti è mai capitato di evitare certe occasioni sociali a causa dei tuoi acufeni? Se sì, perché?",
-  "Cosa hai trovato online su questo problema e cosa ne pensi di quelle informazioni?",
-  "Secondo te, qual era la vera causa di questo problema?",
-  "Cosa avevi già provato prima e perché non ha funzionato?",
-  "Cosa ti ha spinto, alla fine, ad agire subito invece di aspettare ancora?",
-  "Rispondi con sincerità: cosa ti ha quasi impedito di ordinare questo prodotto?",
-  "Ma cosa ti ha convinto, alla fine, a provarlo comunque?",
-  "Se funzionasse, qual è la prima cosa che vorresti cambiare?",
-];
-
+// Enquête (post-purchase quiz): vragen + intro in lib/quiz.js (per product). Antwoorden → Google Sheet via /api/checkout-quiz.
 // Korte willekeurige ID (18 hex-tekens), zoals de SID's die al in de Sheet staan
 const newSid = () => Array.from({ length: 18 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
 
@@ -44,7 +25,7 @@ const BUNDLE_IMG = {
   5: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Artboard3copy_1c26406e-68ad-44c1-a428-5d99f4ff1fa7.png?v=1783404886&width=240",
 };
 
-// LubriSense (checkout.getjustjenny.com/lubrisense): eigen productfoto's, geen NeuroTone-enquête
+// LubriSense (checkout.getjustjenny.com/lubrisense): eigen productfoto's en eigen enquête (QUIZ_LUBRISENSE → tabblad LubriSense)
 const LUBRI_IMG = {
   1: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/3_5305b5fc-f123-40dc-a487-545a8bd63b05.png?v=1787285389&width=240",
   2: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/4_681fd7dd-be4d-4f81-ad4b-c1295e55e3f6.png?v=1787285390&width=240",
@@ -132,7 +113,8 @@ function paymentLabel(p) {
   return p.type;
 }
 
-function Quiz({ sub, preview }) {
+function Quiz({ sub, preview, product = "neurotone" }) {
+  const QUIZ = QUIZZES[product] || QUIZZES.neurotone;
   const key = `jjb_quiz_${sub || "preview"}`;
   const [st, setSt] = useState({ sid: "", first: 0, answers: [], done: false });
   const [a, setA] = useState("");
@@ -157,7 +139,7 @@ function Quiz({ sub, preview }) {
         await fetch("/api/checkout-quiz", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sub, sid: st.sid, first: st.first, answers, questions: QUIZ }),
+          body: JSON.stringify({ sub, sid: st.sid, first: st.first, answers, questions: QUIZ, product }),
         });
       }
     } catch {}
@@ -321,7 +303,7 @@ export default function Grazie() {
           <div className="gz-card" style={{ fontSize: "15px", color: "#666" }}>Caricamento del tuo ordine…</div>
         ) : (
           <>
-            {product.key === "neurotone" && <Quiz sub={q.sub} preview={preview} />}
+            <Quiz sub={q.sub} preview={preview} product={product.key} />
 
             {/* Ordernummer */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "26px" }}>
