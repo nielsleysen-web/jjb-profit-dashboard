@@ -80,7 +80,8 @@ async function kickAttributionScan(host) {
   if (!host || Date.now() - lastKick < 4 * 60 * 1000) return;
   lastKick = Date.now();
   const key = crypto.createHmac("sha256", SESSION_SECRET).update("attribution:scan").digest("base64url");
-  await axios.post(`https://${host}/api/attribution`, { action: "scan", key }, { timeout: 2000 }).catch(() => {});
+  // 14 dagen terug: vult ook de A/B-varianten aan van oudere orders die alleen jjb_pg hadden (reparatie, zie attribution.js)
+  await axios.post(`https://${host}/api/attribution`, { action: "scan", key, days: 14 }, { timeout: 2000 }).catch(() => {});
 }
 
 // Normale verdeling: P(Z < z)

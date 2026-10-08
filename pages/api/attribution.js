@@ -235,15 +235,25 @@ async function fetchBudgets() {
 }
 
 /* ---------------- de scan ---------------- */
-async function runScan(force) {
+// A/B-varianten van een order: jjb_pgs (alle geziene pageids) en anders jjb_pg (de pagina met de checkout-link).
+// PayPal-orders via de webhook en sommige Stripe-orders hebben alleen jjb_pg; zonder deze fallback telden die
+// niet mee in de A/B Tests.
+function pageIdsOf(attrs) {
+  const ids = String(attrs.pgs || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const pg = String(attrs.pg || "").trim();
+  if (pg && !ids.includes(pg)) ids.push(pg);
+  return ids.slice(0, 12);
+}
+
+async function runScan(force, lookbackDays = LOOKBACK_DAYS) {
   const store = (await readData("attribution")) || { orders: {}, capi: {}, lastScanAt: null };
   if (!force && store.lastScanAt && Date.now() - new Date(store.lastScanAt).getTime() < SCAN_INTERVAL_MS) {
     return { skipped: "recently scanned" };
   }
   store.lastScanAt = new Date().toISOString();
 
-  const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 3600 * 1000).toISOString();
-  const result = { attributed: 0, unattributed: 0, capiSent: 0, capiErrors: [] };
+  const since = new Date(Date.now() - lookbackDays * 24 * 3600 * 1000).toISOString();
+  const result = { attributed: 0, unattributed: 0, capiSent: 0, capiErrors: [], repaired: 0 };
   let after = null;
 
   for (let page = 0; page < 8; page++) {
@@ -270,10 +280,15 @@ async function runScan(force) {
     const conn = d.orders;
 
     for (const order of conn.nodes) {
-      if (store.orders[order.name]) continue; // al verwerkt
       const attrs = {};
       for (const a of order.customAttributes || []) {
         if (a.key && a.key.startsWith("jjb_")) attrs[a.key.slice(4)] = a.value;
+      }
+      if (store.orders[order.name]) {
+        // al verwerkt → alleen ontbrekende A/B-varianten aanvullen (eenmalige reparatie, zie pageIdsOf)
+        const cur = store.orders[order.name];
+        if (!(cur.pgs || []).length) { const ids = pageIdsOf(attrs); if (ids.length) { cur.pgs = ids; result.repaired++; } }
+        continue;
       }
       const products = order.lineItems.nodes.map((li) => li.product?.title || li.title).filter(Boolean);
       const entry = {
@@ -292,7 +307,7 @@ async function runScan(force) {
         vid: attrs.vid || "",
         host: (attrs.host || "").toLowerCase(), // first-touch funnel-domein → Funnel Metrics
         path: (attrs.path || "").toLowerCase(), // first-touch padsegment (funnel op dat domein)
-        pgs: String(attrs.pgs || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 12), // geziene A/B-varianten (pageids)
+        pgs: pageIdsOf(attrs), // geziene A/B-varianten (pageids): jjb_pgs, anders jjb_pg
       };
       store.orders[order.name] = entry;
       if (entry.adId || entry.fbclid || entry.fbc) result.attributed++;
@@ -375,8 +390,10 @@ export default async function handler(req, res) {
     if (!isInternal && !isAdmin) return res.status(401).json({ success: false, error: "No access" });
 
     if (action === "scan") {
-      const result = await runScan(force === true);
-      return res.status(200).json({ success: true, ...result });
+      // days: eenmalig verder terugkijken (max 30), bv. om A/B-varianten van oudere orders aan te vullen
+      const days = Math.min(30, Math.max(1, parseInt(req.body?.days || "0", 10) || LOOKBACK_DAYS));
+      const result = await runScan(force === true, days);
+      return res.status(200).json({ success: true, days, ...result });
     }
 
     return res.status(400).json({ success: false, error: "Unknown action" });
