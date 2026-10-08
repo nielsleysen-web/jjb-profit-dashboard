@@ -158,13 +158,30 @@ export default function ScriptSwipe() {
     setOpen(next); dirty.current = true; setSaved("Unsaved changes");
     clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      try { setSaved("Saving…"); await api({ action: "save", id: next.id, name: next.name, sentences: next.sentences.map((s) => ({ i: s.i, mine: s.mine })) }); dirty.current = false; setSaved("Saved"); load(); }
+      try { setSaved("Saving…"); await api({ action: "save", id: next.id, name: next.name, sentences: next.sentences.map((s) => ({ t: s.t, text: s.text, mine: s.mine, added: !!s.added })) }); dirty.current = false; setSaved("Saved"); load(); }
       catch (e) { setSaved("Save failed: " + e.message); }
     }, 1200);
   };
   useEffect(() => { const h = (e) => { if (dirty.current) { e.preventDefault(); e.returnValue = ""; } }; window.addEventListener("beforeunload", h); return () => window.removeEventListener("beforeunload", h); }, []);
 
+  const renum = (arr) => arr.map((s, k) => ({ ...s, i: k + 1 }));
   const setMine = (i, v) => schedule({ ...open, sentences: open.sentences.map((s) => (s.i === i ? { ...s, mine: v } : s)) });
+  const setText = (i, v) => schedule({ ...open, sentences: open.sentences.map((s) => (s.i === i ? { ...s, text: v } : s)) });
+  // Rij-acties: samenvoegen met de volgende regel, een extra regel (hook) invoegen, verwijderen
+  const mergeNext = (i) => {
+    const k = open.sentences.findIndex((s) => s.i === i); if (k < 0 || k >= open.sentences.length - 1) return;
+    const a = open.sentences[k], b = open.sentences[k + 1];
+    const merged = { ...a, text: [a.text, b.text].filter(Boolean).join(" "), mine: [a.mine, b.mine].filter(Boolean).join(" "), t: a.t ?? b.t };
+    schedule({ ...open, sentences: renum([...open.sentences.slice(0, k), merged, ...open.sentences.slice(k + 2)]) });
+  };
+  const insertAt = (i, where) => {
+    const k = open.sentences.findIndex((s) => s.i === i); if (k < 0) return;
+    const pos = where === "above" ? k : k + 1;
+    const row = { t: null, text: "", mine: "", added: true };
+    schedule({ ...open, sentences: renum([...open.sentences.slice(0, pos), row, ...open.sentences.slice(pos)]) });
+    setTimeout(() => document.querySelector(`[data-row="${pos + 1}"] textarea`)?.focus(), 50);
+  };
+  const removeRow = (i) => { if (open.sentences.length <= 1) return; schedule({ ...open, sentences: renum(open.sentences.filter((s) => s.i !== i)) }); };
   const copyMine = async () => { const txt = open.sentences.map((s) => s.mine).filter(Boolean).join("\n"); try { await navigator.clipboard.writeText(txt); setSaved("Copied our version to clipboard"); } catch {} };
   const del = async (id) => { if (!window.confirm("Delete this script?")) return; await api({ action: "delete", id }); if (open?.id === id) setOpen(null); load(); };
   const done = open ? open.sentences.filter((s) => s.mine).length : 0;
@@ -212,7 +229,7 @@ export default function ScriptSwipe() {
               <div style={{ display: "grid", gridTemplateColumns: narrow ? "1fr 1fr" : "34px 48px 1fr 1fr", gap: "0 10px", alignItems: "start" }}>
                 {!narrow && <div style={ui.label}>#</div>}{!narrow && <div style={ui.label}>Time</div>}<div style={ui.label}>Original</div><div style={ui.label}>Our version</div>
                 {open.sentences.map((s) => (
-                  <RowFragment key={s.i} s={s} narrow={narrow} onChange={(v) => setMine(s.i, v)} />
+                  <RowFragment key={`${s.i}-${open.sentences.length}`} s={s} narrow={narrow} last={s.i === open.sentences.length} onChange={(v) => setMine(s.i, v)} onText={(v) => setText(s.i, v)} onMerge={() => mergeNext(s.i)} onInsert={(w) => insertAt(s.i, w)} onRemove={() => removeRow(s.i)} />
                 ))}
               </div>
             </>
@@ -223,14 +240,28 @@ export default function ScriptSwipe() {
   );
 }
 
-function RowFragment({ s, narrow, onChange }) {
+function RowFragment({ s, narrow, last, onChange, onText, onMerge, onInsert, onRemove }) {
   const cell = { padding: "8px 0", borderTop: "1px solid #f1f3f6" };
+  const act = { border: "1px solid #e2e6ec", background: "#fff", color: "#64748b", borderRadius: 6, fontSize: 11, padding: "2px 7px", cursor: "pointer", lineHeight: 1.4 };
+  const actions = (
+    <div className="ss-actions" style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+      <button style={act} title="Insert an extra line (hook) above this one" onClick={() => onInsert("above")}>+ above</button>
+      <button style={act} title="Insert an extra line below this one" onClick={() => onInsert("below")}>+ below</button>
+      {!last && <button style={act} title="Join this line with the next one" onClick={onMerge}>⤵ merge with next</button>}
+      <button style={{ ...act, color: "#b91c1c" }} title="Remove this line" onClick={onRemove}>✕</button>
+    </div>
+  );
   return (
     <>
-      {!narrow && <div style={{ ...cell, fontSize: 12.5, color: "#8a92a3", paddingTop: 17 }}>{s.i}</div>}
+      {!narrow && <div className="ss-num" style={{ ...cell, fontSize: 12.5, color: s.added ? "#d97706" : "#8a92a3", paddingTop: 17 }}>{s.added ? "★" : s.i}</div>}
       {!narrow && <div style={{ ...cell, fontSize: 12.5, color: "#8a92a3", paddingTop: 17, fontVariantNumeric: "tabular-nums" }}>{fmtT(s.t)}</div>}
-      <div style={{ ...cell, fontSize: 14, lineHeight: 1.5, paddingTop: 17, paddingRight: 6 }}>{narrow && <span style={{ color: "#8a92a3", fontSize: 12 }}>{s.i}{s.t != null ? ` · ${fmtT(s.t)}` : ""} · </span>}{s.text}</div>
-      <div style={cell}><AutoTextarea value={s.mine} onChange={onChange} placeholder="Write our version…" /></div>
+      <div className="ss-orig" style={{ ...cell, fontSize: 14, lineHeight: 1.5, paddingTop: s.added ? 8 : 17, paddingRight: 6 }}>
+        {narrow && <span style={{ color: "#8a92a3", fontSize: 12 }}>{s.added ? "★" : s.i}{s.t != null ? ` · ${fmtT(s.t)}` : ""} · </span>}
+        {s.added ? <AutoTextarea value={s.text} onChange={onText} placeholder="Extra line (hook, transition…) — note on the left is optional" /> : s.text}
+        {actions}
+      </div>
+      <div data-row={s.i} style={cell}><AutoTextarea value={s.mine} onChange={onChange} placeholder={s.added ? "Write the hook…" : "Write our version…"} /></div>
+      <style jsx>{`.ss-orig .ss-actions{opacity:.25;transition:opacity .15s}.ss-orig:hover .ss-actions,.ss-orig:focus-within .ss-actions{opacity:1}`}</style>
     </>
   );
 }

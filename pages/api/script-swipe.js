@@ -5,7 +5,7 @@
 //   POST { action: "create", name, source?, chunks? | text? }  → zinnen (lib/script-swipe.js) → opgeslagen script
 //     chunks = segmenten met starttijd uit de browser-transcriptie (Whisper in de browser, pages/script-swipe.js)
 //   GET → { scripts: [{ id, name, … }] } · GET ?id= → één script met zinnen
-//   POST { action: "save", id, name?, sentences: [{ mine }] } · { action: "delete", id } · { action: "csv", id }
+//   POST { action: "save", id, name?, sentences: [{ t, text, mine, added? }] } (volledige lijst) · { action: "delete", id } · { action: "csv", id }
 // Opslag: Shopify metaobject jjb_dashboard_data, handle "swipe-index" (lijst) + "swipe-<id>" (per script).
 // Toegang: admin en Creative Strategist.
 
@@ -110,8 +110,10 @@ export default async function handler(req, res) {
       if (!s) return res.status(404).json({ success: false, error: "Not found" });
       if (b.name != null) s.name = clean(b.name, 120) || s.name;
       if (Array.isArray(b.sentences)) {
-        const mine = new Map(b.sentences.map((x) => [Number(x.i), clean(x.mine, 2000)]));
-        s.sentences = s.sentences.map((x) => (mine.has(x.i) ? { ...x, mine: mine.get(x.i) } : x));
+        // Volledige lijst: regels kunnen samengevoegd, ingevoegd (hooks) of verwijderd zijn → opnieuw nummeren
+        s.sentences = b.sentences.slice(0, 2000).map((x, k) => ({
+          i: k + 1, t: Number.isFinite(x?.t) ? x.t : null, text: clean(x?.text, 4000), mine: clean(x?.mine, 4000), ...(x?.added ? { added: true } : {}),
+        })).filter((x) => x.text || x.mine || x.added);
       }
       s.updatedAt = new Date().toISOString(); s.updatedBy = by;
       await writeData(`swipe-${id}`, s);
