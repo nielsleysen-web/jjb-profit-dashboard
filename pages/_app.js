@@ -52,7 +52,6 @@ const CATEGORIES = [
     perm: "assets",
     items: [
       { href: "/funnel-assets", label: "Assets", icon: "📁" },
-      { href: "/script-swipe", label: "Script Swipe", icon: "📝" },
     ],
   },
   {
