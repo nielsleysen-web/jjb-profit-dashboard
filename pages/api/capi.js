@@ -17,7 +17,11 @@ import crypto from "crypto";
 // ============================================================================
 
 const PIXEL_ID = process.env.META_PIXEL_ID;
-const TOKEN = process.env.META_CAPI_ACCESS_TOKEN;
+// Zelfde token als de Purchase-events (lib/meta-capi.js): in Vercel staat META_CAPI_TOKEN
+const TOKEN = process.env.META_CAPI_ACCESS_TOKEN || process.env.META_CAPI_TOKEN;
+// Alleen de checkout-events die de pagina zelf ook in de browser vuurt (zelfde event_id → Meta dedupliceert).
+// Purchase komt server-side uit de webhooks (lib/meta-capi.js), nooit via deze open endpoint.
+const ALLOWED_EVENTS = new Set(["InitiateCheckout", "AddPaymentInfo"]);
 const TEST_CODE = process.env.META_TEST_EVENT_CODE;
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -54,6 +58,7 @@ export default async function handler(req, res) {
   if (!b.event_name || !b.event_id) {
     return res.status(200).json({ ok: false, error: "missing event_name/event_id" });
   }
+  if (!ALLOWED_EVENTS.has(String(b.event_name))) return res.status(200).json({ ok: false, error: "event not allowed" });
 
   // Customer IP + UA. For a browser beacon these come from the customer's own request.
   // For a SERVER-originated event (b.server_event — e.g. the Stripe webhook), the request

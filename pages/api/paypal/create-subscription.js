@@ -2,8 +2,8 @@
 // De PayPal-knop op de checkout vraagt hier een abonnement aan. Wij kiezen het juiste plan
 // (bundel × verzending) en geven het abonnements-ID terug; de klant keurt het goed in PayPal.
 
-import { paypalConfigured, planFor, pp, packCustom } from "../../../lib/paypal";
-import { getProduct } from "../../../lib/checkout";
+import { paypalConfigured, planFor, pp, packCustom, saveCheckoutContext } from "../../../lib/paypal";
+import { getProduct, TRACK_KEYS } from "../../../lib/checkout";
 
 const clean = (s, max = 120) => String(s || "").trim().slice(0, max);
 
@@ -47,6 +47,15 @@ export default async function handler(req, res) {
     if (Object.keys(subscriber).length) body.subscriber = subscriber;
 
     const sub = await pp("post", "/v1/billing/subscriptions", body);
+    // Tracking (fbc/fbp/ad-id) + IP/browser bewaren: maakt de webhook de order, dan gaat dit toch mee naar Shopify + Meta
+    const t = b.track && typeof b.track === "object" ? b.track : {};
+    const track = {};
+    for (const k of [...TRACK_KEYS, "pg", "utm_medium"]) if (t[k]) track[k] = String(t[k]).slice(0, 300);
+    await saveCheckoutContext(sub.id, {
+      track, phone: clean(b.phone || s.phone, 30),
+      clientIp: String(req.headers["x-forwarded-for"] || "").split(",")[0].trim(),
+      userAgent: String(req.headers["user-agent"] || "").slice(0, 450),
+    });
     return res.status(200).json({ id: sub.id });
   } catch (e) {
     console.error("paypal/create-subscription:", e.message);
