@@ -93,7 +93,8 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
 
   // Onbruikbaar adres → tag, zodat je die orders in Shopify kunt filteren vóór verzending
   const addrOk = !!(addr.line1 && addr.city && /^\d{5}$/.test(String(addr.postal_code || "")));
-  const tags = ["stripe", "subscription-frontend", invTag(invoice.id)];
+  // Eenmalig product (Magnesium Freeze, geen membership) → NIET als membership-front-end taggen (dashboards/portaal-backfill)
+  const tags = ["stripe", product.membership ? "subscription-frontend" : "onetime-frontend", invTag(invoice.id)];
   if (!addrOk) tags.push("missing-address");
   if (product.tag) tags.push(product.tag);
   if (bundle.gift) tags.push(BUNDLE_GIFT.tag);
@@ -107,7 +108,9 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
     financialStatus: "PAID",
     sourceName: "stripe-checkout",
     tags,
-    note: `Stripe checkout — ${bundle.label} + ${product.membership.name} (${product.membership.trialDays} giorni prova). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`,
+    note: product.membership
+      ? `Stripe checkout — ${bundle.label} + ${product.membership.name} (${product.membership.trialDays} giorni prova). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`
+      : `Stripe checkout — ${bundle.label} (acquisto singolo, nessuna membership). Invoice ${invoice.id}`,
     customAttributes,
     lineItems: [{ variantId: bundle.variantId, quantity: 1, priceSet: { shopMoney: { amount: (bundle.price / 100).toFixed(2), currencyCode: "EUR" } } }],
     shippingLines: [{ title: ship.title, code: ship.code, priceSet: { shopMoney: { amount: (ship.price / 100).toFixed(2), currencyCode: "EUR" } } }],
@@ -218,6 +221,8 @@ export default async function handler(req, res) {
           clientIp: md.client_ip, userAgent: md.client_ua, fbc: md.jjb_fbc, fbp: md.jjb_fbp, vid: md.jjb_vid,
           contents: [{ id: product.key === "neurotone" ? META_CONTENT_ID : product.shopifyProductId, quantity: qty }],
         });
+        // Eenmalig product (geen membership): klaar — geen portaal, geen membership-mails
+        if (!product.membership) return res.status(200).json({ received: true, order: order.name, product: product.key, onetime: true });
         // Ledenportaal: record aanmaken + welkomstlink (30 dagen) voor mail 1; nooit blokkerend
         const memberInfo = {
           email: customer?.email || inv.customer_email, firstName: fn, lastName: ln.join(" "),
@@ -239,7 +244,8 @@ export default async function handler(req, res) {
         await syncNewMember({ ...memberInfo, portalLoginUrl }); // profiel + lijst
         // Mail 1 pas na de upsellpagina (ordertabel incl. offerta 1+1); vangnet: cron na 30 min
         await holdStartedMembership(subscription?.id || subId, { ...memberInfo, portalLoginUrl }).catch((e) => console.warn("mail1 hold:", e.message));
-        if (upsellAppliedEarly) await releaseStartedMembership(subscription?.id || subId, { upsellAdded: true }).catch((e) => console.warn("mail1 release:", e.message));
+        // Product zonder upsellpagina (Magnesium Freeze) → mail 1 meteen, niet pas na 30 min via de cron
+        if (upsellAppliedEarly || !product.upsell) await releaseStartedMembership(subscription?.id || subId, { upsellAdded: upsellAppliedEarly }).catch((e) => console.warn("mail1 release:", e.message));
         return res.status(200).json({ received: true, order: order.name });
       }
       // Rebill (€49 elke 28 dagen) → alleen Klaviyo-event, geen Shopify-order
@@ -247,6 +253,7 @@ export default async function handler(req, res) {
         const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
         const sub = subId ? await stripe.subscriptions.retrieve(subId).catch(() => null) : null;
         const product = getProduct(sub?.metadata?.product_key);
+        if (!product.membership) return res.status(200).json({ received: true, ignored: "onetime" });
         if (!product.portal) {
           await productMemberEvent(product, "renewed", { paidAt: inv.created * 1000, email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
             amountPaid: paidAmount(inv), nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
@@ -268,6 +275,7 @@ export default async function handler(req, res) {
         const fsubId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
         const fsub = fsubId ? await stripe.subscriptions.retrieve(fsubId).catch(() => null) : null;
         const fproduct = getProduct(fsub?.metadata?.product_key);
+        if (!fproduct.membership) return res.status(200).json({ received: true, ignored: "onetime" });
         if (!fproduct.portal) {
           await productMemberEvent(fproduct, "failed", { email: inv.customer_email, provider: "stripe", subscriptionId: fsubId, invoiceId: inv.id, amountPaid: (inv.amount_due || 0) / 100 });
           return res.status(200).json({ received: true, paymentFailed: true, product: fproduct.key, dunning });
@@ -281,6 +289,8 @@ export default async function handler(req, res) {
       const custId = typeof sub.customer === "string" ? sub.customer : sub.customer?.id;
       const customer = custId ? await stripe.customers.retrieve(custId).catch(() => null) : null;
       const cproduct = getProduct(sub.metadata?.product_key);
+      // Eenmalige aankoop: het €0-abonnement loopt vanzelf af → geen opzeg-event
+      if (!cproduct.membership) return res.status(200).json({ received: true, ignored: "onetime" });
       if (!cproduct.portal) {
         await productMemberEvent(cproduct, "cancelled", { email: customer?.email, provider: "stripe", subscriptionId: sub.id, reason: sub.cancellation_details?.reason || "" });
         return res.status(200).json({ received: true, cancelled: true, product: cproduct.key });

@@ -135,6 +135,7 @@ async function stripeData() {
     // Front-end betaling nooit gelukt (kaart geweigerd op de checkout) → nooit klant geworden: niet meetellen.
     // Mislukte rebills hebben status past_due/unpaid en blijven wel staan.
     if (s.status === "incomplete" || s.status === "incomplete_expired") continue;
+    if (s.metadata?.kind === "onetime") continue; // eenmalige aankoop (Magnesium Freeze): geen membership
     const c = typeof s.customer === "object" ? s.customer : {};
     members.push({
       id: s.id, provider: "stripe", status: s.pause_collection && s.status !== "canceled" ? "paused" : statusMap[s.status] || s.status, rawStatus: s.status,

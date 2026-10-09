@@ -32,8 +32,11 @@ const LUBRI_IMG = {
   3: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/5.png?v=1787285390&width=240",
   5: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/6.png?v=1787285390&width=240",
 };
-const IMGS = { neurotone: BUNDLE_IMG, lubrisense: LUBRI_IMG };
-const CHECKOUT_PATH = { neurotone: "/checkout?", lubrisense: "/checkout?p=lubrisense&" };
+// Magnesium Freeze (checkout.getjustjenny.com/magnesium, eenmalige aankoop): foto's uit Shopify-product 10589604675850
+const MF = "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Comeotorinolaringoiatra_raccomandoNeuroTonedadiversianni.Il93_notagiaunmiglioramentodelproprioacufeneentroiprimi3giorni_senzausarel_apparecchioacustico._";
+const MAGNESIUM_IMG = { 1: MF + "4.png?v=1786453406&width=240", 2: MF + "7.png?v=1786453405&width=240", 3: MF + "6.png?v=1786453406&width=240", 5: MF + "5.png?v=1786453406&width=240" };
+const IMGS = { neurotone: BUNDLE_IMG, lubrisense: LUBRI_IMG, magnesium: MAGNESIUM_IMG };
+const CHECKOUT_PATH = { neurotone: "/checkout?", lubrisense: "/checkout?p=lubrisense&", magnesium: "/checkout?p=magnesium&" };
 
 const BRAND = { amex: "American Express", visa: "Visa", mastercard: "Mastercard", maestro: "Maestro", discover: "Discover", jcb: "JCB", unionpay: "UnionPay", diners: "Diners Club" };
 const WALLET = { apple_pay: "Apple Pay", google_pay: "Google Pay", link: "Link" };
@@ -303,7 +306,7 @@ export default function Grazie() {
           <div className="gz-card" style={{ fontSize: "15px", color: "#666" }}>Caricamento del tuo ordine…</div>
         ) : (
           <>
-            <Quiz sub={q.sub} preview={preview} product={product.key} />
+            {QUIZZES[product.key] && <Quiz sub={q.sub} preview={preview} product={product.key} />}
 
             {/* Ordernummer */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "26px" }}>

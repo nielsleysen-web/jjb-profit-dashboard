@@ -3,6 +3,7 @@
 // (bundel × verzending) en geven het abonnements-ID terug; de klant keurt het goed in PayPal.
 
 import { paypalConfigured, planFor, pp, packCustom } from "../../../lib/paypal";
+import { getProduct } from "../../../lib/checkout";
 
 const clean = (s, max = 120) => String(s || "").trim().slice(0, max);
 
@@ -11,6 +12,9 @@ export default async function handler(req, res) {
   if (!paypalConfigured()) return res.status(500).json({ error: "PayPal non configurato" });
   try {
     const b = req.body || {};
+    // Geen PayPal-plannen voor dit product (Magnesium Freeze: paypal:false, of eenmalig zonder membership)
+    const prod = getProduct(b.product);
+    if (!prod.membership || prod.paypal === false) return res.status(400).json({ error: "PayPal non disponibile per questo prodotto: paga con carta, Apple Pay o Google Pay." });
     const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product);
     const s = b.shipping || {};
     const full = !!(s.line1 && s.city && /^\d{5}$/.test(String(s.postal_code || "")) && (s.name || b.name));

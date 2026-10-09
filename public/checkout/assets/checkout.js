@@ -27,8 +27,17 @@ const CONFIG = {
 /* ---- Product: NeuroTone (standaard) of LubriSense ----------------------------
    checkout.getjustjenny.com/lubrisense  (of /checkout?p=lubrisense) → LubriSense met een eigen membership.
    Bedragen moeten gelijk zijn aan PRODUCTS in lib/checkout.js. */
-const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || /^lubrisense$/i.test(new URLSearchParams(location.search).get('p') || '')) ? 'lubrisense' : 'neurotone';
+const _pq = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
+const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisense') ? 'lubrisense'
+  : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium' : 'neurotone';
 const PRODUCT_CONFIG = {
+  // Magnesium Freeze: voorlopig met de NeuroTone-membership (Health For Life); geen upsellpagina.
+  // NO_MEMBERSHIP: true → eenmalige aankoop (dan ook geen PayPal rechtstreeks).
+  magnesium: {
+    PRODUCT_NAME: 'Magnesium Freeze',
+    SUCCESS_PATH: '/checkout/grazie',
+    META_CONTENT_IDS: ['10589604675850'],
+  },
   lubrisense: {
     PRODUCT_NAME: 'LubriSense',
     SUCCESS_PATH: '/checkout/offerta', // post-purchase upsell 1+1 (€34,95); daarna /checkout/grazie
@@ -78,7 +87,15 @@ const PACKS_LUBRISENSE = {
   3: { label: '3x LubriSense™', amount: 5495, compare: 0, save: 0, savePct: 0, img: IMG + '5.png?v=1787285390&width=240' },
   5: { label: '5x LubriSense™', amount: 6495, compare: 0, save: 0, savePct: 0, img: IMG + '6.png?v=1787285390&width=240', gift: true },
 };
-const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PACKS_NEUROTONE;
+// Magnesium Freeze: prijzen zoals in Shopify (product 10589604675850), geen doorstreepprijs
+const MF = 'Comeotorinolaringoiatra_raccomandoNeuroTonedadiversianni.Il93_notagiaunmiglioramentodelproprioacufeneentroiprimi3giorni_senzausarel_apparecchioacustico._';
+const PACKS_MAGNESIUM = {
+  1: { label: '1x Magnesium Freeze™', amount: 3495, compare: 0, save: 0, savePct: 0, img: IMG + MF + '4.png?v=1786453406&width=240' },
+  2: { label: '2x Magnesium Freeze™', amount: 4495, compare: 0, save: 0, savePct: 0, img: IMG + MF + '7.png?v=1786453405&width=240' },
+  3: { label: '3x Magnesium Freeze™', amount: 5495, compare: 0, save: 0, savePct: 0, img: IMG + MF + '6.png?v=1786453406&width=240' },
+  5: { label: '5x Magnesium Freeze™', amount: 6495, compare: 0, save: 0, savePct: 0, img: IMG + MF + '5.png?v=1786453406&width=240', gift: true },
+};
+const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
   free:    { cents: 0,   title: 'Standard (5-8 giorni lavorativi)' },
@@ -1063,7 +1080,8 @@ async function loadConfig() {
     CONFIG.STRIPE_PK = c.stripePk || '';
     CONFIG.STRIPE_PAYPAL = !!c.paypal;
     CONFIG.META_PIXEL_ID = c.pixelId || '';
-    CONFIG.PAYPAL_CLIENT_ID = c.paypalClientId || '';
+    // PayPal-plannen = altijd met membership → niet voor een eenmalige aankoop (Magnesium Freeze)
+    CONFIG.PAYPAL_CLIENT_ID = (CONFIG.NO_MEMBERSHIP || CONFIG.NO_PAYPAL_DIRECT) ? '' : (c.paypalClientId || '');
   } catch (e) { logClient('config', e && e.message, 'boot'); }
   if (CONFIG.STRIPE_PK && typeof Stripe !== 'undefined') stripe = Stripe(CONFIG.STRIPE_PK, { locale: 'it' });
   if (CONFIG.META_PIXEL_ID) loadPixel(CONFIG.META_PIXEL_ID);
@@ -1269,6 +1287,7 @@ const COPY_GIFT = {
   bonusVariant: 'In omaggio',
 };
 if (PRODUCT_KEY === 'lubrisense') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName = '1x LubriSense'; }
+if (PRODUCT_KEY === 'magnesium') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName = '1x Magnesium Freeze'; }
 const GIFT = params.get('gift') === '1';
 const BONUS = params.get('bonus') === '1'; // mail 2: 1 flacone in omaggio (+ regalo segreto)
 const _sentEmails = new Set();
@@ -1357,11 +1376,23 @@ document.addEventListener('DOMContentLoaded', () => {
   try {
     $$('.js-membership-name').forEach(el => { el.textContent = CONFIG.MEMBERSHIP_NAME; });
     $$('img[alt="NeuroTone"]').forEach(el => { el.alt = CONFIG.PRODUCT_NAME; });
+    // Geen membership (Magnesium Freeze): abonnementstekst onderaan weg → alleen de algemene voorwaarden van de winkel
+    if (CONFIG.NO_MEMBERSHIP) {
+      $$('.sub-terms').forEach(el => {
+        el.innerHTML = 'Cliccando su «Sì! Confermo l’ordine!» accetto i '
+          + '<a href="https://www.getjustjenny.com/policies/terms-of-service" target="_blank" rel="noopener">Termini e condizioni</a> '
+          + 'e l’<a href="https://www.getjustjenny.com/policies/privacy-policy" target="_blank" rel="noopener">Informativa sulla privacy</a>. '
+          + 'Pagamento unico: nessun abbonamento e nessun addebito successivo.';
+      });
+    }
     if (PRODUCT_KEY !== 'neurotone') {
       document.title = 'Checkout — ' + CONFIG.PRODUCT_NAME + ' — Just Jenny';
-      $$('a[href^="/checkout/termini"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY; });
-      // De NeuroTone-membershippagina past niet: opzeggen staat in de voorwaarden
-      $$('a[href^="/checkout/membership"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY + '#membership'; });
+      // LubriSense: eigen voorwaarden; de NeuroTone-membershippagina past niet (opzeggen staat in de voorwaarden).
+      // Magnesium Freeze heeft (voorlopig) de NeuroTone-membership → gewoon de NeuroTone-pagina's.
+      if (PRODUCT_KEY === 'lubrisense') {
+        $$('a[href^="/checkout/termini"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY; });
+        $$('a[href^="/checkout/membership"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY + '#membership'; });
+      }
       // LubriSense: eigen klantfoto's (vrouwen) in de header; ontbreekt een foto, dan blijft de letter staan
       if (PRODUCT_KEY === 'lubrisense') $$('.jh-av img').forEach((img, i) => { img.src = '/checkout/assets/avatar-lub' + (i + 1) + '.jpg?v=1'; });
     }

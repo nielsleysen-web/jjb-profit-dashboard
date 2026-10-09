@@ -82,13 +82,26 @@ export default async function handler(req, res) {
     if (track.pg) metadata.jjb_pg = clean(track.pg, 24);
     if (track.utm_medium) metadata.jjb_utm_medium = clean(track.utm_medium, 100);
 
+    // Product zonder membership (Magnesium Freeze): eenmalige aankoop. Technisch een abonnement op een
+    // €0-prijs dat na de eerste factuur afloopt (cancel_at_period_end) → nooit een herhaalde afschrijving,
+    // maar webhook (Shopify-order), bedankpagina en dashboards werken zoals bij de andere producten.
+    const onetime = !MEMBERSHIP;
+    if (onetime) metadata.kind = "onetime";
+
     // --- prijzen (automatisch aangemaakt, daarna hergebruikt) ---
-    const membershipPrice = process.env[product.priceEnv] || (await getOrCreatePrice(`${product.lookupPrefix}_membership_${MEMBERSHIP.price}_${MEMBERSHIP.intervalDays}d_${V}`, {
-      currency: CURRENCY,
-      unit_amount: MEMBERSHIP.price,
-      recurring: { interval: "day", interval_count: MEMBERSHIP.intervalDays },
-      product_data: { name: MEMBERSHIP.name },
-    }));
+    const membershipPrice = onetime
+      ? await getOrCreatePrice(`jj_onetime_zero_${V}`, {
+          currency: CURRENCY,
+          unit_amount: 0,
+          recurring: { interval: "month", interval_count: 1 },
+          product_data: { name: "Just Jenny — acquisto singolo (nessun abbonamento)" },
+        })
+      : process.env[product.priceEnv] || (await getOrCreatePrice(`${product.lookupPrefix}_membership_${MEMBERSHIP.price}_${MEMBERSHIP.intervalDays}d_${V}`, {
+          currency: CURRENCY,
+          unit_amount: MEMBERSHIP.price,
+          recurring: { interval: "day", interval_count: MEMBERSHIP.intervalDays },
+          product_data: { name: MEMBERSHIP.name },
+        }));
     const bundlePrice = await getOrCreatePrice(`${product.lookupPrefix}_bundle_${bundle.qty}_${bundle.price}_${V}`, {
       currency: CURRENCY,
       unit_amount: bundle.price,
@@ -136,7 +149,9 @@ export default async function handler(req, res) {
       {
         customer: customer.id,
         items: [{ price: membershipPrice, quantity: 1 }],
-        trial_end: Math.floor(Date.now() / 1000) + MEMBERSHIP.trialDays * 86400,
+        ...(onetime
+          ? { cancel_at_period_end: true } // eenmalig: loopt na de eerste factuur af, €0 → nooit een rebill
+          : { trial_end: Math.floor(Date.now() / 1000) + MEMBERSHIP.trialDays * 86400 }),
         payment_behavior: "default_incomplete",
         payment_settings: { save_default_payment_method: "on_subscription", payment_method_types: methods },
         add_invoice_items: addInvoiceItems,
@@ -155,7 +170,7 @@ export default async function handler(req, res) {
     // Metadata ook op de betaling zelf (handig in Stripe en voor de dashboards)
     await stripe.paymentIntents.update(pi.id, {
       metadata: { ...metadata, subscription_id: subscription.id, invoice_id: invoice.id },
-      description: `${bundle.label} + ${MEMBERSHIP.name} (prova ${MEMBERSHIP.trialDays} giorni)`,
+      description: onetime ? `${PRODUCT_TITLE} — ${bundle.label}` : `${bundle.label} + ${MEMBERSHIP.name} (prova ${MEMBERSHIP.trialDays} giorni)`,
       receipt_email: email,
       shipping: { name: name || email, phone: phone || undefined, address },
     });

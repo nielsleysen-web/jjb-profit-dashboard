@@ -33,7 +33,8 @@ export function middleware(req) {
   }
 
   // LubriSense: checkout.getjustjenny.com/lubrisense → zelfde checkoutpagina; checkout.js leest het product uit het pad
-  const lubri = onCheckoutHost && (url.pathname === "/lubrisense" || url.pathname === "/lubrisense/");
+  // Magnesium Freeze (zonder membership): checkout.getjustjenny.com/magnesium → zelfde pagina
+  const lubri = onCheckoutHost && /^\/(lubrisense|magnesium)\/?$/.test(url.pathname);
   if (url.pathname === "/checkout" || url.pathname === "/checkout/" || (onCheckoutHost && url.pathname === "/") || lubri) {
     const to = url.clone();
     to.pathname = "/checkout/index.html";
