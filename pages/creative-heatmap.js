@@ -5,7 +5,7 @@
 // gekoppeld aan de taak via de naming convention). Geen AI-classificatie nodig: de strateeg vult
 // de velden in bij het briefen.
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { weekStart, addDays, isoWeek } from "../lib/creative-calendar";
 
@@ -104,6 +104,13 @@ export default function CreativeHeatmap() {
       setCalendar((c) => ({ ...c, entries: res.entries || [], backlog: res.backlog || c.backlog }));
       return true;
     } finally { setCalBusy(false); }
+  };
+  // Slepen in de kalender: meteen tonen (optimistic), daarna opslaan. Opslagen na elkaar (geen overschrijvingen
+  // bij snel na elkaar slepen); mislukt er één, dan de kalender opnieuw laden.
+  const dropQueue = useRef(Promise.resolve());
+  const calDrop = (payload, optimistic) => {
+    setCalendar((c) => optimistic(c));
+    dropQueue.current = dropQueue.current.then(() => calPost(payload)).then((ok) => { if (!ok) loadCalendar(); }).catch(() => loadCalendar());
   };
 
   // Gekoppelde ads van video- en design-taken (beide hebben de velden), met filter
@@ -273,6 +280,7 @@ export default function CreativeHeatmap() {
           allProducts={[...new Set((data?.rows || []).map((r) => r.product).filter(Boolean))]}
           knownAngles={[...new Set([...(data?.rows || []).map((r) => r.mechanism).filter(Boolean), ...calendar.entries.map((e) => e.mechanism), ...calendar.backlog.map((e) => e.mechanism)])]}
           backlogPost={calPost}
+          onDrop={calDrop}
           calStatus={calStatus}
           statusMap={statusMap}
           scoreboard={scoreboard}
@@ -527,8 +535,46 @@ const sameProduct = (a, b) => lc(a) === lc(b);
 const sameKey = (a, b) => sameProduct(a.product, b.product) && lc(a.mechanism) === lc(b.mechanism) && lc(a.icp) === lc(b.icp);
 
 // ---- Angle/ICP-kalender: rijen = producten, kolommen = weken ----
-function CalendarView({ calendar, products, allProducts, knownAngles, calStatus, statusMap, scoreboard, scoreLoaded, edit, setEdit, busy, onSave, onDelete, backlogPost }) {
+function CalendarView({ calendar, products, allProducts, knownAngles, calStatus, statusMap, scoreboard, scoreLoaded, edit, setEdit, busy, onSave, onDelete, backlogPost, onDrop }) {
   const [idea, setIdea] = useState(null); // { product, mechanism, icp, note }
+  // Drag & drop: kaartje naar een andere week (zelfde product), backlog-idee in een week, of kaartje terug naar de backlog
+  const [drag, setDrag] = useState(null); // { kind: "entry" | "backlog", id, product }
+  const [over, setOver] = useState(null); // "product|week" of "backlog"
+  const isTmp = (id) => String(id || "").startsWith("tmp-"); // nog niet opgeslagen → (nog) niet slepen
+  const startDrag = (ev, item) => {
+    ev.dataTransfer.effectAllowed = "move";
+    try { ev.dataTransfer.setData("text/plain", item.id); } catch {}
+    setDrag(item);
+  };
+  const endDrag = () => { setDrag(null); setOver(null); };
+  const canDropCell = (p) => !!drag && sameProduct(drag.product, p);
+  const dropOnCell = (p, w) => {
+    const d = drag;
+    endDrag();
+    if (!d || !sameProduct(d.product, p)) return;
+    if (d.kind === "entry") {
+      const e = calendar.entries.find((x) => x.id === d.id);
+      if (!e || e.week === w) return;
+      onDrop({ action: "move", id: d.id, week: w }, (c) => ({ ...c, entries: c.entries.map((x) => (x.id === d.id ? { ...x, week: w } : x)) }));
+    } else {
+      const b = calendar.backlog.find((x) => x.id === d.id);
+      if (!b) return;
+      const entry = { product: b.product, week: w, mechanism: b.mechanism, icp: b.icp, note: b.note || "" };
+      onDrop({ action: "add", entry }, (c) => ({ ...c, entries: [...c.entries, { ...entry, id: `tmp-${Date.now()}` }] }));
+    }
+  };
+  const dropOnBacklog = () => {
+    const d = drag;
+    endDrag();
+    if (!d || d.kind !== "entry") return;
+    const e = calendar.entries.find((x) => x.id === d.id);
+    if (!e) return;
+    onDrop({ action: "unplan", id: d.id }, (c) => ({
+      ...c,
+      entries: c.entries.filter((x) => x.id !== d.id),
+      backlog: c.backlog.some((b) => sameKey(b, e)) ? c.backlog : [...c.backlog, { id: `tmp-${Date.now()}`, product: e.product, mechanism: e.mechanism, icp: e.icp, note: e.note || "" }],
+    }));
+  };
   const thisWeek = calendar.week || weekStart();
   const [offset, setOffset] = useState(0);
   const [newProduct, setNewProduct] = useState(false);
@@ -547,7 +593,7 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
     <>
       <div className="hm-card hm-cal">
         <div className="hm-calh">
-          <div><h2>Angle × ICP per week</h2><p>Click a cell to plan the focus for that product and week. Colour = status of that angle × ICP in the ads so far.</p></div>
+          <div><h2>Angle × ICP per week</h2><p>Click a cell to plan the focus for that product and week. Drag a card to another week, drag a backlog idea into a week, or drag a card back to the backlog. Colour = status of that angle × ICP in the ads so far.</p></div>
           <div className="hm-seg"><button onClick={() => setOffset(offset - 3)}>‹</button><button onClick={() => setOffset(0)} className={offset === 0 ? "on" : ""}>This week</button><button onClick={() => setOffset(offset + 3)}>›</button></div>
         </div>
         <div className="hm-scroll">
@@ -559,14 +605,20 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
                   <td className="rl">{p}</td>
                   {weeks.map((w) => {
                     const es = entriesAt(p, w);
+                    const key = `${p}|${w}`;
                     return (
-                      <td key={w} className={w === thisWeek ? "now" : ""}>
-                        <div className="cell">
+                      <td key={w} className={w === thisWeek ? "now" : ""}
+                        onDragOver={(ev) => { if (!canDropCell(p)) return; ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; if (over !== key) setOver(key); }}
+                        onDragLeave={(ev) => { if (over === key && !ev.currentTarget.contains(ev.relatedTarget)) setOver(null); }}
+                        onDrop={(ev) => { ev.preventDefault(); dropOnCell(p, w); }}>
+                        <div className={`cell${drag ? (canDropCell(p) ? " droppable" : " nodrop") : ""}${over === key ? " over" : ""}`}>
                           {es.map((e) => { const st = calStatus(e); return (
-                            <button key={e.id} type="button" className={`chip ${st ? st.status : "planned"}`} onClick={() => canEdit && setEdit({ ...e })}
+                            <div key={e.id} role="button" tabIndex={0} className={`chip ${st ? st.status : "planned"}${drag?.id === e.id ? " dragging" : ""}`} onClick={() => canEdit && !isTmp(e.id) && setEdit({ ...e })}
+                              onKeyDown={(ev) => { if ((ev.key === "Enter" || ev.key === " ") && canEdit && !isTmp(e.id)) { ev.preventDefault(); setEdit({ ...e }); } }}
+                              draggable={canEdit && !isTmp(e.id)} onDragStart={(ev) => startDrag(ev, { kind: "entry", id: e.id, product: e.product })} onDragEnd={endDrag}
                               title={st ? `${eur(st.spend)} · ROAS ${x2(st.roas)} · ${st.concepts} concept${st.concepts > 1 ? "s" : ""}` : "No matched ads yet"}>
                               <b>{e.mechanism}</b><span>{e.icp}</span>{st && <em>{x2(st.roas)}</em>}
-                            </button>
+                            </div>
                           ); })}
                           {canEdit && <button type="button" className="add" onClick={() => setEdit({ product: p, week: w, mechanism: "", icp: "", note: "" })}>+</button>}
                         </div>
@@ -617,9 +669,13 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
       )}
 
       {/* Backlog: ideeën die nog ingepland moeten worden */}
-      <div className="hm-card hm-box" style={{ marginTop: 16 }}>
+      <div className={`hm-card hm-box hm-blbox${drag?.kind === "entry" ? " droppable" : ""}${over === "backlog" ? " over" : ""}`} style={{ marginTop: 16 }}
+        onDragOver={(ev) => { if (drag?.kind !== "entry") return; ev.preventDefault(); ev.dataTransfer.dropEffect = "move"; if (over !== "backlog") setOver("backlog"); }}
+        onDragLeave={(ev) => { if (over === "backlog" && !ev.currentTarget.contains(ev.relatedTarget)) setOver(null); }}
+        onDrop={(ev) => { ev.preventDefault(); dropOnBacklog(); }}>
         <h3>Backlog · angles × ICPs to test <small>add ideas now, plan them into a week later · {calendar.backlog.filter((b) => !calendar.entries.some((e) => sameKey(e, b))).length} still open</small></h3>
         {!calendar.backlog.length && <div className="hm-muted" style={{ marginBottom: 8 }}>No ideas yet.</div>}
+        {drag?.kind === "entry" && <div className="hm-bldrop">Drop here to take it off the calendar and back into the backlog</div>}
         {products.filter((p) => calendar.backlog.some((b) => sameProduct(b.product, p))).map((p) => (
           <div key={p} className="hm-bl">
             <div className="p">{p}</div>
@@ -629,7 +685,9 @@ function CalendarView({ calendar, products, allProducts, knownAngles, calStatus,
                 const st = calStatus(b);
                 const state = st ? st.status : planned.length ? "planned" : "open";
                 return (
-                  <div key={b.id} className={`it ${state}`}>
+                  <div key={b.id} className={`it ${state}${canEdit && !isTmp(b.id) ? " drag" : ""}${drag?.id === b.id ? " dragging" : ""}`}
+                    draggable={canEdit && !isTmp(b.id)} onDragStart={(ev) => startDrag(ev, { kind: "backlog", id: b.id, product: b.product })} onDragEnd={endDrag}
+                    title={canEdit ? "Drag into a week of the calendar" : undefined}>
                     <span className="nm"><b>{b.mechanism}</b> × {b.icp}{b.note ? <small> · {b.note}</small> : null}</span>
                     <span className="meta">
                       {st ? <em className={st.status}>{STATUS_LABEL[st.status]} · {x2(st.roas)}</em> : planned.length ? <em>planned W{planned.map((e) => isoWeek(e.week)).join(", W")}</em> : <em className="open">not planned</em>}
@@ -868,6 +926,15 @@ i.unset{background:var(--line2)!important}
 .hm-ct .chip.planned{border-left-color:var(--ink3);border-left-style:dashed}
 .hm-ct .add{border:0;background:none;color:var(--ink3);font-size:14px;cursor:pointer;padding:2px;line-height:1;opacity:.5;margin-top:auto}
 .hm-ct .cell:hover .add{opacity:1}
+.hm-ct .chip[draggable="true"]{cursor:grab}.hm-ct .chip[draggable="true"]:active{cursor:grabbing}
+.hm-ct .chip.dragging,.hm-bl .it.dragging{opacity:.4}
+.hm-ct .cell.droppable{border-color:#3b82f6;background:rgba(59,130,246,.04)}
+.hm-ct .cell.nodrop{opacity:.45}
+.hm-ct .cell.over{border-style:solid;border-color:#3b82f6;background:rgba(59,130,246,.12)}
+.hm-blbox.droppable{outline:2px dashed #3b82f6;outline-offset:-2px}
+.hm-blbox.over{background:rgba(59,130,246,.08)}
+.hm-bldrop{margin:4px 0 10px;padding:10px;border:1px dashed #3b82f6;border-radius:10px;color:#3b82f6;font-size:12.5px;text-align:center}
+.hm-bl .it.drag{cursor:grab}.hm-bl .it.drag:active{cursor:grabbing}
 .hm-caladd{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;font-size:12px}
 .hm-caladd input{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:8px;height:30px;padding:0 10px;font:inherit;font-size:12.5px;outline:none;min-width:200px}
 .hm-chipbtn{border:1px solid var(--line2);background:var(--surface);color:var(--ink);border-radius:999px;padding:4px 11px;font:inherit;font-size:12px;cursor:pointer}

@@ -5,6 +5,8 @@
 //      { action: "backlogDelete", id }
 //      { action: "update", id, entry: { … } }
 //      { action: "delete", id }
+//      { action: "move", id, week }   → slepen in de kalender: alleen de week verandert
+//      { action: "unplan", id }       → kalender-kaartje naar de backlog gesleept: uit de kalender, terug in de backlog
 // Lezen: iedereen met een creative rol (+ admin/finance). Schrijven: admin + Creative Strategist.
 // Een nieuwe ICP komt meteen in de keuzelijst van dat product (creative-options), zodat de taken hem kennen.
 
@@ -121,6 +123,26 @@ export default async function handler(req, res) {
     }
     if (action === "backlogDelete") {
       cal.backlog = cal.backlog.filter((x) => x.id !== id);
+      await writeData("creative-calendar", cal);
+      return res.status(200).json({ success: true, entries: cal.entries, backlog: cal.backlog });
+    }
+    if (action === "move") {
+      const cur = cal.entries.find((x) => x.id === id);
+      if (!cur) return res.status(404).json({ success: false, error: "Entry not found" });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.body.week || ""))) return res.status(400).json({ success: false, error: "Invalid week" });
+      cur.week = weekStart(req.body.week);
+      cur.updatedAt = new Date().toISOString();
+      await writeData("creative-calendar", cal);
+      return res.status(200).json({ success: true, entries: cal.entries, backlog: cal.backlog });
+    }
+    if (action === "unplan") {
+      const cur = cal.entries.find((x) => x.id === id);
+      if (!cur) return res.status(404).json({ success: false, error: "Entry not found" });
+      cal.entries = cal.entries.filter((x) => x.id !== id);
+      const key = (x) => [x.product, x.mechanism, x.icp].join("|").toLowerCase();
+      if (!cal.backlog.some((x) => key(x) === key(cur))) {
+        cal.backlog.push({ id: uid(), product: cur.product, mechanism: cur.mechanism, icp: cur.icp, note: cur.note || "", createdBy: session.name || session.email, createdAt: new Date().toISOString() });
+      }
       await writeData("creative-calendar", cal);
       return res.status(200).json({ success: true, entries: cal.entries, backlog: cal.backlog });
     }
