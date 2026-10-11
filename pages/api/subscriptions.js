@@ -149,7 +149,8 @@ async function stripeData() {
       product: s.metadata?.product_key || "neurotone",
     });
   }
-  const rebills = [], failed = [], pending = [], dunning = [];
+  const rebills = [], failed = [], pending = [], dunning = [], failHist = [];
+  const histFrom = Date.now() / 1000 - 31 * 86400; // mislukte rebills van de laatste 30 dagen (+1 dag marge voor tijdzones)
   n = 0;
   for await (const inv of stripe.invoices.list({ limit: 100, expand: ["data.payment_intent"] })) {
     if (++n > 8000) break;
@@ -158,13 +159,31 @@ async function stripeData() {
     if (inv.metadata?.jj_dunning) dunning.push(dunningRow(inv));
     const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
     const pi = typeof inv.payment_intent === "object" ? inv.payment_intent : null;
-    const err = pi?.last_payment_error;
+    // Off-session 3DS-vraag: PaymentIntent blijft op requires_action, vaak zonder last_payment_error → als 3DS tellen
+    const err = pi?.last_payment_error || (pi?.status === "requires_action" ? { code: "authentication_required" } : null);
     // Kortingsladder (lib/stripe-dunning.js): factuur "paid out of band" → echt betaald bedrag in metadata, telt als recovered
-    if (inv.status === "paid" && inv.amount_paid) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: paidAmount(inv), provider: "stripe", recovered: (inv.attempt_count || 1) > 1 || !!inv.metadata?.jj_dunning_amount, discountPct: inv.metadata?.jj_dunning_amount ? Number(String(inv.metadata.jj_dunning_result || "").replace("paid-", "")) || null : null });
+    // Let op: zo'n factuur heeft amount_paid 0 (het geld kwam via een losse PaymentIntent) → daarom ook jj_dunning_amount meetellen,
+    // anders vallen de via retries binnengehaalde bedragen buiten rebill-omzet en Total net profit.
+    // Historiek mislukte rebills: elke rebill-factuur waarvan minstens één poging mislukte, ook als ze later toch betaald werd
+    if (inv.created >= histFrom && inv.attempted && ((inv.attempt_count || 0) > 1 || ["open", "uncollectible", "void"].includes(inv.status) || inv.metadata?.jj_dunning)) {
+      failHist.push({ subId, invoiceId: inv.id, piId: pi?.id || (typeof inv.payment_intent === "string" ? inv.payment_intent : null), at: iso(inv.created * 1000), amount: (inv.amount_due || inv.total || 0) / 100,
+        reason: inv.metadata?.jj_dunning_code || err?.decline_code || err?.code || null, outcome: inv.status === "paid" ? "recovered" : inv.status === "open" ? "open" : "lost",
+        paid: inv.status === "paid" ? paidAmount(inv) : 0, ladder: !!inv.metadata?.jj_dunning, provider: "stripe" });
+    }
+    if (inv.status === "paid" && (inv.amount_paid || Number(inv.metadata?.jj_dunning_amount) > 0)) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: paidAmount(inv), provider: "stripe", recovered: (inv.attempt_count || 1) > 1 || !!inv.metadata?.jj_dunning_amount, discountPct: inv.metadata?.jj_dunning_amount ? Number(String(inv.metadata.jj_dunning_result || "").replace("paid-", "")) || null : null });
     else if (!inv.attempted && (inv.status === "draft" || inv.status === "open") && inv.amount_due) pending.push({ subId, at: iso(inv.created * 1000), amount: inv.amount_due / 100, provider: "stripe" });
     else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
   }
-  return { members, rebills, failed, pending, dunning };
+  // Bij een later geslaagde poging wist Stripe last_payment_error → reden halen uit de eerste mislukte charge
+  const unknown = failHist.filter((f) => !f.reason && f.piId).slice(0, 80);
+  for (let i = 0; i < unknown.length; i += 10) {
+    await Promise.all(unknown.slice(i, i + 10).map(async (f) => {
+      const ch = await stripe.charges.list({ payment_intent: f.piId, limit: 10 }).catch(() => null);
+      const bad = (ch?.data || []).filter((c) => c.status === "failed").sort((a, b) => a.created - b.created)[0];
+      if (bad) f.reason = bad.outcome?.reason || bad.failure_code || null;
+    }));
+  }
+  return { members, rebills, failed, pending, dunning, failHist };
 }
 
 /* ---------------- kortingsladder (insufficient funds): schema per mislukte rebill ----------------
@@ -219,7 +238,7 @@ async function paypalData(ids) {
       const last = bi.last_payment?.time ? Date.parse(bi.last_payment.time) : null;
       const rebillAt = [];
       for (let k = 0; k < cycles; k++) { const at = iso(last ? last - k * CYCLE_MS : start + TRIAL_MS + k * CYCLE_MS); rebillAt.push(at); rebills.push({ subId: s.id, at, amount: PRICE, provider: "paypal" }); }
-      if (bi.last_failed_payment?.time) failed.push({ subId: s.id, at: bi.last_failed_payment.time, amount: PRICE, provider: "paypal" });
+      if (bi.last_failed_payment?.time) failed.push({ subId: s.id, at: bi.last_failed_payment.time, amount: PRICE, provider: "paypal", reason: bi.last_failed_payment.reason_code || "paypal", outcome: ended ? "lost" : last && last > Date.parse(bi.last_failed_payment.time) ? "recovered" : "open" });
       members.push({
         id: s.id, provider: "paypal", status: inTrial ? "trial" : statusMap[s.status] || s.status.toLowerCase(), rawStatus: s.status,
         startedAt: iso(Date.parse(s.create_time)), trialEnd: iso(start + TRIAL_MS),
@@ -322,6 +341,8 @@ export default async function handler(req, res) {
     const feFees = feOrders.reduce((a, m) => a + m.order.fees, 0);
     const pRebills = rebills.filter((r) => inPeriod(r.at));
     const rebillRevenue = pRebills.reduce((a, r) => a + r.amount, 0);
+    const retryRebills = pRebills.filter((r) => r.recovered); // binnengehaald na een mislukte poging (Stripe retry of kortingsladder)
+    const retryRevenue = retryRebills.reduce((a, r) => a + r.amount, 0);
     const rebillCogs = pRebills.length * REBILL_COGS;
     const rebillFees = pRebills.reduce((a, r) => a + r.amount * REBILL_FEE_PCT + REBILL_FEE_FIXED, 0);
     const spend = meta.total;
@@ -536,6 +557,7 @@ export default async function handler(req, res) {
     const kpis = {
       netProfit: r2(netProfit),
       orders: { count: feOrders.length + pRebills.length, amount: r2(feRevenue + rebillRevenue), frontEnd: feOrders.length, rebills: pRebills.length },
+      retryRevenue: { period: r2(retryRevenue), count: retryRebills.length, ladder: retryRebills.filter((r) => r.discountPct != null).length },
       rebillRevenue: { period: r2(rebillRevenue), total: r2(rebills.reduce((a, r) => a + r.amount, 0)), count: pRebills.length, totalCount: rebills.length },
       cogs: { frontEnd: r2(feCogs), rebills: r2(rebillCogs), rebillCogsEach: REBILL_COGS },
       fees: r2(feFees + rebillFees),
@@ -591,8 +613,26 @@ export default async function handler(req, res) {
       today: dayStr(now), runTime: new Date(`${dayStr(now)}T08:10:00Z`).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: TZ }), // cron vercel.json "10 8 * * *" (UTC)
     };
 
+    /* ---- mislukte rebills laatste 30 dagen: per reden, en hoe ze afliepen ---- */
+    const from30 = now - 30 * DAY;
+    const fail30 = [...(st.failHist || []), ...py.failed.filter((f) => f.outcome)].filter((f) => Date.parse(f.at) >= from30);
+    const byReason = {};
+    for (const f of fail30) {
+      const k = f.provider === "paypal" ? "paypal" : f.reason || "unknown";
+      const b = (byReason[k] ||= { reason: k, count: 0, recovered: 0, open: 0, lost: 0, amount: 0 });
+      b.count++; b[f.outcome]++; b.amount += f.amount;
+    }
+    const failed30 = {
+      days: 30, total: fail30.length, amount: r2(fail30.reduce((a, f) => a + f.amount, 0)),
+      recovered: fail30.filter((f) => f.outcome === "recovered").length,
+      recoveredAmount: r2(fail30.filter((f) => f.outcome === "recovered").reduce((a, f) => a + (f.paid || f.amount), 0)),
+      open: fail30.filter((f) => f.outcome === "open").length, lost: fail30.filter((f) => f.outcome === "lost").length,
+      ladder: fail30.filter((f) => f.ladder).length, stripe: fail30.filter((f) => f.provider === "stripe").length, paypal: fail30.filter((f) => f.provider === "paypal").length,
+      byReason: Object.values(byReason).map((b) => ({ ...b, amount: r2(b.amount) })).sort((a, b) => b.count - a.count),
+    };
+
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, upcoming, dunning, dunningSummary, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, upcoming, dunning, dunningSummary, failed30, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });
