@@ -158,6 +158,138 @@ function DueToday({ rows }) {
   );
 }
 
+
+/* ---------- Next 14 days: renewals due per day, stacked per product ---------- */
+const PRODUCTS = [["neurotone", "NeuroTone", "#2b2e36"], ["magnesium", "Magnesium Freeze", "#8b909b"], ["lubrisense", "LubriSense", "#c08fbd"]];
+const prodMeta = (k) => PRODUCTS.find((p) => p[0] === k) || [k, k, "#cbd5e1"];
+const fmtDay = (d, o = { day: "numeric", month: "short" }) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { ...o, timeZone: "UTC" });
+
+function NextDays({ days }) {
+  const [hover, setHover] = useState(null);
+  if (!days?.length) return null;
+  const extra = [...new Set(days.flatMap((d) => Object.keys(d.byProduct || {})))].filter((k) => !PRODUCTS.some((p) => p[0] === k));
+  const keys = [...PRODUCTS.map((p) => p[0]), ...extra].filter((k) => days.some((d) => d.byProduct?.[k]));
+  const total = days.reduce((a, d) => a + d.total, 0), amount = days.reduce((a, d) => a + d.amount, 0);
+  const W = 1000, H = 250, TOP = 24, BOTTOM = 26, SIDE = 4;
+  const ih = H - TOP - BOTTOM, slot = (W - 2 * SIDE) / days.length, bw = slot * 0.84;
+  const max = Math.max(1, ...days.map((d) => d.total));
+  const hpx = (v) => (v / max) * ih;
+  return (
+    <div style={{ ...ui.card, padding: "20px 22px 14px", marginBottom: "20px", position: "relative" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+          <span style={{ fontWeight: 800, fontSize: "15px" }}>Next 14 days</span>
+          <span style={{ fontSize: "12px", color: "#8a92a3", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>renewals due per day</span>
+        </div>
+        <span style={{ fontSize: "12px", color: "#8a92a3" }}>{total} renewals · {eur(amount, 0)} if all are collected</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} onMouseLeave={() => setHover(null)}>
+        {days.map((d, i) => {
+          const x = SIDE + i * slot + (slot - bw) / 2;
+          let y = TOP + ih;
+          const segs = keys.map((k) => {
+            const v = d.byProduct?.[k] || 0;
+            if (!v) return null;
+            const h = hpx(v);
+            y -= h;
+            return <rect key={k} x={x} y={y + 1.5} width={bw} height={Math.max(1, h - 3)} rx="5" fill={prodMeta(k)[2]} opacity={hover == null || hover === i ? 1 : 0.6} />;
+          });
+          return (
+            <g key={d.d} onMouseEnter={() => setHover(i)} style={{ cursor: "default" }}>
+              <rect x={SIDE + i * slot} y={0} width={slot} height={H} fill="transparent" />
+              {segs}
+              {d.total > 0 && <text x={x + bw / 2} y={TOP + ih - hpx(d.total) - 7} textAnchor="middle" fontSize="12" fill="#475569" style={{ fontVariantNumeric: "tabular-nums" }}>{d.total}</text>}
+              {d.total === 0 && <rect x={x} y={TOP + ih - 2} width={bw} height="2" rx="1" fill="#e2e6ec" />}
+              <text x={x + bw / 2} y={H - 6} textAnchor="middle" fontSize="11" fill={i === 0 ? "#0f172a" : "#a4adbd"} fontWeight={i === 0 ? 700 : 400} fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace">{i === 0 ? "Today" : fmtDay(d.d)}</text>
+            </g>
+          );
+        })}
+      </svg>
+      {hover != null && (() => {
+        const d = days[hover];
+        const left = ((SIDE + hover * slot + slot / 2) / W) * 100;
+        return (
+          <div style={{ position: "absolute", top: "54px", left: `${left}%`, transform: `translateX(${left > 70 ? "-105%" : "10px"})`, background: "#0f172a", color: "#fff", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", lineHeight: 1.7, pointerEvents: "none", boxShadow: "0 8px 24px rgba(15,23,42,0.18)", whiteSpace: "nowrap", zIndex: 10 }}>
+            <div style={{ fontWeight: 700 }}>{fmtDay(d.d, { weekday: "long", day: "numeric", month: "short" })}</div>
+            {keys.filter((k) => d.byProduct?.[k]).map((k) => <div key={k}><span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "2px", background: prodMeta(k)[2], marginRight: "6px" }} />{prodMeta(k)[1]}: <b>{d.byProduct[k]}</b></div>)}
+            <div style={{ color: "#cbd5e1" }}>{d.total} renewal{d.total === 1 ? "" : "s"} · {eur(d.amount, 0)}{d.trial ? ` · ${d.trial} first rebill after trial` : ""}{d.paypal ? ` · ${d.paypal} PayPal` : ""}</div>
+          </div>
+        );
+      })()}
+      <div style={{ display: "flex", gap: "18px", flexWrap: "wrap", marginTop: "6px", fontSize: "12.5px", color: "#334155" }}>
+        {keys.map((k) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "7px" }}><span style={{ width: "10px", height: "10px", borderRadius: "3px", background: prodMeta(k)[2] }} />{prodMeta(k)[1]}</span>)}
+        {!keys.length && <span style={{ color: "#8a92a3" }}>No renewals scheduled in the next 14 days.</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Retries after insufficient funds (discount ladder, lib/stripe-dunning.js) ---------- */
+const OUTCOME = { "in-progress": ["In progress", "blue"], recovered: ["Recovered", "green"], cancelled: ["Cancelled", "gray"], "paid-by-customer": ["Paid by customer", "green"] };
+function StepCell({ s, today }) {
+  if (s.state === "paid") return <Chip>✓ paid {eur(s.amount)}</Chip>;
+  if (s.state === "failed") return <span title={s.code || ""}><Chip tone="red">✗ {fmtDay(s.date)}</Chip>{s.code ? <div style={{ fontSize: "10.5px", color: "#a4adbd", marginTop: "2px" }}>{s.code}</div> : null}</span>;
+  if (s.state === "next") return <span><Chip tone="amber">{s.date <= today ? "Today" : fmtDay(s.date, { weekday: "short", day: "numeric", month: "short" })}</Chip><div style={{ fontSize: "10.5px", color: "#8a92a3", marginTop: "2px" }}>{eur(s.amount)}</div></span>;
+  if (s.state === "planned") return <span style={{ color: "#8a92a3", fontSize: "12.5px" }}>{fmtDay(s.date, { weekday: "short", day: "numeric", month: "short" })}<div style={{ fontSize: "10.5px", color: "#b6bdc9" }}>{eur(s.amount)}</div></span>;
+  return <span style={{ color: "#c3c9d3" }}>—</span>;
+}
+function Retries({ rows, summary }) {
+  const [showDone, setShowDone] = useState(false);
+  if (!summary) return null;
+  const today = summary.today;
+  const active = rows.filter((r) => r.outcome === "in-progress");
+  const list = showDone ? rows : active;
+  const days = Array.from({ length: 14 }, (_, i) => { const d = new Date(`${today}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + i); return d.toISOString().slice(0, 10); });
+  const overdue = Object.entries(summary.byDay || {}).filter(([d]) => d < today).reduce((a, [, n]) => a + n, 0);
+  return (
+    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "10px" }}>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: "15px" }}>Retries after insufficient funds</div>
+          <div style={{ fontSize: "12px", color: "#8a92a3", maxWidth: "760px", lineHeight: 1.5 }}>Card rebills declined for insufficient funds get 3 extra tries with a discount: −10% on day 2, −20% on day 5 and −30% on day 9 after the failed rebill, every day at {summary.runTime} (Brussels). After the 3rd failed try the membership is cancelled. Other declines are retried by Stripe itself; PayPal retries its own payments.</div>
+        </div>
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          <Chip tone="blue">{summary.inProgress} in progress · {eur(summary.openAmount)}</Chip>
+          <Chip>{summary.recovered} recovered · {eur(summary.recoveredAmount)}</Chip>
+          <Chip tone="gray">{summary.cancelled} cancelled</Chip>
+          <span style={{ fontSize: "11px", color: "#a4adbd", alignSelf: "center" }}>last 30 days</span>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "4px 0 14px" }}>
+        {overdue > 0 && <span style={{ border: "1px solid #fecaca", background: "#fef2f2", borderRadius: "10px", padding: "6px 10px", fontSize: "12px", color: "#991b1b" }}><b>{overdue}</b> overdue (next run)</span>}
+        {days.map((d, i) => { const n = (summary.byDay || {})[d] || 0; return (
+          <span key={d} style={{ border: `1px solid ${n ? "#fde68a" : "#eceef2"}`, background: n ? "#fffbeb" : "#fff", borderRadius: "10px", padding: "6px 10px", fontSize: "12px", color: n ? "#854d0e" : "#b6bdc9", minWidth: "62px", textAlign: "center", lineHeight: 1.3 }}>
+            <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "10.5px" }}>{i === 0 ? "Today" : fmtDay(d, { weekday: "short", day: "numeric" })}</div>
+            <b style={{ fontSize: "14px" }}>{n || "·"}</b>
+          </span>
+        ); })}
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr>{["Member", "Product", "Failed on", "Rebill", "Try 1 · −10%", "Try 2 · −20%", "Try 3 · −30%", "Status"].map((h, i) => <th key={h} style={{ ...ui.th, textAlign: i === 3 ? "right" : "left" }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {list.map((r) => {
+              const [t, tone] = OUTCOME[r.outcome] || [r.outcome, "gray"];
+              return (
+                <tr key={r.invoiceId}>
+                  <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "170px" }}><a href={`/members?email=${encodeURIComponent(r.member.email || r.email)}&brand=${r.member.product === "lubrisense" ? "lubrisense" : "neurotone"}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{r.member.name || r.member.email || r.email}</a><div style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.member.email || r.email}</div></td>
+                  <td style={ui.td}>{prodMeta(r.member.product || "neurotone")[1]}</td>
+                  <td style={ui.td}>{fmtDay(r.failedOn)}</td>
+                  <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(r.amount)}</td>
+                  {r.steps.map((s) => <td key={s.stage} style={ui.td}><StepCell s={s} today={today} /></td>)}
+                  <td style={ui.td}><Chip tone={tone}>{t}{r.outcome === "recovered" && r.paidAmount ? ` · ${eur(r.paidAmount)}` : ""}</Chip></td>
+                </tr>
+              );
+            })}
+            {list.length === 0 && <tr><td colSpan={8} style={{ ...ui.td, color: "#8a92a3" }}>{showDone ? "No retries in the last 30 days." : "No rebills in the retry ladder right now."}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > active.length && <button style={{ ...ui.btn(false), marginTop: "12px" }} onClick={() => setShowDone(!showDone)}>{showDone ? "Show only in progress" : `Also show finished (${rows.length - active.length}, last 30 days)`}</button>}
+    </div>
+  );
+}
+
 function Cohorts({ week, month }) {
   const [mode, setMode] = useState("week");
   const rows = mode === "week" ? week : month;
@@ -290,6 +422,10 @@ export default function Subscriptions() {
           </Grid>
 
           <DueToday rows={data.dueToday || []} />
+
+          <NextDays days={data.upcoming} />
+
+          <Retries rows={data.dunning || []} summary={data.dunningSummary} />
 
           <Cohorts week={data.cohortsWeek} month={data.cohortsMonth} />
 

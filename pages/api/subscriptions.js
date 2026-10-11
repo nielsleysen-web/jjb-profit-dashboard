@@ -16,7 +16,7 @@
 import crypto from "crypto";
 import axios from "axios";
 import Stripe from "stripe";
-import { paidAmount } from "../../lib/stripe-dunning";
+import { paidAmount, LADDER } from "../../lib/stripe-dunning";
 import { MEMBERSHIP } from "../../lib/checkout";
 import { shopifyGraphql } from "../../lib/shopify-admin";
 import { pp, paypalConfigured, unpackCustom } from "../../lib/paypal";
@@ -149,11 +149,13 @@ async function stripeData() {
       product: s.metadata?.product_key || "neurotone",
     });
   }
-  const rebills = [], failed = [], pending = [];
+  const rebills = [], failed = [], pending = [], dunning = [];
   n = 0;
   for await (const inv of stripe.invoices.list({ limit: 100, expand: ["data.payment_intent"] })) {
     if (++n > 8000) break;
     if (inv.billing_reason !== "subscription_cycle") continue;
+    // Kortingsladder bij saldotekort (lib/stripe-dunning.js): alles staat in de factuur-metadata
+    if (inv.metadata?.jj_dunning) dunning.push(dunningRow(inv));
     const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
     const pi = typeof inv.payment_intent === "object" ? inv.payment_intent : null;
     const err = pi?.last_payment_error;
@@ -162,7 +164,40 @@ async function stripeData() {
     else if (!inv.attempted && (inv.status === "draft" || inv.status === "open") && inv.amount_due) pending.push({ subId, at: iso(inv.created * 1000), amount: inv.amount_due / 100, provider: "stripe" });
     else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
   }
-  return { members, rebills, failed, pending };
+  return { members, rebills, failed, pending, dunning };
+}
+
+/* ---------------- kortingsladder (insufficient funds): schema per mislukte rebill ----------------
+   Poging k valt op <dag van mislukken> + LADDER[k].day (cron /api/stripe/dunning, dagelijks ±10:10 Italiaanse tijd).
+   Een gemiste dag schuift naar de volgende run; de eerstvolgende poging staat exact in jj_dunning_next. */
+const addDaysStr = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+function dunningRow(inv) {
+  const md = inv.metadata || {};
+  const done = parseInt(md.jj_dunning_stage || "0", 10);
+  const failedOn = md.jj_dunning_failed || dayStr((inv.status_transitions?.finalized_at || inv.created) * 1000);
+  const result = md.jj_dunning_result || ""; // "paid-20" · "cancelled" · "invoice-paid" · "subscription-canceled" · …
+  const paidPct = /^paid-(\d+)$/.test(result) ? Number(result.slice(5)) : null;
+  const active = md.jj_dunning === "1" && inv.status === "open";
+  const full = (inv.total || inv.amount_due || 0) / 100;
+  const steps = LADDER.map((s) => {
+    const base = { stage: s.stage, pct: s.pct, amount: r2(full * (1 - s.pct / 100)) };
+    if (s.stage <= done) {
+      if (paidPct === s.pct) return { ...base, state: "paid", date: null };
+      return { ...base, state: "failed", code: md[`jj_dunning_fail_${s.stage}`] || null, date: null };
+    }
+    if (!active) return { ...base, state: "skipped", date: null };
+    if (s.stage === done + 1) return { ...base, state: "next", date: md.jj_dunning_next || addDaysStr(failedOn, s.day) };
+    return { ...base, state: "planned", date: addDaysStr(failedOn, s.day) };
+  });
+  // Laatst bekende pogingsdatum (voor afgeronde rijen): zelfde regel als de ladder
+  steps.forEach((st, i) => { if (!st.date && (st.state === "paid" || st.state === "failed")) st.date = addDaysStr(failedOn, LADDER[i].day); });
+  const outcome = active ? "in-progress" : paidPct != null ? "recovered" : result === "cancelled" ? "cancelled" : result === "invoice-paid" ? "paid-by-customer" : result || inv.status;
+  return {
+    invoiceId: inv.id, subId: typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id, email: inv.customer_email || "",
+    failedOn, amount: r2(full), code: md.jj_dunning_code || null, enrolled: md.jj_dunning_enrolled || null,
+    done, next: active ? md.jj_dunning_next || null : null, nextPct: active ? LADDER[done]?.pct ?? null : null,
+    outcome, paidAmount: md.jj_dunning_amount ? Number(md.jj_dunning_amount) : null, steps,
+  };
 }
 
 /* ---------------- PayPal ---------------- */
@@ -528,8 +563,36 @@ export default async function handler(req, res) {
       mrr: r2((trial + active) * PRICE * (30 / MEMBERSHIP.intervalDays)), recurring28d: r2((trial + active) * PRICE),
     };
 
+    /* ---- komende 14 dagen: geplande verlengingen per dag en per product ---- */
+    const upcoming = [];
+    for (let i = 0; i < 14; i++) {
+      const d = dayStr(now + i * DAY);
+      const { start, end } = dayBounds(d, d);
+      const list = billable.filter((m) => between(m.nextBilling, Math.max(now, start), end));
+      const byProduct = {};
+      for (const m of list) byProduct[m.product || "neurotone"] = (byProduct[m.product || "neurotone"] || 0) + 1;
+      upcoming.push({ d, total: list.length, amount: r2(list.length * PRICE), byProduct,
+        trial: list.filter((m) => m.status === "trial").length, paypal: list.filter((m) => m.provider === "paypal").length });
+    }
+
+    /* ---- kortingsladder: lopende pogingen + afgeronde van de laatste 30 dagen ---- */
+    const since30 = dayStr(now - 30 * DAY);
+    const dunning = (st.dunning || [])
+      .filter((r) => r.outcome === "in-progress" || r.failedOn >= since30)
+      .map((r) => { const m = byId[r.subId]; return { ...r, member: m ? who(m) : { id: r.subId, name: "", email: r.email, provider: "stripe", product: "neurotone", status: "" } }; })
+      .sort((a, b) => (a.outcome === "in-progress") !== (b.outcome === "in-progress") ? (a.outcome === "in-progress" ? -1 : 1) : String(a.next || "9").localeCompare(String(b.next || "9")) || b.failedOn.localeCompare(a.failedOn));
+    const dunningSummary = {
+      inProgress: dunning.filter((r) => r.outcome === "in-progress").length,
+      openAmount: r2(dunning.filter((r) => r.outcome === "in-progress").reduce((a, r) => a + r.amount, 0)),
+      recovered: dunning.filter((r) => r.outcome === "recovered").length,
+      recoveredAmount: r2(dunning.filter((r) => r.outcome === "recovered").reduce((a, r) => a + (r.paidAmount || 0), 0)),
+      cancelled: dunning.filter((r) => r.outcome === "cancelled").length,
+      byDay: (() => { const o = {}; for (const r of dunning) if (r.next) o[r.next] = (o[r.next] || 0) + 1; return o; })(),
+      today: dayStr(now), runTime: new Date(`${dayStr(now)}T08:10:00Z`).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: TZ }), // cron vercel.json "10 8 * * *" (UTC)
+    };
+
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, upcoming, dunning, dunningSummary, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });
