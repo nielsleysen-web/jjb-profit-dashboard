@@ -18,6 +18,7 @@ import { queueUpsell, dequeueUpsell } from "../../../lib/upsell-queue";
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 export const config = { maxDuration: 60 };
 
+const MAX_UPSELL_ATTEMPTS = 2;
 const invTag = (invoiceId) => `stripe-inv-${invoiceId}`.slice(0, 40);
 
 // Na een geslaagde betaling: wachtrij + mail 1 vrijgeven (met upsellregel), daarna de order aanvullen.
@@ -103,6 +104,9 @@ export default async function handler(req, res) {
     // Idempotency: dezelfde key herhaalt bij Stripe 24 uur lang ook een MISLUKT antwoord → per poging een
     // nieuwe key (teller in de metadata), zodat "Riprova" na een weigering echt opnieuw probeert.
     const attempt = Number(sub.metadata?.upsell_attempts || 0) + 1;
+    // Max 2 pogingen per aankoop: telkens opnieuw weigeren op dezelfde kaart maakt de bank argwanend
+    // (en voorspelt een mislukte rebill) → na 2 weigeringen geen nieuwe afschrijving meer
+    if (attempt > MAX_UPSELL_ATTEMPTS) return res.status(429).json({ error: "Il pagamento dell'offerta non è andato a buon fine. Il tuo ordine è confermato.", code: "max_attempts" });
     await stripe.subscriptions.update(sub.id, { metadata: { ...sub.metadata, upsell_attempts: String(attempt) } }).catch(() => {});
     const card = pm.card || {};
     const pmInfo = `${pm.type}${card.brand ? "/" + card.brand : ""}${card.funding ? "/" + card.funding : ""}${card.wallet?.type ? "/wallet:" + card.wallet.type : ""}${card.country ? "/" + card.country : ""}`;
@@ -131,7 +135,7 @@ export default async function handler(req, res) {
       }
       console.error("stripe/upsell charge:", e.code, e.decline_code || "-", e.message, "| sub", sub.id, "pm", pm.id, pmInfo, "attempt", attempt);
       const msg = e.type === "StripeCardError" ? "La tua carta non ha autorizzato l'addebito." : "Impossibile completare l'addebito. Riprova.";
-      return res.status(402).json({ error: msg, code: e.code || null });
+      return res.status(402).json({ error: msg, code: e.code || null, attempts: attempt, max: MAX_UPSELL_ATTEMPTS });
     }
 
     if (pi.status === "requires_action" && pi.client_secret) {

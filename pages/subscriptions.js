@@ -299,7 +299,7 @@ function RetryStrip({ r }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(66px, 1fr))", gap: "6px" }}>
         {r.days.map((d, i) => {
           const on = d.count > 0;
-          const tip = `${fmtDay(d.d, { weekday: "long", day: "numeric", month: "short" })}: ${d.count} retr${d.count === 1 ? "y" : "ies"}${on ? ` · ${eur(d.amount)} · ${d.ladder} discount ladder${d.pcts.length ? ` (−${d.pcts.join("/−")}%)` : ""} · ${d.stripe} Stripe` : ""}${d.overdue ? ` · ${d.overdue} overdue, picked up at the next run` : ""}`;
+          const tip = `${fmtDay(d.d, { weekday: "long", day: "numeric", month: "short" })}: ${d.count} retr${d.count === 1 ? "y" : "ies"}${on ? ` · ${eur(d.amount)} · ${d.ladder} discount ladder${d.labels?.length ? ` (${d.labels.join(" / ")})` : d.pcts.length ? ` (−${d.pcts.join("/−")}%)` : ""} · ${d.stripe} Stripe` : ""}${d.overdue ? ` · ${d.overdue} overdue, picked up at the next run` : ""}`;
           return (
             <div key={d.d} title={tip} style={{ position: "relative", borderRadius: "12px", padding: "8px 8px 9px", textAlign: "center", background: on ? `rgba(79,109,245,${0.05 + 0.1 * (d.count / max)})` : "#fafbfc", border: `1px solid ${i === 0 ? "#0f172a" : on ? "#dfe5fd" : "#f0f2f5"}`, lineHeight: 1.25 }}>
               <div style={{ fontSize: "10.5px", fontWeight: 600, color: i === 0 ? "#0f172a" : "#8a92a3" }}>{i === 0 ? "Today" : fmtDay(d.d, { weekday: "short" })}</div>

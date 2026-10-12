@@ -16,7 +16,7 @@
 import crypto from "crypto";
 import axios from "axios";
 import Stripe from "stripe";
-import { paidAmount, LADDER } from "../../lib/stripe-dunning";
+import { paidAmount, LADDER, stepAmount, stepPct } from "../../lib/stripe-dunning";
 import { MEMBERSHIP } from "../../lib/checkout";
 import { shopifyGraphql } from "../../lib/shopify-admin";
 import { pp, paypalConfigured, unpackCustom } from "../../lib/paypal";
@@ -36,6 +36,8 @@ function getSession(req) {
 
 const TZ = "Europe/Brussels";
 const PRICE = MEMBERSHIP.price / 100;
+const priceOf = (m) => (m && Number.isFinite(m.price) ? m.price : PRICE); // per lid: na een geslaagde laatste retry kan het €29,95 zijn
+const sumPrice = (list) => list.reduce((a, m) => a + priceOf(m), 0);
 const TRIAL_MS = MEMBERSHIP.trialDays * 86400000;
 const CYCLE_MS = MEMBERSHIP.intervalDays * 86400000;
 const DAY = 86400000;
@@ -147,6 +149,8 @@ async function stripeData() {
       cancelReason: s.cancellation_details?.reason || null, cancelFeedback: s.cancellation_details?.feedback || null, cancelAt: iso((s.cancel_at || 0) * 1000),
       email: c.email || "", name: c.shipping?.name || c.name || "", cycles: 0, membershipRevenue: 0, rebillAt: [],
       product: s.metadata?.product_key || "neurotone",
+      price: s.items?.data?.[0]?.price?.unit_amount != null ? s.items.data[0].price.unit_amount / 100 : PRICE,
+      priceDowngraded: !!s.metadata?.jj_price_downgrade,
     });
   }
   const rebills = [], failed = [], pending = [], dunning = [], failHist = [], retries = [];
@@ -175,7 +179,7 @@ async function stripeData() {
       const full = (inv.amount_due || 0) / 100;
       if (inv.metadata?.jj_dunning === "1") {
         const nx = dunningRow(inv).steps.find((x) => x.state === "next");
-        retries.push({ subId, invoiceId: inv.id, kind: "ladder", d: nx?.date || null, amount: nx ? nx.amount : full, pct: nx?.pct ?? null, full });
+        retries.push({ subId, invoiceId: inv.id, kind: "ladder", d: nx?.date || null, amount: nx ? nx.amount : full, pct: nx?.pct ?? null, label: nx?.label || null, full });
       } else retries.push({ subId, invoiceId: inv.id, kind: "stripe", d: inv.next_payment_attempt ? dayStr(inv.next_payment_attempt * 1000) : null, at: inv.next_payment_attempt ? iso(inv.next_payment_attempt * 1000) : null, amount: full, pct: null, full, reason: err?.decline_code || err?.code || null });
     }
     if (inv.status === "paid" && (inv.amount_paid || Number(inv.metadata?.jj_dunning_amount) > 0)) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: paidAmount(inv), provider: "stripe", recovered: (inv.attempt_count || 1) > 1 || !!inv.metadata?.jj_dunning_amount, discountPct: inv.metadata?.jj_dunning_amount ? Number(String(inv.metadata.jj_dunning_result || "").replace("paid-", "")) || null : null });
@@ -207,9 +211,10 @@ function dunningRow(inv) {
   const active = md.jj_dunning === "1" && inv.status === "open";
   const full = (inv.total || inv.amount_due || 0) / 100;
   const steps = LADDER.map((s) => {
-    const base = { stage: s.stage, pct: s.pct, amount: r2(full * (1 - s.pct / 100)) };
+    const fullCents = Math.round(full * 100);
+    const base = { stage: s.stage, pct: stepPct(s, fullCents), label: s.label, amount: r2(stepAmount(s, fullCents) / 100) };
     if (s.stage <= done) {
-      if (paidPct === s.pct) return { ...base, state: "paid", date: null };
+      if (paidPct != null && s.stage === done) return { ...base, state: "paid", date: null };
       return { ...base, state: "failed", code: md[`jj_dunning_fail_${s.stage}`] || null, date: null };
     }
     if (!active) return { ...base, state: "skipped", date: null };
@@ -222,7 +227,7 @@ function dunningRow(inv) {
   return {
     invoiceId: inv.id, subId: typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id, email: inv.customer_email || "",
     failedOn, amount: r2(full), code: md.jj_dunning_code || null, enrolled: md.jj_dunning_enrolled || null,
-    done, next: active ? md.jj_dunning_next || null : null, nextPct: active ? LADDER[done]?.pct ?? null : null,
+    done, next: active ? md.jj_dunning_next || null : null, nextPct: active && LADDER[done] ? stepPct(LADDER[done], Math.round(full * 100)) : null, nextLabel: active ? LADDER[done]?.label || null : null,
     outcome, paidAmount: md.jj_dunning_amount ? Number(md.jj_dunning_amount) : null, steps,
   };
 }
@@ -447,7 +452,7 @@ export default async function handler(req, res) {
       const pts = Array.from({ length: 24 }, (_, h) => ({ label: `${String(h).padStart(2, "0")}:00`, total: 0, rebills: 0, rebillCount: 0, frontEnd: 0, orders: 0, scheduled: 0, scheduledAmount: 0 }));
       for (const m of members) if (m.order && between(m.order.at, dStart, dEnd)) { const p = pts[hourOf(m.order.at)]; p.total += m.order.net; p.frontEnd += m.order.net; p.orders++; }
       for (const r of rebills) if (between(r.at, dStart, dEnd)) { const p = pts[hourOf(r.at)]; p.total += r.amount; p.rebills += r.amount; p.rebillCount++; p.orders++; }
-      for (const m of billable) if (between(m.nextBilling, Math.max(now, dStart), dEnd)) { const p = pts[hourOf(m.nextBilling)]; p.scheduled++; p.scheduledAmount += PRICE; }
+      for (const m of billable) if (between(m.nextBilling, Math.max(now, dStart), dEnd)) { const p = pts[hourOf(m.nextBilling)]; p.scheduled++; p.scheduledAmount += priceOf(m); }
       return pts.map((p) => ({ ...p, total: r2(p.total), rebills: r2(p.rebills), frontEnd: r2(p.frontEnd), scheduledAmount: r2(p.scheduledAmount) }));
     }
     const singleDay = from === to;
@@ -534,7 +539,7 @@ export default async function handler(req, res) {
     const events = [];
     for (const r of pRebills) { const m = byId[r.subId]; if (!m) continue; events.push({ type: "paid", at: r.at, amount: r2(r.amount), cycle: m.rebillAt.indexOf(r.at) + 1 || m.cycles, next: m.nextBilling, recovered: !!r.recovered, member: who(m) }); }
     for (const f of pFailed) { const m = byId[f.subId]; if (!m) continue; events.push({ type: "failed", at: f.at, amount: r2(f.amount), cycle: m.cycles + 1, reason: f.reason || null, attempts: f.attempts || 1, nextAttempt: f.nextAttempt || null, inRecovery: m.status === "problem", member: who(m) }); }
-    for (const m of openInPeriod) events.push({ type: "scheduled", at: m.nextBilling, amount: PRICE, cycle: m.cycles + 1, member: who(m) });
+    for (const m of openInPeriod) events.push({ type: "scheduled", at: m.nextBilling, amount: priceOf(m), cycle: m.cycles + 1, member: who(m) });
     events.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
     // Rebills die vandaag (Brussel) geïnd moeten worden: al betaald, mislukt of nog gepland — los van de gekozen periode
@@ -543,10 +548,10 @@ export default async function handler(req, res) {
     const dueToday = [];
     for (const r of rebills) { if (!inToday(r.at)) continue; const m = byId[r.subId]; if (!m) continue; dueToday.push({ type: "paid", at: r.at, amount: r2(r.amount), cycle: m.rebillAt.indexOf(r.at) + 1 || m.cycles, recovered: !!r.recovered, member: who(m) }); }
     for (const f of failed) { if (!inToday(f.at)) continue; const m = byId[f.subId]; if (!m) continue; dueToday.push({ type: "failed", at: f.at, amount: r2(f.amount), cycle: m.cycles + 1, reason: f.reason || null, nextAttempt: f.nextAttempt || null, member: who(m) }); }
-    for (const m of billable) if (between(m.nextBilling, Math.max(now, tb.start), tb.end)) dueToday.push({ type: "scheduled", at: m.nextBilling, amount: PRICE, cycle: m.cycles + 1, member: who(m) });
+    for (const m of billable) if (between(m.nextBilling, Math.max(now, tb.start), tb.end)) dueToday.push({ type: "scheduled", at: m.nextBilling, amount: priceOf(m), cycle: m.cycles + 1, member: who(m) });
     // Zodat de lijst van vandaag niet "krimpt": ook wie vandaag aan de beurt was maar (nog) niet betaald/mislukt is
     const seenToday = new Set(dueToday.map((d) => d.member.id));
-    const addDue = (type, m, at, extra = {}) => { if (!m || seenToday.has(m.id)) return; seenToday.add(m.id); dueToday.push({ type, at, amount: PRICE, cycle: m.cycles + 1, member: who(m), ...extra }); };
+    const addDue = (type, m, at, extra = {}) => { if (!m || seenToday.has(m.id)) return; seenToday.add(m.id); dueToday.push({ type, at, amount: priceOf(m), cycle: m.cycles + 1, member: who(m), ...extra }); };
     // Stripe heeft de verlenging gestart maar nog niet afgeschreven (± 1 uur na het verlengmoment)
     for (const pnd of st.pending || []) if (inToday(pnd.at)) addDue("processing", byId[pnd.subId], pnd.at);
     // PayPal: tijdstip voorbij, betaling nog niet binnen (PayPal int soms uren later)
@@ -583,14 +588,14 @@ export default async function handler(req, res) {
       failed: { count: pFailed.length, amount: r2(pFailed.reduce((a, f) => a + f.amount, 0)), attempts, rate: attempts ? r2(pFailed.length / attempts) : null, inRecovery: problem, recovered: recoveredInPeriod },
       rebillNet: r2(rebillNet), rebillFees: r2(rebillFees), rebillCogs: r2(rebillCogs), rebillMargin: rebillRevenue > 0 ? r2(rebillNet / rebillRevenue) : null,
       frontEnd: { revenue: r2(feRevenue), cogs: r2(feCogs), fees: r2(feFees), count: feOrders.length },
-      due: { open: openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0), openAmount: r2((openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0)) * PRICE), processing: live ? dueToday.filter((d) => d.type === "processing").length : 0, cancelledToday: live ? dueToday.filter((d) => d.type === "cancelled").length : 0, total: pRebills.length + pFailed.length + openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0), ...byProvider(openInPeriod) },
-      next7: { count: next7.length, amount: r2(next7.length * PRICE), ...byProvider(next7), firstDay: next7.length ? dayStr(Math.min(...next7.map((m) => Date.parse(m.nextBilling)))) : null },
+      due: { open: openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0), openAmount: r2(sumPrice(openInPeriod) + (live ? dueToday.filter((d) => d.type === "processing").length : 0) * PRICE), processing: live ? dueToday.filter((d) => d.type === "processing").length : 0, cancelledToday: live ? dueToday.filter((d) => d.type === "cancelled").length : 0, total: pRebills.length + pFailed.length + openInPeriod.length + (live ? dueToday.filter((d) => d.type === "processing").length : 0), ...byProvider(openInPeriod) },
+      next7: { count: next7.length, amount: r2(sumPrice(next7)), ...byProvider(next7), firstDay: next7.length ? dayStr(Math.min(...next7.map((m) => Date.parse(m.nextBilling)))) : null },
       cancellations: cancelStats,
       newSubscribers: { period: newMembers.length, today: newToday.length, trialNow: trial },
       projection,
       activeSubscribers: trial + active, trial, active, problem,
       // MRR: alle actieve abonnees, proefleden meegerekend (zij rebillen na de proef)
-      mrr: r2((trial + active) * PRICE * (30 / MEMBERSHIP.intervalDays)), recurring28d: r2((trial + active) * PRICE),
+      mrr: r2(sumPrice(members.filter((m) => m.status === "trial" || m.status === "active")) * (30 / MEMBERSHIP.intervalDays)), recurring28d: r2(sumPrice(members.filter((m) => m.status === "trial" || m.status === "active"))),
     };
 
     /* ---- komende 14 dagen: geplande verlengingen per dag en per product ---- */
@@ -601,7 +606,7 @@ export default async function handler(req, res) {
       const list = billable.filter((m) => between(m.nextBilling, Math.max(now, start), end));
       const byProduct = {};
       for (const m of list) byProduct[m.product || "neurotone"] = (byProduct[m.product || "neurotone"] || 0) + 1;
-      upcoming.push({ d, total: list.length, amount: r2(list.length * PRICE), byProduct,
+      upcoming.push({ d, total: list.length, amount: r2(sumPrice(list)), byProduct,
         trial: list.filter((m) => m.status === "trial").length, paypal: list.filter((m) => m.provider === "paypal").length });
     }
 
@@ -643,7 +648,7 @@ export default async function handler(req, res) {
         const days = Array.from({ length: 14 }, (_, i) => {
           const d = dayStr(now + i * DAY), on = list.filter((r) => r.d === d || (i === 0 && r.d && r.d < today));
           return { d, count: on.length, amount: r2(on.reduce((a, r) => a + r.amount, 0)), ladder: on.filter((r) => r.kind === "ladder").length, stripe: on.filter((r) => r.kind === "stripe").length,
-            overdue: i === 0 ? on.filter((r) => r.d < today).length : 0, pcts: [...new Set(on.filter((r) => r.pct != null).map((r) => r.pct))].sort((a, b) => a - b) };
+            overdue: i === 0 ? on.filter((r) => r.d < today).length : 0, pcts: [...new Set(on.filter((r) => r.pct != null).map((r) => r.pct))].sort((a, b) => a - b), labels: [...new Set(on.filter((r) => r.label).map((r) => r.label))] };
         });
         const later = list.filter((r) => r.d && r.d > days[13].d).length;
         return { days, scheduled: list.filter((r) => r.d).length, amount: r2(list.filter((r) => r.d).reduce((a, r) => a + r.amount, 0)), later, none: list.filter((r) => !r.d).length,

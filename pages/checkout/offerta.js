@@ -179,6 +179,8 @@ export default function Offerta() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
+  const [blocked, setBlocked] = useState(false); // na 2 geweigerde kaartpogingen: geen nieuwe poging meer, enkel doorgaan
+  const fails = useRef(0);
   const ppRendered = useRef(false);
 
   useEffect(() => {
@@ -243,10 +245,14 @@ export default function Offerta() {
         if (error) throw new Error(error.message || "Conferma non riuscita.");
         r = await fetch("/api/stripe/upsell", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sub: q.sub, pi: r.pi }) }).then((x) => x.json());
       }
-      if (r.error) throw new Error(r.error);
+      if (r.error) { const x = new Error(r.error); x.code = r.code; x.last = r.attempts && r.max && r.attempts >= r.max; throw x; }
       setDone(true);
     } catch (e) {
-      setErr(e.message || "Si è verificato un errore. Riprova.");
+      fails.current += 1;
+      if (e.code === "max_attempts" || e.last || fails.current >= 2) {
+        setBlocked(true);
+        setErr("Il pagamento dell'offerta non è andato a buon fine. Il tuo ordine è confermato.");
+      } else setErr(e.message || "Si è verificato un errore. Riprova.");
       setBusy(false);
     }
   }
@@ -288,7 +294,9 @@ export default function Offerta() {
     q?.paypal && !preview ? (
       <div className="ppbox" id={id} />
     ) : (
-      <button className="cta" onClick={buyStripe} disabled={busy || !ready}>{busy ? "Un attimo…" : "COMPLETA L'ACQUISTO →"}</button>
+      blocked
+        ? <button className="cta" onClick={() => grazie(false)}>CONTINUA →</button>
+        : <button className="cta" onClick={buyStripe} disabled={busy || !ready}>{busy ? "Un attimo…" : "COMPLETA L'ACQUISTO →"}</button>
     );
 
   return (
