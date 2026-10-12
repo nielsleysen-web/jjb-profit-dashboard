@@ -288,6 +288,43 @@ const REASON = {
 };
 const reasonLabel = (r) => REASON[r] || String(r).replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 const FOUT = [["recovered", "Recovered", "#22c55e"], ["open", "Still retrying", "#f59e0b"], ["lost", "Lost", "#ef4444"]];
+// When is how much retried again: next 14 days (discount ladder for insufficient funds + Stripe's own retries)
+const RETRY_KIND = [["ladder", "Discount ladder", "#f59e0b"], ["stripe", "Stripe retry", "#4f6df5"]];
+function RetryStrip({ r }) {
+  const max = Math.max(1, ...r.days.map((d) => d.count));
+  return (
+    <div style={{ borderTop: "1px solid #f0f2f5", marginTop: "18px", paddingTop: "16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+        <div>
+          <span style={{ fontWeight: 800, fontSize: "13.5px" }}>Next retries</span>
+          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "8px" }}>{r.scheduled} scheduled · {eur(r.amount, 2)}{r.later ? ` · ${r.later} after these 14 days` : ""}{r.none ? ` · ${r.none} open without a new try planned` : ""}{r.paypalOpen ? ` · ${r.paypalOpen} PayPal (PayPal retries itself)` : ""}</span>
+        </div>
+        <div style={{ display: "flex", gap: "14px", fontSize: "12px", color: "#64748b" }}>
+          {RETRY_KIND.map(([k, l, c]) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: "8px", height: "8px", borderRadius: "999px", background: c }} />{l}{k === "ladder" ? ` (${r.ladderTime})` : ""}</span>)}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(66px, 1fr))", gap: "6px" }}>
+        {r.days.map((d, i) => {
+          const on = d.count > 0;
+          const tip = `${fmtDay(d.d, { weekday: "long", day: "numeric", month: "short" })}: ${d.count} retr${d.count === 1 ? "y" : "ies"}${on ? ` · ${eur(d.amount)} · ${d.ladder} discount ladder${d.pcts.length ? ` (−${d.pcts.join("/−")}%)` : ""} · ${d.stripe} Stripe` : ""}${d.overdue ? ` · ${d.overdue} overdue, picked up at the next run` : ""}`;
+          return (
+            <div key={d.d} title={tip} style={{ position: "relative", borderRadius: "12px", padding: "8px 8px 9px", textAlign: "center", background: on ? `rgba(79,109,245,${0.05 + 0.1 * (d.count / max)})` : "#fafbfc", border: `1px solid ${i === 0 ? "#0f172a" : on ? "#dfe5fd" : "#f0f2f5"}`, lineHeight: 1.25 }}>
+              <div style={{ fontSize: "10.5px", fontWeight: 600, color: i === 0 ? "#0f172a" : "#8a92a3" }}>{i === 0 ? "Today" : fmtDay(d.d, { weekday: "short" })}</div>
+              <div style={{ fontSize: "10.5px", color: "#a4adbd", fontFamily: MONO }}>{fmtDay(d.d)}</div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: on ? "#0f172a" : "#cbd2dc", margin: "4px 0 2px", fontVariantNumeric: "tabular-nums" }}>{on ? d.count : "·"}</div>
+              {on && <div style={{ fontSize: "10.5px", color: "#64748b", fontVariantNumeric: "tabular-nums" }}>{eur(d.amount, 0)}</div>}
+              {on && <div style={{ display: "flex", justifyContent: "center", gap: "3px", marginTop: "5px", flexWrap: "wrap" }}>
+                {RETRY_KIND.flatMap(([k, , c]) => Array.from({ length: Math.min(d[k], 8) }, (_, j) => <span key={k + j} style={{ width: "6px", height: "6px", borderRadius: "999px", background: c }} />))}
+              </div>}
+              {d.overdue > 0 && <span style={{ position: "absolute", top: "-7px", right: "-5px", background: "#ef4444", color: "#fff", fontSize: "10px", fontWeight: 700, borderRadius: "999px", padding: "1px 6px" }}>{d.overdue} late</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function FailedRebills({ f }) {
   if (!f) return null;
   const max = Math.max(1, ...f.byReason.map((b) => b.count));
@@ -319,72 +356,7 @@ function FailedRebills({ f }) {
         ))}
       </div>
       {f.byReason.length > 0 && <div style={{ display: "flex", gap: "16px", marginTop: "14px", fontSize: "12px", color: "#64748b" }}>{FOUT.map(([k, l, c]) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: "10px", height: "10px", borderRadius: "3px", background: c }} />{l}</span>)}</div>}
-    </div>
-  );
-}
-
-/* ---------- Retries after insufficient funds (discount ladder, lib/stripe-dunning.js) ---------- */
-const OUTCOME = { "in-progress": ["In progress", "blue"], recovered: ["Recovered", "green"], cancelled: ["Cancelled", "gray"], "paid-by-customer": ["Paid by customer", "green"] };
-function StepCell({ s, today }) {
-  if (s.state === "paid") return <Chip>✓ paid {eur(s.amount)}</Chip>;
-  if (s.state === "failed") return <span title={s.code || ""}><Chip tone="red">✗ {fmtDay(s.date)}</Chip>{s.code ? <div style={{ fontSize: "10.5px", color: "#a4adbd", marginTop: "2px" }}>{s.code}</div> : null}</span>;
-  if (s.state === "next") return <span><Chip tone="amber">{s.date <= today ? "Today" : fmtDay(s.date, { weekday: "short", day: "numeric", month: "short" })}</Chip><div style={{ fontSize: "10.5px", color: "#8a92a3", marginTop: "2px" }}>{eur(s.amount)}</div></span>;
-  if (s.state === "planned") return <span style={{ color: "#8a92a3", fontSize: "12.5px" }}>{fmtDay(s.date, { weekday: "short", day: "numeric", month: "short" })}<div style={{ fontSize: "10.5px", color: "#b6bdc9" }}>{eur(s.amount)}</div></span>;
-  return <span style={{ color: "#c3c9d3" }}>—</span>;
-}
-function Retries({ rows, summary }) {
-  const [showDone, setShowDone] = useState(false);
-  if (!summary) return null;
-  const today = summary.today;
-  const active = rows.filter((r) => r.outcome === "in-progress");
-  const list = showDone ? rows : active;
-  const days = Array.from({ length: 14 }, (_, i) => { const d = new Date(`${today}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + i); return d.toISOString().slice(0, 10); });
-  const overdue = Object.entries(summary.byDay || {}).filter(([d]) => d < today).reduce((a, [, n]) => a + n, 0);
-  return (
-    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "10px" }}>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: "15px" }}>Retries after insufficient funds</div>
-          <div style={{ fontSize: "12px", color: "#8a92a3", maxWidth: "760px", lineHeight: 1.5 }}>Card rebills declined for insufficient funds get 3 extra tries with a discount: −10% on day 2, −20% on day 5 and −30% on day 9 after the failed rebill, every day at {summary.runTime} (Brussels). After the 3rd failed try the membership is cancelled. Other declines are retried by Stripe itself; PayPal retries its own payments.</div>
-        </div>
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          <Chip tone="blue">{summary.inProgress} in progress · {eur(summary.openAmount)}</Chip>
-          <Chip>{summary.recovered} recovered · {eur(summary.recoveredAmount)}</Chip>
-          <Chip tone="gray">{summary.cancelled} cancelled</Chip>
-          <span style={{ fontSize: "11px", color: "#a4adbd", alignSelf: "center" }}>last 30 days</span>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "4px 0 14px" }}>
-        {overdue > 0 && <span style={{ border: "1px solid #fecaca", background: "#fef2f2", borderRadius: "10px", padding: "6px 10px", fontSize: "12px", color: "#991b1b" }}><b>{overdue}</b> overdue (next run)</span>}
-        {days.map((d, i) => { const n = (summary.byDay || {})[d] || 0; return (
-          <span key={d} style={{ border: `1px solid ${n ? "#fde68a" : "#eceef2"}`, background: n ? "#fffbeb" : "#fff", borderRadius: "10px", padding: "6px 10px", fontSize: "12px", color: n ? "#854d0e" : "#b6bdc9", minWidth: "62px", textAlign: "center", lineHeight: 1.3 }}>
-            <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "10.5px" }}>{i === 0 ? "Today" : fmtDay(d, { weekday: "short", day: "numeric" })}</div>
-            <b style={{ fontSize: "14px" }}>{n || "·"}</b>
-          </span>
-        ); })}
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr>{["Member", "Product", "Failed on", "Rebill", "Try 1 · −10%", "Try 2 · −20%", "Try 3 · −30%", "Status"].map((h, i) => <th key={h} style={{ ...ui.th, textAlign: i === 3 ? "right" : "left" }}>{h}</th>)}</tr></thead>
-          <tbody>
-            {list.map((r) => {
-              const [t, tone] = OUTCOME[r.outcome] || [r.outcome, "gray"];
-              return (
-                <tr key={r.invoiceId}>
-                  <td style={{ ...ui.td, whiteSpace: "normal", minWidth: "170px" }}><a href={`/members?email=${encodeURIComponent(r.member.email || r.email)}&brand=${r.member.product === "lubrisense" ? "lubrisense" : "neurotone"}`} style={{ fontWeight: 700, color: "#0f172a", textDecoration: "none" }}>{r.member.name || r.member.email || r.email}</a><div style={{ fontSize: "11.5px", color: "#8a92a3" }}>{r.member.email || r.email}</div></td>
-                  <td style={ui.td}>{prodMeta(r.member.product || "neurotone")[1]}</td>
-                  <td style={ui.td}>{fmtDay(r.failedOn)}</td>
-                  <td style={{ ...ui.td, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{eur(r.amount)}</td>
-                  {r.steps.map((s) => <td key={s.stage} style={ui.td}><StepCell s={s} today={today} /></td>)}
-                  <td style={ui.td}><Chip tone={tone}>{t}{r.outcome === "recovered" && r.paidAmount ? ` · ${eur(r.paidAmount)}` : ""}</Chip></td>
-                </tr>
-              );
-            })}
-            {list.length === 0 && <tr><td colSpan={8} style={{ ...ui.td, color: "#8a92a3" }}>{showDone ? "No retries in the last 30 days." : "No rebills in the retry ladder right now."}</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      {rows.length > active.length && <button style={{ ...ui.btn(false), marginTop: "12px" }} onClick={() => setShowDone(!showDone)}>{showDone ? "Show only in progress" : `Also show finished (${rows.length - active.length}, last 30 days)`}</button>}
+      {f.retries && <RetryStrip r={f.retries} />}
     </div>
   );
 }
@@ -528,8 +500,6 @@ export default function Subscriptions() {
           <NextDays days={data.upcoming} />
 
           <FailedRebills f={data.failed30} />
-
-          <Retries rows={data.dunning || []} summary={data.dunningSummary} />
 
           <Cohorts week={data.cohortsWeek} month={data.cohortsMonth} />
 

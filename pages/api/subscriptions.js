@@ -149,7 +149,7 @@ async function stripeData() {
       product: s.metadata?.product_key || "neurotone",
     });
   }
-  const rebills = [], failed = [], pending = [], dunning = [], failHist = [];
+  const rebills = [], failed = [], pending = [], dunning = [], failHist = [], retries = [];
   const histFrom = Date.now() / 1000 - 31 * 86400; // mislukte rebills van de laatste 30 dagen (+1 dag marge voor tijdzones)
   n = 0;
   for await (const inv of stripe.invoices.list({ limit: 100, expand: ["data.payment_intent"] })) {
@@ -170,6 +170,14 @@ async function stripeData() {
         reason: inv.metadata?.jj_dunning_code || err?.decline_code || err?.code || null, outcome: inv.status === "paid" ? "recovered" : inv.status === "open" ? "open" : "lost",
         paid: inv.status === "paid" ? paidAmount(inv) : 0, ladder: !!inv.metadata?.jj_dunning, provider: "stripe" });
     }
+    // Volgende geplande nieuwe poging van een openstaande mislukte rebill: kortingsladder (jj_dunning_next) of Stripe's eigen retry
+    if (inv.attempted && inv.status === "open" && inv.amount_due) {
+      const full = (inv.amount_due || 0) / 100;
+      if (inv.metadata?.jj_dunning === "1") {
+        const nx = dunningRow(inv).steps.find((x) => x.state === "next");
+        retries.push({ subId, invoiceId: inv.id, kind: "ladder", d: nx?.date || null, amount: nx ? nx.amount : full, pct: nx?.pct ?? null, full });
+      } else retries.push({ subId, invoiceId: inv.id, kind: "stripe", d: inv.next_payment_attempt ? dayStr(inv.next_payment_attempt * 1000) : null, at: inv.next_payment_attempt ? iso(inv.next_payment_attempt * 1000) : null, amount: full, pct: null, full, reason: err?.decline_code || err?.code || null });
+    }
     if (inv.status === "paid" && (inv.amount_paid || Number(inv.metadata?.jj_dunning_amount) > 0)) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: paidAmount(inv), provider: "stripe", recovered: (inv.attempt_count || 1) > 1 || !!inv.metadata?.jj_dunning_amount, discountPct: inv.metadata?.jj_dunning_amount ? Number(String(inv.metadata.jj_dunning_result || "").replace("paid-", "")) || null : null });
     else if (!inv.attempted && (inv.status === "draft" || inv.status === "open") && inv.amount_due) pending.push({ subId, at: iso(inv.created * 1000), amount: inv.amount_due / 100, provider: "stripe" });
     else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
@@ -183,7 +191,7 @@ async function stripeData() {
       if (bad) f.reason = bad.outcome?.reason || bad.failure_code || null;
     }));
   }
-  return { members, rebills, failed, pending, dunning, failHist };
+  return { members, rebills, failed, pending, dunning, failHist, retries };
 }
 
 /* ---------------- kortingsladder (insufficient funds): schema per mislukte rebill ----------------
@@ -629,6 +637,19 @@ export default async function handler(req, res) {
       open: fail30.filter((f) => f.outcome === "open").length, lost: fail30.filter((f) => f.outcome === "lost").length,
       ladder: fail30.filter((f) => f.ladder).length, stripe: fail30.filter((f) => f.provider === "stripe").length, paypal: fail30.filter((f) => f.provider === "paypal").length,
       byReason: Object.values(byReason).map((b) => ({ ...b, amount: r2(b.amount) })).sort((a, b) => b.count - a.count),
+      // Wanneer wordt hoeveel opnieuw geprobeerd: komende 14 dagen per dag (kortingsladder ±10:10 Brussel, Stripe op zijn eigen tijdstip)
+      retries: (() => {
+        const list = st.retries || [], today = dayStr(now);
+        const days = Array.from({ length: 14 }, (_, i) => {
+          const d = dayStr(now + i * DAY), on = list.filter((r) => r.d === d || (i === 0 && r.d && r.d < today));
+          return { d, count: on.length, amount: r2(on.reduce((a, r) => a + r.amount, 0)), ladder: on.filter((r) => r.kind === "ladder").length, stripe: on.filter((r) => r.kind === "stripe").length,
+            overdue: i === 0 ? on.filter((r) => r.d < today).length : 0, pcts: [...new Set(on.filter((r) => r.pct != null).map((r) => r.pct))].sort((a, b) => a - b) };
+        });
+        const later = list.filter((r) => r.d && r.d > days[13].d).length;
+        return { days, scheduled: list.filter((r) => r.d).length, amount: r2(list.filter((r) => r.d).reduce((a, r) => a + r.amount, 0)), later, none: list.filter((r) => !r.d).length,
+          ladderTime: new Date(`${today}T08:10:00Z`).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: TZ }),
+          paypalOpen: py.failed.filter((f) => f.outcome === "open").length };
+      })(),
     };
 
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
