@@ -98,6 +98,8 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   if (!addrOk) tags.push("missing-address");
   if (product.tag) tags.push(product.tag);
   if (bundle.gift) tags.push(BUNDLE_GIFT.tag);
+  // A/B-test 3DS: aankopen via de aparte 3DS-checkoutlinks herkenbaar in Shopify
+  if (md.jj_checkout_variant === "3ds") tags.push(md.jj_3ds === "forced" ? "checkout-3ds-forced" : "checkout-3ds");
   // Kortingscode in Stripe → zelfde korting op de Shopify-order, zodat de bedragen kloppen
   const discountCents = (invoice.total_discount_amounts || []).reduce((t, d) => t + (d.amount || 0), 0);
 
@@ -176,6 +178,17 @@ export default async function handler(req, res) {
         // Heractivering vanuit het portaal (alleen membership) → geen Shopify-order, alleen Klaviyo-renewal
         const subIdEarly = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
         const subEarly = subIdEarly ? await stripe.subscriptions.retrieve(subIdEarly).catch(() => null) : null;
+        // 3DS werd voor deze eerste betaling verplicht (debit/prepaid, create-subscription) → terug naar "automatic",
+        // zodat de latere rebills (off-session, klant niet aanwezig) nooit om een bevestiging vragen
+        if (subEarly?.payment_settings?.payment_method_options?.card?.request_three_d_secure === "any") {
+          const ps = subEarly.payment_settings || {};
+          await stripe.subscriptions.update(subEarly.id, { payment_settings: {
+            ...(ps.payment_method_types ? { payment_method_types: ps.payment_method_types } : {}),
+            ...(ps.save_default_payment_method ? { save_default_payment_method: ps.save_default_payment_method } : {}),
+            payment_method_options: { card: { request_three_d_secure: "automatic" } },
+          } })
+            .catch((e) => console.error("3ds reset:", subEarly.id, e.message));
+        }
         if (subEarly?.metadata?.kind === "reactivation") {
           // In het portaal van het juiste product (LubriSense-heractivering → intimate.…)
           await runWithBrand(getProduct(subEarly.metadata.product_key).portalBrand || "neurotone", () =>

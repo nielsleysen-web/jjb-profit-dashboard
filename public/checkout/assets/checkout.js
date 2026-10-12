@@ -30,6 +30,10 @@ const CONFIG = {
 const _pq = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
 const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisense') ? 'lubrisense'
   : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium' : 'neurotone';
+/* A/B-test 3D Secure: de aparte links checkout.getjustjenny.com/3ds, /lubrisense/3ds en /magnesium/3ds
+   (of ?ab=3ds) → debit- en prepaidkaarten krijgen bij de eerste betaling een verplichte 3DS-bevestiging.
+   De gewone links werken exact zoals voorheen. */
+const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(location.search).get('ab') === '3ds';
 const PRODUCT_CONFIG = {
   // Magnesium Freeze: voorlopig met de NeuroTone-membership (Health For Life); geen upsellpagina.
   // NO_MEMBERSHIP: true → eenmalige aankoop (dan ook geen PayPal rechtstreeks).
@@ -790,6 +794,7 @@ function subCacheKey(customer) {
   return JSON.stringify([
     pack, shipMethod, promo ? promo.code : '',
     customer.email || '', customer.name || '', customer.shipping || null,
+    customer.card_funding || '', customer.checkout_variant || '', // ander kaarttype → ander 3DS-besluit → nieuw abonnement
   ]);
 }
 // Bumped on every reset so the next attempt_id is genuinely new. Without this, a
@@ -1221,8 +1226,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const nameOnCard = $('#card-name').value.trim();
 
       const phone = shipping.phone;
-      const sub = await createSubscription({ email, name: shipping.name, phone, shipping });
-      saveOrderForThankYou({ email });
       const billingDetails = {
         name: (payPalSelected ? '' : nameOnCard) || billing.name, email,
         phone: phone || undefined,
@@ -1232,6 +1235,18 @@ document.addEventListener('DOMContentLoaded', async () => {
           postal_code: billing.postal_code, country: billing.country || 'IT',
         },
       };
+      // Alleen op de 3DS-testlinks: eerst de PaymentMethod aanmaken → de server ziet het kaarttype
+      // (debit/prepaid/credit) en vraagt bij debit/prepaid 3D Secure aan (zie create-subscription.js).
+      let cardPm = null;
+      if (TDS_VARIANT && !payPalSelected) {
+        const r = await stripe.createPaymentMethod({ type: 'card', card: cardNumber, billing_details: billingDetails });
+        if (r.error) { showPayError(r.error, 'card_pm'); return; }
+        cardPm = r.paymentMethod;
+      }
+      const subCustomer = { email, name: shipping.name, phone, shipping, ...(cardPm ? { pm_id: cardPm.id, card_funding: (cardPm.card && cardPm.card.funding) || 'unknown' } : {}) };
+      if (TDS_VARIANT) subCustomer.checkout_variant = '3ds';
+      const sub = await createSubscription(subCustomer);
+      saveOrderForThankYou({ email });
 
       // PayPal via Stripe → redirect naar PayPal en terug naar de bedankpagina
       if (payPalSelected) {
@@ -1244,7 +1259,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const confirmData = {
-        payment_method: { card: cardNumber, billing_details: billingDetails },
+        payment_method: cardPm ? cardPm.id : { card: cardNumber, billing_details: billingDetails },
         // 3DS: met een return_url kan Stripe terugvallen op een volledige redirect
         // (nodig in de Facebook/Instagram-browser) en komt de klant op de bedankpagina.
         return_url: successUrl(sub.subscriptionId),
@@ -1254,7 +1269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Een hergebruikte PaymentIntent kan verlopen zijn → één keer een nieuw abonnement
       if (error && error.code === 'payment_intent_unexpected_state') {
         resetSubCache();
-        const fresh = await createSubscription({ email, name: shipping.name, phone, shipping });
+        const fresh = await createSubscription(subCustomer);
         subId = fresh.subscriptionId;
         confirmData.return_url = successUrl(subId);
         ({ error, paymentIntent } = await stripe.confirmCardPayment(fresh.clientSecret, confirmData));

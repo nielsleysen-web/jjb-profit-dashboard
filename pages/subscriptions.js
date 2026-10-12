@@ -354,6 +354,45 @@ function FailedRebills({ f }) {
   );
 }
 
+/* ---------- A/B test: 3D Secure on the /3ds checkout links (debit + prepaid cards) ---------- */
+function AbTest({ ab }) {
+  if (!ab) return null;
+  if (!ab.running) return (
+    <div style={{ ...ui.card, padding: "14px 20px", marginBottom: "20px", fontSize: "12.5px", color: "#64748b" }}>
+      <b style={{ color: "#0f172a" }}>A/B test · 3D Secure</b> · not started yet — send traffic to <code>checkout.getjustjenny.com/3ds</code> (or <code>/lubrisense/3ds</code>, <code>/magnesium/3ds</code>). Debit and prepaid cards confirm the first payment with 3DS there; the normal links stay as they are.
+    </div>
+  );
+  const Col = ({ title, sub, g, accent }) => (
+    <div style={{ flex: "1 1 260px", border: `1px solid ${accent ? "#dfe5fd" : "#eceef2"}`, background: accent ? "#f8f9ff" : "#fff", borderRadius: "12px", padding: "14px 16px" }}>
+      <div style={{ fontWeight: 800, fontSize: "13.5px" }}>{title}</div>
+      <div style={{ fontSize: "11.5px", color: "#8a92a3", marginBottom: "10px" }}>{sub}</div>
+      {[["All cards", g.all], ["Debit + prepaid", g.dp]].map(([l, x]) => (
+        <div key={l} style={{ borderTop: "1px solid #f0f2f5", padding: "8px 0", fontSize: "12.5px", color: "#475569", lineHeight: 1.7 }}>
+          <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px" }}>{l}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><span>Checkout paid</span><span style={{ fontVariantNumeric: "tabular-nums" }}><b style={{ color: "#0f172a" }}>{x.completion == null ? "—" : pct(x.completion, 0)}</b> <span style={{ color: "#a4adbd" }}>{x.started == null ? "(card type unknown)" : `(${x.paid}/${x.started})`}</span></span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><span>First rebill paid</span><span style={{ fontVariantNumeric: "tabular-nums" }}><b style={{ color: x.rebillRate == null ? "#0f172a" : x.rebillRate >= 0.7 ? "#16a34a" : x.rebillRate >= 0.5 ? "#b45309" : "#dc2626" }}>{x.rebillRate == null ? "—" : pct(x.rebillRate, 0)}</b> <span style={{ color: "#a4adbd" }}>({x.rebillOk}/{x.rebillDue})</span></span></div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", color: "#8a92a3", fontSize: "11.5px" }}><span>Members · still in trial</span><span>{x.members} · {x.members - x.rebillDue}</span></div>
+        </div>
+      ))}
+    </div>
+  );
+  return (
+    <div style={{ ...ui.card, padding: "18px 22px", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
+        <div>
+          <span style={{ fontWeight: 800, fontSize: "15px" }}>A/B test · 3D Secure</span>
+          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "8px" }}>since {fmtDY(ab.from)} · Stripe checkouts (PayPal direct not included)</span>
+        </div>
+        <span style={{ fontSize: "11.5px", color: "#a4adbd" }}>Checkout paid = card payments started that went through · first rebill = members whose trial ended (cancellations during the trial left out)</span>
+      </div>
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+        <Col title="Normal checkout" sub="checkout.getjustjenny.com · no forced 3DS" g={ab.standard} />
+        <Col title="3DS checkout" sub="…/3ds links · debit + prepaid confirm with 3DS" g={ab.tds} accent />
+      </div>
+    </div>
+  );
+}
+
 function Cohorts({ week, month }) {
   const [mode, setMode] = useState("week");
   const rows = mode === "week" ? week : month;
@@ -493,6 +532,8 @@ export default function Subscriptions() {
           <NextDays days={data.upcoming} />
 
           <FailedRebills f={data.failed30} />
+
+          <AbTest ab={data.abTest} />
 
           <Cohorts week={data.cohortsWeek} month={data.cohortsMonth} />
 

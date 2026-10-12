@@ -21,6 +21,23 @@ const V = "v1"; // verhoog bij een prijswijziging
 
 const clean = (s, max = 200) => String(s || "").trim().slice(0, max);
 
+// A/B-test 3D Secure — alleen op de aparte 3DS-checkoutlinks (checkout.getjustjenny.com/3ds, /lubrisense/3ds,
+// /magnesium/3ds; checkout.js stuurt dan checkout_variant "3ds" mee). Daar krijgen debit- en prepaidkaarten een
+// verplichte 3DS-bevestiging bij de eerste betaling (vaak €29,95, net onder de €30-vrijstelling → anders géén 3DS,
+// waarna strenge banken zoals Intesa/PostePay de latere rebill zonder bevestigde machtiging weigeren).
+// De gewone checkoutlinks blijven exact zoals ze waren (controlegroep).
+//   JJ_3DS_FUNDING  kaarttypes, komma-gescheiden (standaard "debit,prepaid"); "off" = op de 3DS-links ook uit
+// Het kaarttype komt van de PaymentMethod die de checkout vlak voor de betaling aanmaakt (server haalt hem zelf op).
+async function threeDsDecision(variant, pmId) {
+  if (variant !== "3ds") return { force: false, funding: null };
+  const cfg = String(process.env.JJ_3DS_FUNDING ?? "debit,prepaid").toLowerCase().trim();
+  if (!pmId || !/^pm_[A-Za-z0-9]+$/.test(String(pmId))) return { force: false, funding: null };
+  const pm = await stripe.paymentMethods.retrieve(String(pmId)).catch(() => null);
+  const funding = pm?.card?.funding || null;
+  if (!funding || pm?.card?.wallet || !cfg || cfg === "off" || cfg === "0") return { force: false, funding };
+  return { force: cfg.split(",").map((x) => x.trim()).includes(funding), funding };
+}
+
 async function getOrCreatePrice(lookupKey, create) {
   const found = await stripe.prices.list({ lookup_keys: [lookupKey], limit: 1 });
   if (found.data.length) return found.data[0].id;
@@ -145,6 +162,11 @@ export default async function handler(req, res) {
     // --- abonnement: proefperiode + eenmalige regels op de eerste factuur ---
     const methods = ["card", "link"];
     if (process.env.STRIPE_PAYPAL === "1") methods.push("paypal");
+    const variant = b.checkout_variant === "3ds" ? "3ds" : null;
+    const tds = await threeDsDecision(variant, b.pm_id);
+    if (variant) metadata.jj_checkout_variant = variant; // A/B: ontbreekt = gewone checkout
+    if (tds.funding) metadata.jj_card_funding = tds.funding;
+    if (tds.force) metadata.jj_3ds = "forced";
     const subscription = await stripe.subscriptions.create(
       {
         customer: customer.id,
@@ -153,7 +175,11 @@ export default async function handler(req, res) {
           ? { cancel_at_period_end: true } // eenmalig: loopt na de eerste factuur af, €0 → nooit een rebill
           : { trial_end: Math.floor(Date.now() / 1000) + MEMBERSHIP.trialDays * 86400 }),
         payment_behavior: "default_incomplete",
-        payment_settings: { save_default_payment_method: "on_subscription", payment_method_types: methods },
+        payment_settings: {
+          save_default_payment_method: "on_subscription",
+          payment_method_types: methods,
+          ...(tds.force ? { payment_method_options: { card: { request_three_d_secure: "any" } } } : {}),
+        },
         add_invoice_items: addInvoiceItems,
         discounts,
         metadata,

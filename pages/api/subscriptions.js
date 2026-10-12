@@ -127,13 +127,17 @@ async function shopifyOrders() {
 
 /* ---------------- Stripe ---------------- */
 async function stripeData() {
-  if (!process.env.STRIPE_SECRET_KEY) return { members: [], rebills: [], failed: [] };
+  if (!process.env.STRIPE_SECRET_KEY) return { members: [], rebills: [], failed: [], abStarts: [] };
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" });
   const statusMap = { trialing: "trial", active: "active", past_due: "problem", unpaid: "problem", incomplete: "problem", incomplete_expired: "canceled", canceled: "canceled", paused: "paused" };
-  const members = [];
+  const members = [], abStarts = [];
   let n = 0;
-  for await (const s of stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer"] })) {
+  for await (const s of stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer", "data.default_payment_method"] })) {
     if (++n > 5000) break;
+    // A/B-test 3DS: elke gestarte kaartbetaling telt (ook als ze nooit lukte), per checkoutvariant
+    const variant = s.metadata?.jj_checkout_variant === "3ds" ? "3ds" : "standard";
+    const funding = s.metadata?.jj_card_funding || (typeof s.default_payment_method === "object" ? s.default_payment_method?.card?.funding : null) || null;
+    if (s.metadata?.kind !== "onetime" && s.metadata?.kind !== "reactivation") abStarts.push({ created: s.created, variant, funding, paid: s.status !== "incomplete" && s.status !== "incomplete_expired" });
     // Front-end betaling nooit gelukt (kaart geweigerd op de checkout) → nooit klant geworden: niet meetellen.
     // Mislukte rebills hebben status past_due/unpaid en blijven wel staan.
     if (s.status === "incomplete" || s.status === "incomplete_expired") continue;
@@ -149,6 +153,7 @@ async function stripeData() {
       cancelReason: s.cancellation_details?.reason || null, cancelFeedback: s.cancellation_details?.feedback || null, cancelAt: iso((s.cancel_at || 0) * 1000),
       email: c.email || "", name: c.shipping?.name || c.name || "", cycles: 0, membershipRevenue: 0, rebillAt: [],
       product: s.metadata?.product_key || "neurotone",
+      variant, funding, tdsForced: s.metadata?.jj_3ds === "forced",
       price: s.items?.data?.[0]?.price?.unit_amount != null ? s.items.data[0].price.unit_amount / 100 : PRICE,
       priceDowngraded: !!s.metadata?.jj_price_downgrade,
     });
@@ -195,7 +200,7 @@ async function stripeData() {
       if (bad) f.reason = bad.outcome?.reason || bad.failure_code || null;
     }));
   }
-  return { members, rebills, failed, pending, dunning, failHist, retries };
+  return { members, rebills, failed, pending, dunning, failHist, retries, abStarts };
 }
 
 /* ---------------- kortingsladder (insufficient funds): schema per mislukte rebill ----------------
@@ -657,8 +662,28 @@ export default async function handler(req, res) {
       })(),
     };
 
+    /* ---- A/B-test 3D Secure: gewone checkout vs. de /3ds-links, vanaf de eerste bestelling via een /3ds-link ----
+       Afronding = gestarte kaartbetalingen die ook betaald werden (meet de extra 3DS-stap).
+       Eerste rebill = leden van wie de proef voorbij is (zonder opzeg tijdens de proef): gelukt of niet. */
+    const abFrom = Math.min(Infinity, ...(st.abStarts || []).filter((x) => x.variant === "3ds").map((x) => x.created));
+    const abTest = (() => {
+      if (!Number.isFinite(abFrom)) return { running: false };
+      const dp = (f) => f === "debit" || f === "prepaid";
+      const group = (variant, onlyDp) => {
+        const starts = st.abStarts.filter((x) => x.created >= abFrom && x.variant === variant && (!onlyDp || dp(x.funding)));
+        const mem = members.filter((m) => m.provider === "stripe" && m.variant === variant && Date.parse(m.startedAt) >= abFrom * 1000 && (!onlyDp || dp(m.funding)));
+        const due = mem.filter((m) => Date.parse(m.trialEnd) <= now && !(m.canceledAt && Date.parse(m.canceledAt) < Date.parse(m.trialEnd)));
+        const ok = due.filter((m) => m.cycles >= 1).length;
+        // Gewone checkout kent het kaarttype van een NIET-betaalde poging niet (geen kaart vooraf aangemaakt) → afronding per kaarttype onbekend
+        const known = !(onlyDp && variant === "standard");
+        return { started: known ? starts.length : null, paid: known ? starts.filter((x) => x.paid).length : null, completion: known && starts.length ? r2(starts.filter((x) => x.paid).length / starts.length) : null,
+          members: mem.length, rebillDue: due.length, rebillOk: ok, rebillRate: due.length ? r2(ok / due.length) : null, problem: due.filter((m) => m.status === "problem").length };
+      };
+      return { running: true, from: iso(abFrom * 1000), standard: { all: group("standard"), dp: group("standard", true) }, tds: { all: group("3ds"), dp: group("3ds", true) } };
+    })();
+
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, upcoming, dunning, dunningSummary, failed30, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, upcoming, dunning, dunningSummary, failed30, abTest, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });
