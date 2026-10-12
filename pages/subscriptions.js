@@ -4,7 +4,7 @@
 // with customer service actions (pause 30/60/90 days, resume, cancel).
 // Source: /api/subscriptions (Stripe + PayPal + Shopify + Meta).
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { MemberActionButtons, CancellationInfo } from "../components/membership/MemberActions";
 
 const ui = {
@@ -179,100 +179,93 @@ function NdStat({ label, value, sub, color }) {
 
 function NextDays({ days }) {
   const [hover, setHover] = useState(null);
+  // Render in real pixels (measured width) so text and bars keep the same size on every screen
+  const boxRef = useRef(null);
+  const [W, setW] = useState(900);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setW(Math.max(320, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [days?.length]);
   if (!days?.length) return null;
   const extra = [...new Set(days.flatMap((d) => Object.keys(d.byProduct || {})))].filter((k) => !PRODUCTS.some((p) => p[0] === k));
   const keys = [...PRODUCTS.map((p) => p[0]), ...extra].filter((k) => days.some((d) => d.byProduct?.[k]));
   const total = days.reduce((a, d) => a + d.total, 0), amount = days.reduce((a, d) => a + d.amount, 0);
   const busiest = days.reduce((b, d) => (d.total > (b?.total || 0) ? d : b), null);
   const avg = total / days.length;
-  const W = 1000, H = 270, TOP = 30, BOTTOM = 46;
-  const ih = H - TOP - BOTTOM, slot = W / days.length, bw = Math.min(42, slot * 0.6);
-  const max = Math.max(1, ...days.map((d) => d.total)) * 1.08;
+  const H = 190, TOP = 20, BOTTOM = 26;
+  const ih = H - TOP - BOTTOM, slot = W / days.length, bw = Math.max(8, Math.min(26, slot * 0.46));
+  const max = Math.max(1, ...days.map((d) => d.total));
   const hpx = (v) => (v / max) * ih;
   const base = TOP + ih;
+  const stat = (v, l, c) => <span style={{ whiteSpace: "nowrap" }}><b style={{ color: c || "#0f172a", fontVariantNumeric: "tabular-nums" }}>{v}</b> {l}</span>;
   return (
-    <div style={{ ...ui.card, padding: "20px 22px 16px", marginBottom: "20px", position: "relative" }}>
-      <style>{`@keyframes ndGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}@keyframes ndFade{from{opacity:0}to{opacity:1}}`}</style>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "14px", marginBottom: "10px" }}>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: "15px" }}>Next 14 days</div>
-          <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "2px" }}>Renewals due per day, per product</div>
-          <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginTop: "12px", fontSize: "12.5px", color: "#334155" }}>
-            {keys.map((k) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "7px" }}><span style={{ width: "10px", height: "10px", borderRadius: "999px", background: prodMeta(k)[2] }} />{prodMeta(k)[1]} <b style={{ fontVariantNumeric: "tabular-nums" }}>{days.reduce((a, d) => a + (d.byProduct?.[k] || 0), 0)}</b></span>)}
-            {!keys.length && <span style={{ color: "#8a92a3" }}>No renewals scheduled in the next 14 days.</span>}
-          </div>
+    <div style={{ ...ui.card, padding: "16px 20px 12px", marginBottom: "20px", position: "relative" }}>
+      <style>{`@keyframes ndGrow{from{transform:scaleY(0)}to{transform:scaleY(1)}}`}</style>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px 16px", marginBottom: "6px" }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "14px", flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 800, fontSize: "14px" }}>Next 14 days <span style={{ fontWeight: 500, fontSize: "12px", color: "#8a92a3" }}>· renewals due</span></span>
+          <span style={{ display: "inline-flex", gap: "12px", flexWrap: "wrap", fontSize: "12px", color: "#475569" }}>
+            {keys.map((k) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}><span style={{ width: "8px", height: "8px", borderRadius: "999px", background: prodMeta(k)[2] }} />{prodMeta(k)[1]} <b style={{ color: "#0f172a", fontVariantNumeric: "tabular-nums" }}>{days.reduce((a, d) => a + (d.byProduct?.[k] || 0), 0)}</b></span>)}
+          </span>
         </div>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <NdStat label="Renewals" value={total} sub={`≈ ${num1(avg)} per day`} />
-          <NdStat label="Potential" value={eur(amount, 0)} sub="if all are collected" color="#16a34a" />
-          {busiest && <NdStat label="Busiest day" value={busiest.total} sub={fmtDay(busiest.d, { weekday: "short", day: "numeric", month: "short" })} color="#4f6df5" />}
+        <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", fontSize: "12px", color: "#8a92a3" }}>
+          {stat(total, "renewals")}{stat(eur(amount, 0), "potential", "#16a34a")}{busiest && busiest.total > 0 && stat(busiest.total, `on ${fmtDay(busiest.d, { weekday: "short", day: "numeric", month: "short" })}`, "#4f6df5")}
         </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }} onMouseLeave={() => setHover(null)}>
-        <defs>
-          {keys.map((k) => (
-            <linearGradient key={k} id={`nd-g-${k}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={prodMeta(k)[2]} stopOpacity="0.82" />
-              <stop offset="100%" stopColor={prodMeta(k)[2]} stopOpacity="1" />
-            </linearGradient>
-          ))}
+      {!keys.length && <div style={{ fontSize: "12.5px", color: "#8a92a3", padding: "16px 0" }}>No renewals scheduled in the next 14 days.</div>}
+      <div ref={boxRef} style={{ position: "relative", display: keys.length ? "block" : "none" }}>
+        <svg width={W} height={H} style={{ display: "block", overflow: "visible" }} onMouseLeave={() => setHover(null)}>
+          <defs>
+            {days.map((d, i) => {
+              const x = i * slot + (slot - bw) / 2, h = hpx(d.total);
+              return <clipPath key={d.d} id={`nd-c-${i}`}><rect x={x} y={base - h} width={bw} height={h + 6} rx={Math.min(6, bw / 2)} /></clipPath>;
+            })}
+          </defs>
+          {[0.5, 1].map((t) => <line key={t} x1="0" x2={W} y1={base - ih * t} y2={base - ih * t} stroke="#f1f3f6" />)}
+          <line x1="0" x2={W} y1={base + 0.5} y2={base + 0.5} stroke="#e2e6ec" />
+          {avg > 0 && <line x1="0" x2={W} y1={base - hpx(avg)} y2={base - hpx(avg)} stroke="#a4adbd" strokeDasharray="3 4" />}
           {days.map((d, i) => {
-            const x = i * slot + (slot - bw) / 2, h = hpx(d.total);
-            return <clipPath key={d.d} id={`nd-c-${i}`}><rect x={x} y={base - h} width={bw} height={h} rx={Math.min(10, h / 2)} /></clipPath>;
-          })}
-        </defs>
-        <line x1="0" x2={W} y1={base + 0.5} y2={base + 0.5} stroke="#e2e6ec" />
-        {days.map((d, i) => {
-          const x = i * slot + (slot - bw) / 2, h = hpx(d.total);
-          const today = i === 0, on = hover === i, dim = hover != null && !on;
-          const wd = new Date(`${d.d}T12:00:00Z`).getUTCDay(), weekend = wd === 0 || wd === 6;
-          let y = base;
-          const segs = [], gaps = [];
-          keys.forEach((k) => {
-            const v = d.byProduct?.[k] || 0;
-            if (!v) return;
-            const sh = hpx(v);
-            y -= sh;
-            segs.push(<rect key={k} x={x} y={y} width={bw} height={sh} fill={`url(#nd-g-${k})`} />);
-            if (y > base - h + 0.5) gaps.push(<rect key={`g${k}`} x={x} y={y - 1} width={bw} height="2" fill="#fff" />);
-          });
-          return (
-            <g key={d.d} onMouseEnter={() => setHover(i)} style={{ cursor: "default" }}>
-              <rect x={i * slot} y="0" width={slot} height={H} fill="transparent" />
-              <rect x={x} y={TOP - 6} width={bw} height={ih + 6} rx="10" fill={on ? "#eef1fe" : today ? "#f1f4ff" : "#f6f7fa"} />
-              <g clipPath={`url(#nd-c-${i})`} style={{ opacity: dim ? 0.4 : 1, transition: "opacity .15s", transformBox: "fill-box", transformOrigin: "bottom", animation: `ndGrow .7s cubic-bezier(.2,.8,.2,1) ${i * 35}ms both` }}>
-                {segs}{gaps}
+            const x = i * slot + (slot - bw) / 2, h = hpx(d.total), cx = i * slot + slot / 2;
+            const today = i === 0, on = hover === i, dim = hover != null && !on;
+            const wd = new Date(`${d.d}T12:00:00Z`).getUTCDay(), weekend = wd === 0 || wd === 6;
+            let y = base;
+            const segs = [];
+            keys.forEach((k, j) => {
+              const v = d.byProduct?.[k] || 0;
+              if (!v) return;
+              const sh = hpx(v);
+              y -= sh;
+              segs.push(<rect key={k} x={x} y={y} width={bw} height={sh} fill={prodMeta(k)[2]} />);
+              if (y > base - h + 0.5) segs.push(<rect key={`g${k}`} x={x} y={y - 1} width={bw} height="2" fill="#fff" />);
+            });
+            return (
+              <g key={d.d} onMouseEnter={() => setHover(i)}>
+                <rect x={i * slot + 2} y={TOP - 14} width={slot - 4} height={ih + 14} rx="8" fill={on ? "#f4f6fb" : "transparent"} />
+                <g clipPath={`url(#nd-c-${i})`} style={{ opacity: dim ? 0.35 : 1, transition: "opacity .15s", transformBox: "fill-box", transformOrigin: "bottom", animation: `ndGrow .55s cubic-bezier(.2,.8,.2,1) ${i * 30}ms both` }}>{segs}</g>
+                {d.total > 0 && <text x={cx} y={base - h - 6} textAnchor="middle" fontSize="11.5" fontWeight="700" fill={dim ? "#b6bdc9" : "#334155"} style={{ fontVariantNumeric: "tabular-nums" }}>{d.total}</text>}
+                <text x={cx} y={H - 7} textAnchor="middle" fontSize="11" fontWeight={today ? 700 : 500} fill={today ? "#0f172a" : weekend ? "#b6bdc9" : "#8a92a3"}>{today ? "Today" : fmtDay(d.d, { weekday: "short", day: "numeric" })}</text>
               </g>
-              {d.total > 0
-                ? <text x={x + bw / 2} y={base - h - 8} textAnchor="middle" fontSize="13" fontWeight="700" fill={dim ? "#b6bdc9" : "#0f172a"} style={{ fontVariantNumeric: "tabular-nums", animation: `ndFade .4s ease ${300 + i * 35}ms both` }}>{d.total}</text>
-                : <circle cx={x + bw / 2} cy={base - 6} r="2.5" fill="#cbd2dc" />}
-              {today
-                ? <><rect x={i * slot + slot / 2 - 24} y={base + 9} width="48" height="20" rx="10" fill="#0f172a" /><text x={i * slot + slot / 2} y={base + 23} textAnchor="middle" fontSize="11" fontWeight="700" fill="#fff">Today</text></>
-                : <text x={i * slot + slot / 2} y={base + 21} textAnchor="middle" fontSize="11" fontWeight="600" fill={weekend ? "#b6bdc9" : "#64748b"}>{fmtDay(d.d, { weekday: "short" })}</text>}
-              <text x={i * slot + slot / 2} y={base + 39} textAnchor="middle" fontSize="11" fill={today ? "#0f172a" : "#a4adbd"} fontFamily={MONO}>{fmtDay(d.d)}</text>
-            </g>
+            );
+          })}
+          {avg > 0 && <text x={W} y={base - hpx(avg) - 4} textAnchor="end" fontSize="10" fill="#a4adbd">avg {num1(avg)}</text>}
+        </svg>
+        {hover != null && (() => {
+          const d = days[hover];
+          const cx = (hover + 0.5) * slot, right = cx > W * 0.66;
+          return (
+            <div style={{ position: "absolute", top: "8px", left: `${cx}px`, transform: `translateX(${right ? "calc(-100% - 22px)" : "22px"})`, background: "#fff", color: "#0f172a", border: "1px solid #eceef2", borderRadius: "10px", padding: "9px 12px", fontSize: "12px", lineHeight: 1.7, pointerEvents: "none", boxShadow: "0 10px 28px rgba(15,23,42,0.12)", whiteSpace: "nowrap", zIndex: 10, minWidth: "170px" }}>
+              <div style={{ fontWeight: 800, marginBottom: "2px" }}>{hover === 0 ? "Today · " : ""}{fmtDay(d.d, { weekday: "long", day: "numeric", month: "short" })}</div>
+              {keys.filter((k) => d.byProduct?.[k]).map((k) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: "14px" }}><span><span style={{ display: "inline-block", width: "7px", height: "7px", borderRadius: "999px", background: prodMeta(k)[2], marginRight: "6px" }} />{prodMeta(k)[1]}</span><b style={{ fontVariantNumeric: "tabular-nums" }}>{d.byProduct[k]}</b></div>)}
+              {!d.total && <div style={{ color: "#8a92a3" }}>No renewals due</div>}
+              {d.total > 0 && <div style={{ borderTop: "1px solid #eceef2", marginTop: "4px", paddingTop: "4px", display: "flex", justifyContent: "space-between", gap: "14px" }}><span style={{ color: "#64748b" }}>{d.total} renewal{d.total === 1 ? "" : "s"}</span><b style={{ color: "#16a34a" }}>{eur(d.amount, 0)}</b></div>}
+              {(d.trial || d.paypal) ? <div style={{ fontSize: "11px", color: "#8a92a3" }}>{d.trial ? `${d.trial} first rebill after trial` : ""}{d.trial && d.paypal ? " · " : ""}{d.paypal ? `${d.paypal} via PayPal` : ""}</div> : null}
+            </div>
           );
-        })}
-        {avg > 0 && (
-          <g style={{ pointerEvents: "none" }}>
-            <line x1="0" x2={W} y1={base - hpx(avg)} y2={base - hpx(avg)} stroke="#94a3b8" strokeDasharray="4 5" strokeWidth="1" />
-            <text x={W} y={base - hpx(avg) - 6} textAnchor="end" fontSize="10.5" fill="#8a92a3" fontFamily={MONO}>avg {num1(avg)}/day</text>
-          </g>
-        )}
-      </svg>
-      {hover != null && (() => {
-        const d = days[hover];
-        const left = (((hover + 0.5) * slot) / W) * 100;
-        return (
-          <div style={{ position: "absolute", top: "118px", left: `${left}%`, transform: `translateX(${left > 66 ? "calc(-100% - 30px)" : "30px"})`, background: "#fff", color: "#0f172a", border: "1px solid #eceef2", borderRadius: "12px", padding: "12px 14px", fontSize: "12.5px", lineHeight: 1.75, pointerEvents: "none", boxShadow: "0 12px 32px rgba(15,23,42,0.12)", whiteSpace: "nowrap", zIndex: 10, minWidth: "190px" }}>
-            <div style={{ fontWeight: 800, marginBottom: "4px" }}>{hover === 0 ? "Today · " : ""}{fmtDay(d.d, { weekday: "long", day: "numeric", month: "short" })}</div>
-            {keys.filter((k) => d.byProduct?.[k]).map((k) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: "16px" }}><span><span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "999px", background: prodMeta(k)[2], marginRight: "7px" }} />{prodMeta(k)[1]}</span><b style={{ fontVariantNumeric: "tabular-nums" }}>{d.byProduct[k]}</b></div>)}
-            {!d.total && <div style={{ color: "#8a92a3" }}>No renewals due</div>}
-            {d.total > 0 && <div style={{ borderTop: "1px solid #eceef2", marginTop: "6px", paddingTop: "6px", display: "flex", justifyContent: "space-between", gap: "16px" }}><span style={{ color: "#64748b" }}>{d.total} renewal{d.total === 1 ? "" : "s"}</span><b style={{ color: "#16a34a" }}>{eur(d.amount, 0)}</b></div>}
-            {(d.trial || d.paypal) ? <div style={{ fontSize: "11.5px", color: "#8a92a3" }}>{d.trial ? `${d.trial} first rebill after trial` : ""}{d.trial && d.paypal ? " · " : ""}{d.paypal ? `${d.paypal} via PayPal` : ""}</div> : null}
-          </div>
-        );
-      })()}
+        })()}
+      </div>
     </div>
   );
 }
