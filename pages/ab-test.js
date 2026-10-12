@@ -171,6 +171,88 @@ function Lift({ v, big }) {
   );
 }
 
+/* ---------- Checkout-test 3D Secure (/3ds-links vs. gewone checkout) — bron /api/ab-3ds ----------
+   Kernvraag: mislukken er minder eerste rebills bij debit/prepaid als de eerste betaling met 3DS bevestigd is,
+   en kost die extra stap niet te veel betaalde checkouts? Omzet per gestarte checkout weegt beide samen. */
+const REASON_NL = { insufficient_funds: "Onvoldoende saldo", generic_decline: "Generic decline", do_not_honor: "Do not honor", authentication_required: "3DS vereist", transaction_not_allowed: "Transactie niet toegestaan", expired_card: "Kaart verlopen", try_again_later: "Later opnieuw", incorrect_number: "Fout kaartnummer", card_declined: "Kaart geweigerd", unknown: "Onbekend" };
+const SEGS = [["dp", "Debit + prepaid"], ["all", "Alle kaarten"], ["credit", "Credit"]];
+const MIN_DUE = 30; // per variant minstens zoveel eerste rebills voor een conclusie
+const rel = (a, b) => (a == null || b == null || !a ? null : (b - a) / a);
+function TdsTest() {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState("");
+  const [seg, setSeg] = useState("dp");
+  useEffect(() => { fetch("/api/ab-3ds").then((r) => r.json()).then((x) => (x.success ? setD(x) : setErr(x.error || "Fout"))).catch((e) => setErr(e.message)); }, []);
+  const box = { ...ui.card, padding: "24px 26px", marginBottom: "20px" };
+  if (err) return <div style={{ ...box, color: "#991b1b" }}>3DS-test: {err}</div>;
+  if (!d) return <div style={{ ...box, color: "#b6bdc9", fontSize: "13px" }}>3DS-test laden… (Stripe)</div>;
+  if (!d.running) return (
+    <div style={{ ...box, fontSize: "13.5px", color: "#64748b", lineHeight: 1.6 }}>
+      <div style={{ fontSize: "15px", fontWeight: 700, color: "#0f172a", marginBottom: "4px" }}>Checkout-test · 3D Secure</div>
+      Nog niet gestart. Stuur verkeer naar <code>checkout.getjustjenny.com/3ds</code> (of <code>/lubrisense/3ds</code>, <code>/magnesium/3ds</code>). Daar bevestigen debit- en prepaidkaarten de eerste betaling met 3DS; de gewone links zijn de controlegroep. De test verschijnt hier na de eerste bestelling via een 3DS-link.
+    </div>
+  );
+  const A = d.groups.standard[seg], B = d.groups.tds[seg], c = d.compare[seg];
+  const enough = A.due >= MIN_DUE && B.due >= MIN_DUE;
+  const p = c.firstTry, conf = p == null ? null : Math.max(p, 1 - p);
+  const verdict = !enough ? [`Nog te weinig rebills (${A.due} vs ${B.due}, min. ${MIN_DUE} per kant)`, "#f1f5f9", "#64748b"]
+    : conf >= 0.95 ? [p >= 0.5 ? `3DS wint · ${(conf * 100).toFixed(0)}% zeker` : `Gewone checkout wint · ${(conf * 100).toFixed(0)}% zeker`, "#dcfce7", "#166534"]
+    : conf >= 0.8 ? [p >= 0.5 ? `3DS ligt voor · ${(conf * 100).toFixed(0)}%` : `Gewone checkout ligt voor · ${(conf * 100).toFixed(0)}%`, "#fef9c3", "#854d0e"]
+    : ["Geen duidelijk verschil", "#f1f5f9", "#64748b"];
+  const rows = [
+    ["Checkout betaald", (g) => (g.started == null ? "onbekend*" : `${fmtPct(g.completion)} (${g.paid}/${g.started})`), rel(A.completion, B.completion)],
+    ["1e rebill meteen gelukt", (g) => `${fmtPct(g.firstTryRate)} (${g.ok}/${g.due})`, rel(A.firstTryRate, B.firstTryRate)],
+    ["1e rebill uiteindelijk betaald", (g) => `${fmtPct(g.finalRate)} (${g.ok + g.recovered}/${g.due})`, rel(A.finalRate, B.finalRate)],
+    ["Nog open · verloren", (g) => `${g.open} · ${g.lost}`, null],
+    ["Omzet per gestarte checkout", (g) => (g.revPerStart == null ? "onbekend*" : fmtEur(g.revPerStart)), rel(A.revPerStart, B.revPerStart)],
+    ["Omzet per lid", (g) => fmtEur(g.revPerMember), rel(A.revPerMember, B.revPerMember)],
+    ["Leden · nog in proef · opgezegd in proef", (g) => `${g.members} · ${g.inTrial} · ${g.cancelledInTrial}`, null],
+  ];
+  const Col = ({ g, title, sub, color, win }) => (
+    <div style={{ flex: 1, padding: "20px 22px", borderRadius: "14px", background: "#fff", border: `1.5px solid ${win ? color : "#eceef2"}`, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "9px", height: "9px", borderRadius: "50%", background: color }} /><b style={{ fontSize: "14px" }}>{title}</b></div>
+      <div style={{ fontSize: "11px", color: "#a4adbd", marginTop: "3px", height: "30px", lineHeight: "15px", overflow: "hidden" }}>{sub}</div>
+      <div style={{ fontSize: "40px", fontWeight: 800, letterSpacing: "-1px", margin: "6px 0 0", fontVariantNumeric: "tabular-nums" }}>{fmtPct(g.firstTryRate, 1)}</div>
+      <div style={{ fontSize: "12px", color: "#8a92a3", marginBottom: "14px" }}>1e rebill meteen gelukt</div>
+      {rows.map(([l, f]) => <div key={l} style={{ display: "flex", justifyContent: "space-between", gap: "10px", padding: "7px 0", borderTop: "1px solid #f3f4f7", fontSize: "13px" }}><span style={{ color: "#8a92a3" }}>{l}</span><span style={{ fontWeight: 600, fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{f(g)}</span></div>)}
+      <div style={{ marginTop: "12px", fontSize: "11px", fontWeight: 600, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px" }}>Weigerredenen 1e rebill</div>
+      <div style={{ marginTop: "6px", display: "flex", flexWrap: "wrap", gap: "6px" }}>
+        {g.reasons.length ? g.reasons.map((r) => <span key={r.reason} style={{ fontSize: "11.5px", background: "#f6f7fa", border: "1px solid #eceef2", borderRadius: "999px", padding: "3px 9px", color: "#475569" }}>{REASON_NL[r.reason] || r.reason} <b>{r.count}</b></span>) : <span style={{ fontSize: "12px", color: "#b6bdc9" }}>geen</span>}
+      </div>
+    </div>
+  );
+  const winA = enough && conf >= 0.95 && p < 0.5, winB = enough && conf >= 0.95 && p >= 0.5;
+  return (
+    <div style={box}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "16px" }}>
+        <div>
+          <div style={{ fontSize: "15px", fontWeight: 700, color: "#334155" }}>Checkout-test · 3D Secure <span style={{ fontWeight: 500, color: "#8a92a3", fontSize: "12.5px" }}>· gewone checkout vs. /3ds-links</span></div>
+          <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "4px" }}>Gestart op {new Date(d.start).toLocaleDateString("nl-BE", { day: "numeric", month: "long" })} · dag {d.days} · eerste rebills komen ±7 dagen na een bestelling binnen</div>
+        </div>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+          {SEGS.map(([k, l]) => <button key={k} onClick={() => setSeg(k)} style={{ padding: "6px 11px", borderRadius: "999px", border: "1px solid #e2e6ec", background: seg === k ? "#0f172a" : "#fff", color: seg === k ? "#fff" : "#334155", fontWeight: 600, fontSize: "12px", cursor: "pointer" }}>{l}</button>)}
+          <span style={{ background: verdict[1], color: verdict[2], fontWeight: 700, fontSize: "12.5px", padding: "6px 12px", borderRadius: "999px", marginLeft: "6px" }}>{verdict[0]}</span>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: "14px", alignItems: "stretch" }}>
+        <Col g={A} title="Gewone checkout" sub="controlegroep · geen verplichte 3DS" color={COL.A} win={winA} />
+        <div style={{ width: "104px", display: "flex", flexDirection: "column", flex: "none" }}>
+          <div style={{ textAlign: "center", padding: "62px 0 8px", fontSize: "11px", color: "#b6bdc9", fontWeight: 600 }}>3DS vs gewoon</div>
+          <Lift v={rel(A.firstTryRate, B.firstTryRate)} big />
+          <div style={{ height: "37px" }} />
+          {rows.map(([l, , lift]) => <div key={l} style={{ height: "31px", display: "flex", alignItems: "center", justifyContent: "center" }}>{lift != null ? <Lift v={lift} /> : <span style={{ color: "#e2e6ec" }}>·</span>}</div>)}
+        </div>
+        <Col g={B} title="3DS-checkout" sub={`/3ds-links · debit + prepaid bevestigen met 3DS${B.tdsAsked != null && seg !== "credit" ? ` (${B.tdsPaid}/${B.tdsAsked} 3DS-betalingen gelukt)` : ""}`} color={COL.B} win={winB} />
+      </div>
+      <p style={{ fontSize: "11.5px", color: "#b6bdc9", lineHeight: 1.6, margin: "14px 0 0" }}>
+        Alleen Stripe-betalingen (PayPal rechtstreeks valt erbuiten). 1e rebill = leden van wie de proef voorbij is; wie in de proef opzegde telt niet mee. “Meteen gelukt” = eerste poging betaald; “uiteindelijk betaald” = ook na een Stripe-retry of de kortingsladder.
+        Zekerheid via 2-proporties z-test op “1e rebill meteen gelukt”; kies pas vanaf 95% en minstens {MIN_DUE} eerste rebills per kant.
+        {seg !== "all" && " * Bij de gewone checkout is het kaarttype van een niet-betaalde poging onbekend, dus checkout- en omzet-per-checkoutcijfers per kaarttype bestaan alleen voor de 3DS-variant; vergelijk die op “Alle kaarten”."}
+      </p>
+    </div>
+  );
+}
+
 export default function AbTest() {
   const [preset, setPreset] = useState(null); // "start" | aantal dagen
   const [all, setAll] = useState(false);
@@ -223,6 +305,7 @@ export default function AbTest() {
         </div>
       </div>
 
+      <TdsTest />
       {err && <div style={{ ...ui.card, padding: "16px", color: "#991b1b", marginBottom: "16px" }}>{err}</div>}
       {!data && !err && <div style={{ color: "#b6bdc9", fontSize: "13px" }}>Laden…</div>}
       {data && tests.length === 0 && <div style={{ ...ui.card, padding: "22px", color: "#64748b", fontSize: "14px", lineHeight: 1.6 }}>Nog geen test met twee varianten in deze periode. Zet in Funnelish beide varianten actief (bv. 50% / 50%); zodra de nieuwe variant bezoekers krijgt verschijnt de test hier binnen enkele minuten.</div>}
