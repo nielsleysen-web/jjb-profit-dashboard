@@ -52,6 +52,8 @@ const CATEGORIES = [
     perm: "assets",
     items: [
       { href: "/funnel-assets", label: "Assets", icon: "📁" },
+      // Onboarding-course voor nieuwe editors, designers en creative strategists (Loom-lessen)
+      { href: "/onboarding", label: "Creative Onboarding", icon: "🎓", perm: "creatives" },
     ],
   },
   {
@@ -91,7 +93,8 @@ const ALL_PROTECTED = [...CATEGORIES.flatMap((c) => c.items.map((i) => i.href)),
 
 function requiredPerm(pathname) {
   for (const cat of CATEGORIES) {
-    if (cat.items.some((i) => i.href === pathname)) return cat.perm;
+    const item = cat.items.find((i) => i.href === pathname);
+    if (item) return item.perm || cat.perm; // een item kan strenger zijn dan zijn categorie
   }
   const extra = EXTRA_PROTECTED.find((e) => e.href === pathname);
   return extra ? extra.perm : null;
@@ -280,7 +283,9 @@ export default function App({ Component, pageProps }) {
   const noAccess = requiresAuth && authUser && perm && !authUser[perm];
 
   const visibleCategories = authUser
-    ? CATEGORIES.filter((cat) => authUser[cat.perm] && cat.items.length > 0)
+    ? CATEGORIES.filter((cat) => authUser[cat.perm])
+        .map((cat) => ({ ...cat, items: cat.items.filter((i) => !i.perm || authUser[i.perm]) }))
+        .filter((cat) => cat.items.length > 0)
     : [];
 
   const NavLinks = ({ horizontal }) =>
