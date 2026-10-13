@@ -9,6 +9,7 @@
 //   POST { action: "progress", lessonId, done }   → mark a lesson (un)done for yourself
 //   POST { action: "saveCourse", course }         → admin only: replace the whole course (modules + lessons)
 // A module/lesson can be limited to certain roles (roles: [] = everyone in the course).
+// lesson.section = topic: in the module sidebar a divider with the topic name starts wherever the topic changes.
 
 import crypto from "crypto";
 import { shopifyGraphql } from "../../lib/shopify-admin";
@@ -40,7 +41,7 @@ async function writeData(handle, value) {
 }
 
 // Starting structure — the admin replaces the Loom links and texts in the page (Edit course)
-const lesson = (title, description = "") => ({ id: uid(), title, description, loom: "", duration: "", resources: [], roles: [] });
+const lesson = (title, description = "") => ({ id: uid(), title, section: "", description, loom: "", duration: "", resources: [], roles: [] });
 const SEED = () => ({
   title: "Creative Onboarding",
   intro: "Welcome to Just Jenny. Work through these modules in order — each lesson is a short Loom. Mark a lesson as done when you have watched it and applied it.",
@@ -72,6 +73,7 @@ function cleanCourse(c) {
     lessons: (Array.isArray(m?.lessons) ? m.lessons : []).slice(0, 60).map((l) => ({
       id: /^[a-f0-9]{6,24}$/.test(l?.id) ? l.id : uid(),
       title: str(l?.title, 140) || "Untitled lesson",
+      section: str(l?.section, 80),
       description: str(l?.description, 4000),
       loom: str(l?.loom, 300),
       duration: str(l?.duration, 20),

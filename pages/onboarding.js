@@ -3,7 +3,7 @@
 // Admin: "Edit course" (modules, lessons, Loom links, who sees what) and "Team progress".
 // Data: /api/onboarding (Shopify metaobject, shared for the whole team).
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 const ui = {
   page: { padding: "28px 36px", background: "#f7f8fa", minHeight: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", color: "#0f172a" },
@@ -104,13 +104,22 @@ function ModuleView({ module, progress, onToggle, busy, lessonId, setLessonId, o
         <aside className="sk-side" style={{ position: "sticky", top: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 21, color: SK.ink, padding: "0 14px", lineHeight: 1.3 }}>{module.title}</div>
           <div style={{ padding: "12px 14px 22px" }}><ProgressPill value={lessons.length ? done / lessons.length : 0} /></div>
-          {lessons.map((l) => {
+          {lessons.map((l, i) => {
             const on = l.id === lesson?.id;
+            const topic = (l.section || "").trim();
+            const newTopic = topic && topic !== (lessons[i - 1]?.section || "").trim();
             return (
-              <button key={l.id} onClick={() => setLessonId(l.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "14px", margin: "0 0 4px", border: "none", borderRadius: 10, cursor: "pointer", background: on ? SK.active : "transparent", fontSize: 16.5, color: SK.ink, fontWeight: on ? 600 : 400 }}>
+              <Fragment key={l.id}>
+              {newTopic && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: i ? "18px 14px 8px" : "2px 14px 8px", borderTop: i ? `1px solid ${SK.line}` : "none", marginTop: i ? 10 : 0 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: SK.sub }}>{topic}</span>
+                </div>
+              )}
+              <button onClick={() => setLessonId(l.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "14px", margin: "0 0 4px", border: "none", borderRadius: 10, cursor: "pointer", background: on ? SK.active : "transparent", fontSize: 16.5, color: SK.ink, fontWeight: on ? 600 : 400 }}>
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</span>
                 {progress[l.id] && <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="9" fill={SK.green} /><path d="M5 9.2 7.6 11.7 13 6.3" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
               </button>
+              </Fragment>
             );
           })}
         </aside>
@@ -118,7 +127,10 @@ function ModuleView({ module, progress, onToggle, busy, lessonId, setLessonId, o
         {lesson && (
           <article style={{ background: "#fff", border: `1px solid ${SK.line}`, borderRadius: 12, padding: "40px 48px 44px", minWidth: 0 }} className="sk-lesson">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 28 }}>
+              <div>
+              {lesson.section && <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: SK.sub, marginBottom: 8 }}>{lesson.section}</div>}
               <h2 style={{ margin: 0, fontSize: 31, fontWeight: 700, color: SK.ink, letterSpacing: "-0.3px", lineHeight: 1.2 }}>{lesson.title}</h2>
+              </div>
               <DoneCircle on={!!progress[lesson.id]} disabled={busy} onClick={() => onToggle(lesson.id, !progress[lesson.id])} />
             </div>
             {embed
@@ -179,8 +191,10 @@ function Editor({ initial, roles, onSaved }) {
     setSaving(false);
   };
   const small = { ...ui.btn("ghost"), padding: "5px 9px", fontSize: "12px" };
+  const topics = [...new Set(c.modules.flatMap((m) => m.lessons.map((l) => (l.section || "").trim())).filter(Boolean))];
   return (
     <div>
+      <datalist id="jj-topics">{topics.map((t) => <option key={t} value={t} />)}</datalist>
       <div style={{ ...ui.card, padding: "18px 20px", marginBottom: "14px" }}>
         <div style={ui.label}>Course title</div>
         <input value={c.title} onChange={(e) => setC({ ...c, title: e.target.value })} style={{ ...ui.input, margin: "6px 0 12px", fontWeight: 700 }} />
@@ -210,6 +224,7 @@ function Editor({ initial, roles, onSaved }) {
                   <button style={{ ...small, color: "#b91c1c" }} onClick={() => { if (confirm(`Delete lesson "${l.title}"?`)) setM(mi, { lessons: m.lessons.filter((_, i) => i !== li) }); }}>✕</button>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "8px", marginTop: "8px", paddingLeft: "26px" }}>
+                  <input value={l.section || ""} onChange={(e) => setL(mi, li, { section: e.target.value })} list="jj-topics" placeholder="Topic (e.g. AI video editing). A new topic starts a divider in the sidebar" style={ui.input} />
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                     <input value={l.loom} onChange={(e) => setL(mi, li, { loom: e.target.value })} placeholder="Loom link — https://www.loom.com/share/…" style={{ ...ui.input, borderColor: l.loom && !loomEmbed(l.loom) ? "#fca5a5" : "#e2e6ec" }} />
                     <span style={{ fontSize: "11.5px", fontWeight: 700, whiteSpace: "nowrap", color: !l.loom ? "#94a3b8" : loomEmbed(l.loom) ? "#16a34a" : "#b91c1c" }}>{!l.loom ? "no video yet" : loomEmbed(l.loom) ? "✓ Loom ok" : "not a Loom link"}</span>
@@ -222,7 +237,7 @@ function Editor({ initial, roles, onSaved }) {
                 </div>
               </div>
             ))}
-            <button style={{ ...ui.btn("ghost"), justifySelf: "start" }} onClick={() => setM(mi, { lessons: [...m.lessons, { id: uid(), title: "New lesson", description: "", loom: "", duration: "", resources: [], roles: [] }] })}>+ Add lesson</button>
+            <button style={{ ...ui.btn("ghost"), justifySelf: "start" }} onClick={() => setM(mi, { lessons: [...m.lessons, { id: uid(), title: "New lesson", section: m.lessons[m.lessons.length - 1]?.section || "", description: "", loom: "", duration: "", resources: [], roles: [] }] })}>+ Add lesson</button>
           </div>
         </div>
       ))}
