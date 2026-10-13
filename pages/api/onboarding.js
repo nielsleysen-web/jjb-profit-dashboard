@@ -1,4 +1,4 @@
-// pages/api/onboarding.js — Creative Onboarding (course for new video editors, graphic designers and creative strategists).
+// pages/api/onboarding.js — Onboarding Courses (course for new video editors, graphic designers and creative strategists).
 //
 // Course = modules → lessons (Loom video + text + resource links). Stored as JSON in the Shopify metaobject
 // jjb_dashboard_data / handle "onboarding_course" (same storage as /api/assets). Progress per person in
@@ -43,7 +43,7 @@ async function writeData(handle, value) {
 // Starting structure — the admin replaces the Loom links and texts in the page (Edit course)
 const lesson = (title, description = "") => ({ id: uid(), title, section: "", description, loom: "", duration: "", resources: [], roles: [] });
 const SEED = () => ({
-  title: "Creative Onboarding",
+  title: "Onboarding Courses",
   intro: "Welcome to Just Jenny. Work through these modules in order — each lesson is a short Loom. Mark a lesson as done when you have watched it and applied it.",
   modules: [
     { id: uid(), title: "1 · Welcome to Just Jenny", description: "Who we are, how we work and what we expect from you.", roles: [], lessons: [lesson("Welcome & how we work"), lesson("Our products and customers"), lesson("Your first week")] },
@@ -83,7 +83,7 @@ function cleanCourse(c) {
         .filter((x) => x.label && (/^https?:\/\//i.test(x.url) || x.url.startsWith("/"))),
     })),
   }));
-  return { title: str(c?.title, 80) || "Creative Onboarding", intro: str(c?.intro, 1200), modules };
+  return { title: str(c?.title, 80) || "Onboarding Courses", intro: str(c?.intro, 1200), modules };
 }
 
 // What one person may see: modules/lessons without roles are for everyone; otherwise one of their roles must match

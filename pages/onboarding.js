@@ -1,9 +1,9 @@
-// pages/onboarding.js — Creative Onboarding: a course for new video editors, graphic designers and creative strategists.
+// pages/onboarding.js — Onboarding Courses: a course for new video editors, graphic designers and creative strategists.
 // Modules → lessons with a Loom video, text and resource links; everyone ticks off their own lessons.
 // Admin: "Edit course" (modules, lessons, Loom links, who sees what) and "Team progress".
 // Data: /api/onboarding (Shopify metaobject, shared for the whole team).
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 const ui = {
   page: { padding: "28px 36px", background: "#f7f8fa", minHeight: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", color: "#0f172a" },
@@ -90,13 +90,77 @@ function Classroom({ course, progress, onOpen }) {
   );
 }
 
-function ModuleView({ module, progress, onToggle, busy, lessonId, setLessonId, onBack, nextModule, onOpenModule }) {
+/* ---------------- "watch the whole video" gate ----------------
+   Loom's embed speaks the player.js protocol: we subscribe to timeupdate/ended via postMessage.
+   Only normal playback counts (jumps > 3 s = seeking are not counted), per second of the video.
+   A lesson counts as watched at ≥ 95% of the seconds. Kept per lesson in localStorage so a reload keeps progress. */
+const WATCH_NEED = 0.95;
+function useLoomWatch(lessonId, active) {
+  const ref = useRef(null);
+  const [state, setState] = useState({ id: null, secs: 0, duration: 0, complete: false });
+  useEffect(() => {
+    if (!active || !lessonId) return;
+    const key = `jj-ob-watch-${lessonId}`;
+    let seen = new Set(), duration = 0, last = null, gotMsg = false;
+    try { const saved = JSON.parse(localStorage.getItem(key) || "null"); if (saved) { seen = new Set(saved.s || []); duration = saved.d || 0; } } catch {}
+    const listener = `jj-${lessonId}`;
+    const publish = (ended) => {
+      const need = Math.max(1, Math.floor(duration * WATCH_NEED));
+      const complete = duration > 0 && (seen.size >= need || (ended && seen.size >= Math.floor(duration * 0.9)));
+      setState({ id: lessonId, secs: seen.size, duration, complete });
+      try { localStorage.setItem(key, JSON.stringify({ s: [...seen], d: duration })); } catch {}
+    };
+    publish(false);
+    const subscribe = () => {
+      const w = ref.current?.contentWindow; if (!w) return;
+      for (const ev of ["timeupdate", "ended"]) w.postMessage(JSON.stringify({ context: "player.js", version: "0.0.11", method: "addEventListener", value: ev, listener }), "*");
+    };
+    const onMsg = (e) => {
+      if (!/(^|\.)loom\.com$/.test(String(e.origin).replace(/^https?:\/\//, ""))) return;
+      let m = e.data; if (typeof m === "string") { try { m = JSON.parse(m); } catch { return; } }
+      if (!m || m.context !== "player.js") return;
+      if (m.event === "ready") { subscribe(); return; }
+      if (m.listener !== listener) return;
+      gotMsg = true;
+      if (m.event === "timeupdate" && m.value) {
+        const s = Number(m.value.seconds) || 0;
+        if (m.value.duration) duration = Number(m.value.duration);
+        if (last != null && s > last && s - last <= 3) for (let t = Math.floor(last); t <= Math.floor(s); t++) seen.add(t);
+        last = s;
+        publish(false);
+      } else if (m.event === "ended") { if (last != null && duration - last <= 3) for (let t = Math.floor(last); t < Math.ceil(duration); t++) seen.add(t); publish(true); }
+    };
+    window.addEventListener("message", onMsg);
+    // the player may be ready before we listen → keep subscribing until the first event arrives
+    let tries = 0;
+    const iv = setInterval(() => { if (gotMsg || ++tries > 40) return clearInterval(iv); subscribe(); }, 1500);
+    return () => { window.removeEventListener("message", onMsg); clearInterval(iv); };
+  }, [lessonId, active]);
+  // never report the previous lesson's state for a new lesson
+  return state.id === lessonId ? { ref, ...state } : { ref, id: lessonId, secs: 0, duration: 0, complete: false };
+}
+const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.round(s % 60))).padStart(2, "0")}`;
+
+function ModuleView({ module, progress, onToggle, busy, lessonId, setLessonId, onBack, nextModule, onOpenModule, isAdmin }) {
   const lessons = module.lessons;
-  const idx = Math.max(0, lessons.findIndex((l) => l.id === lessonId));
+  // Lessons unlock in order: you can open every finished lesson + the first unfinished one (admin: everything)
+  const firstOpen = lessons.findIndex((l) => !progress[l.id]);
+  const unlocked = (i) => isAdmin || firstOpen === -1 || i <= firstOpen || !!progress[lessons[i]?.id];
+  let idx = Math.max(0, lessons.findIndex((l) => l.id === lessonId));
+  if (!unlocked(idx)) idx = Math.max(0, firstOpen);
   const lesson = lessons[idx];
   const done = lessons.filter((l) => progress[l.id]).length;
   const embed = lesson && loomEmbed(lesson.loom);
   const next = lessons[idx + 1];
+  const gated = !!embed && !isAdmin && !progress[lesson?.id];
+  const watch = useLoomWatch(lesson?.id, gated);
+  // A deep link to a locked lesson falls back to the first open one: keep the URL/state in sync with what is shown
+  useEffect(() => { if (lesson && lessonId && lesson.id !== lessonId) setLessonId(lesson.id); }, [lesson?.id, lessonId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const canAdvance = !gated || watch.complete;
+  // Fully watched → tick the lesson off automatically
+  useEffect(() => { if (gated && watch.complete && !busy) onToggle(lesson.id, true); }, [gated, watch.complete]); // eslint-disable-line react-hooks/exhaustive-deps
+  const left = watch.duration ? Math.max(0, Math.floor(watch.duration * WATCH_NEED) - watch.secs) : null;
+  const watchedPct = watch.duration ? Math.min(1, watch.secs / Math.max(1, Math.floor(watch.duration * WATCH_NEED))) : 0;
   return (
     <div>
       <button onClick={onBack} style={{ background: "none", border: "none", color: SK.sub, fontSize: 15, fontWeight: 600, cursor: "pointer", padding: "0 0 16px" }}>← All modules</button>
@@ -115,9 +179,10 @@ function ModuleView({ module, progress, onToggle, busy, lessonId, setLessonId, o
                   <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: SK.sub }}>{topic}</span>
                 </div>
               )}
-              <button onClick={() => setLessonId(l.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "14px", margin: "0 0 4px", border: "none", borderRadius: 10, cursor: "pointer", background: on ? SK.active : "transparent", fontSize: 16.5, color: SK.ink, fontWeight: on ? 600 : 400 }}>
+              <button onClick={() => unlocked(i) && setLessonId(l.id)} disabled={!unlocked(i)} title={unlocked(i) ? undefined : "Finish the previous lesson first"} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, textAlign: "left", padding: "14px", margin: "0 0 4px", border: "none", borderRadius: 10, cursor: unlocked(i) ? "pointer" : "not-allowed", background: on ? SK.active : "transparent", fontSize: 16.5, color: unlocked(i) ? SK.ink : "#a0a4a8", fontWeight: on ? 600 : 400 }}>
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.title}</span>
                 {progress[l.id] && <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="9" fill={SK.green} /><path d="M5 9.2 7.6 11.7 13 6.3" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                {!unlocked(i) && <svg width="15" height="15" viewBox="0 0 16 16" aria-label="Locked"><rect x="3" y="7" width="10" height="7.5" rx="1.6" fill="#b8bcc2" /><path d="M5.3 7V5.2a2.7 2.7 0 0 1 5.4 0V7" fill="none" stroke="#b8bcc2" strokeWidth="1.6" /></svg>}
               </button>
               </Fragment>
             );
@@ -131,11 +196,17 @@ function ModuleView({ module, progress, onToggle, busy, lessonId, setLessonId, o
               {lesson.section && <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: SK.sub, marginBottom: 8 }}>{lesson.section}</div>}
               <h2 style={{ margin: 0, fontSize: 31, fontWeight: 700, color: SK.ink, letterSpacing: "-0.3px", lineHeight: 1.2 }}>{lesson.title}</h2>
               </div>
-              <DoneCircle on={!!progress[lesson.id]} disabled={busy} onClick={() => onToggle(lesson.id, !progress[lesson.id])} />
+              <DoneCircle on={!!progress[lesson.id]} disabled={busy || (!progress[lesson.id] && !canAdvance)} onClick={() => { if (!progress[lesson.id] && !canAdvance) return; onToggle(lesson.id, !progress[lesson.id]); }} />
             </div>
             {embed
-              ? <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 10, overflow: "hidden", background: "#000", marginBottom: 28 }}><iframe src={embed} title={lesson.title} allowFullScreen allow="autoplay; fullscreen" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} /></div>
+              ? <div style={{ position: "relative", paddingTop: "56.25%", borderRadius: 10, overflow: "hidden", background: "#000", marginBottom: 28 }}><iframe key={lesson.id} ref={watch.ref} src={embed} title={lesson.title} allowFullScreen allow="autoplay; fullscreen" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0 }} /></div>
               : <div style={{ borderRadius: 10, background: "#f1f3f4", border: `1px dashed ${SK.line}`, padding: "34px 20px", textAlign: "center", color: SK.sub, marginBottom: 28 }}><div style={{ fontSize: 26 }}>🎬</div><div style={{ fontWeight: 700, color: SK.ink, marginTop: 4 }}>Video coming soon</div></div>}
+            {gated && (
+              <div style={{ margin: "-14px 0 26px" }}>
+                <div style={{ height: 6, background: SK.track, borderRadius: 999, overflow: "hidden" }}><div style={{ width: `${Math.round(watchedPct * 100)}%`, height: "100%", background: watch.complete ? SK.green : "#1a73e8", borderRadius: 999, transition: "width .4s" }} /></div>
+                <div style={{ fontSize: 13.5, color: SK.sub, marginTop: 7 }}>{watch.complete ? "✓ Video watched" : watch.duration ? `Watched ${Math.round(watchedPct * 100)}% · ${mmss(left)} to go. Watch the full video to unlock the next lesson.` : "Press play and watch the full video to unlock the next lesson."}</div>
+              </div>
+            )}
             {lesson.description && <div className="sk-text" dangerouslySetInnerHTML={{ __html: renderText(lesson.description) }} />}
             {lesson.resources?.length > 0 && (
               <div style={{ marginTop: 28 }}>
@@ -152,9 +223,9 @@ function ModuleView({ module, progress, onToggle, busy, lessonId, setLessonId, o
             )}
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 36 }}>
               {next
-                ? <button onClick={() => { if (!progress[lesson.id]) onToggle(lesson.id, true); setLessonId(next.id); }} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: SK.ink, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Next lesson →</button>
+                ? <button disabled={!canAdvance} title={canAdvance ? undefined : "Watch the full video first"} onClick={() => { if (!canAdvance) return; if (!progress[lesson.id]) onToggle(lesson.id, true); setLessonId(next.id); }} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: canAdvance ? SK.ink : "#c9ccd1", color: "#fff", fontWeight: 700, fontSize: 15, cursor: canAdvance ? "pointer" : "not-allowed" }}>{canAdvance ? "Next lesson →" : "🔒 Next lesson"}</button>
                 : nextModule
-                  ? <button onClick={() => { if (!progress[lesson.id]) onToggle(lesson.id, true); onOpenModule(nextModule.id); }} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: SK.ink, color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>Next module: {nextModule.title} →</button>
+                  ? <button disabled={!canAdvance} title={canAdvance ? undefined : "Watch the full video first"} onClick={() => { if (!canAdvance) return; if (!progress[lesson.id]) onToggle(lesson.id, true); onOpenModule(nextModule.id); }} style={{ padding: "12px 18px", borderRadius: 10, border: "none", background: canAdvance ? SK.ink : "#c9ccd1", color: "#fff", fontWeight: 700, fontSize: 15, cursor: canAdvance ? "pointer" : "not-allowed" }}>{canAdvance ? `Next module: ${nextModule.title} →` : `🔒 Next module`}</button>
                   : <span style={{ fontWeight: 700, color: SK.green }}>{done === lessons.length ? "🎉 Onboarding completed" : ""}</span>}
             </div>
           </article>
@@ -327,7 +398,7 @@ export default function Onboarding() {
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ width: 38, height: 38, borderRadius: 9, background: "#0f172a", color: "#fff", fontWeight: 800, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 15 }}>JJ</span>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 18 }}>{data?.course?.title || "Creative Onboarding"}</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>{data?.course?.title || "Onboarding Courses"}</div>
               {data && <div style={{ fontSize: 13, color: SK.sub }}>{doneAll} of {all.length} lessons completed</div>}
             </div>
           </div>
@@ -350,7 +421,7 @@ export default function Onboarding() {
         )}
         {data && tab === "classroom" && mod && (
           <ModuleView module={mod} progress={data.progress || {}} onToggle={toggle} busy={busy} lessonId={lessonId} setLessonId={setLessonId}
-            onBack={() => { setModuleId(null); setHash(null); }} nextModule={mods[mods.indexOf(mod) + 1]} onOpenModule={openModule} />
+            onBack={() => { setModuleId(null); setHash(null); }} nextModule={mods[mods.indexOf(mod) + 1]} onOpenModule={openModule} isAdmin={!!data.isAdmin} />
         )}
         {data && tab === "edit" && data.isAdmin && <Editor initial={data.course} roles={data.roles} onSaved={(course) => setData((d) => ({ ...d, course }))} />}
         {data && tab === "team" && data.isAdmin && <Team team={data.team} />}

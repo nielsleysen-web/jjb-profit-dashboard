@@ -53,7 +53,7 @@ const CATEGORIES = [
     items: [
       { href: "/funnel-assets", label: "Assets", icon: "📁" },
       // Onboarding-course voor nieuwe editors, designers en creative strategists (Loom-lessen)
-      { href: "/onboarding", label: "Creative Onboarding", icon: "🎓", perm: "creatives" },
+      { href: "/onboarding", label: "Onboarding Courses", icon: "🎓", perm: "creatives" },
     ],
   },
   {
