@@ -8,7 +8,7 @@ import { readSession } from "../../../lib/portal-auth";
 import { getMember } from "../../../lib/portal-members";
 import { getSubscriptionInfo } from "../../../lib/portal-account";
 import { selfPause, selfResume, selfOffer, selfCancel, selfUndoCancel } from "../../../lib/portal-self-service";
-import { bump } from "../../../lib/portal-store";
+import { bump, redis } from "../../../lib/portal-store";
 import { withPortalBrand } from "../../../lib/portal-brand";
 
 async function handler(req, res) {
@@ -29,6 +29,7 @@ async function handler(req, res) {
     else if (b.action === "cancel") r = await selfCancel(m, sub, { reason: String(b.reason || ""), note: b.note });
     else if (b.action === "undoCancel") r = await selfUndoCancel(m, sub);
     else return res.status(400).json({ ok: false, error: "unknown_action" });
+    await redis(["DEL", "cache:subs:raw:v2"]).catch(() => {}); // dashboard shows the change right away
     return res.status(200).json({ ok: true, ...r });
   } catch (e) {
     if (e.status && e.status < 500) return res.status(e.status).json({ ok: false, error: e.message });

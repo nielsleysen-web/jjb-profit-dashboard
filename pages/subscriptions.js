@@ -452,79 +452,6 @@ function FailedRebills({ f }) {
   );
 }
 
-/* ---------- A/B test: 3D Secure on the /3ds checkout links (debit + prepaid cards) ---------- */
-function AbTest({ ab }) {
-  if (!ab) return null;
-  if (!ab.running) return (
-    <div style={{ ...ui.card, padding: "14px 20px", marginBottom: "20px", fontSize: "12.5px", color: "#64748b" }}>
-      <b style={{ color: "#0f172a" }}>A/B test · 3D Secure</b> · not started yet — send traffic to <code>checkout.getjustjenny.com/3ds</code> (or <code>/lubrisense/3ds</code>, <code>/magnesium/3ds</code>). Debit and prepaid cards confirm the first payment with 3DS there; the normal links stay as they are.
-    </div>
-  );
-  const Col = ({ title, sub, g, accent }) => (
-    <div style={{ flex: "1 1 260px", border: `1px solid ${accent ? "#dfe5fd" : "#eceef2"}`, background: accent ? "#f8f9ff" : "#fff", borderRadius: "12px", padding: "14px 16px" }}>
-      <div style={{ fontWeight: 800, fontSize: "13.5px" }}>{title}</div>
-      <div style={{ fontSize: "11.5px", color: "#8a92a3", marginBottom: "10px" }}>{sub}</div>
-      {[["All cards", g.all], ["Debit + prepaid", g.dp]].map(([l, x]) => (
-        <div key={l} style={{ borderTop: "1px solid #f0f2f5", padding: "8px 0", fontSize: "12.5px", color: "#475569", lineHeight: 1.7 }}>
-          <div style={{ fontSize: "10.5px", fontWeight: 600, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px" }}>{l}</div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><span>Checkout paid</span><span style={{ fontVariantNumeric: "tabular-nums" }}><b style={{ color: "#0f172a" }}>{x.completion == null ? "—" : pct(x.completion, 0)}</b> <span style={{ color: "#a4adbd" }}>{x.started == null ? "(card type unknown)" : `(${x.paid}/${x.started})`}</span></span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px" }}><span>First rebill paid</span><span style={{ fontVariantNumeric: "tabular-nums" }}><b style={{ color: x.rebillRate == null ? "#0f172a" : x.rebillRate >= 0.7 ? "#16a34a" : x.rebillRate >= 0.5 ? "#b45309" : "#dc2626" }}>{x.rebillRate == null ? "—" : pct(x.rebillRate, 0)}</b> <span style={{ color: "#a4adbd" }}>({x.rebillOk}/{x.rebillDue})</span></span></div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", color: "#8a92a3", fontSize: "11.5px" }}><span>Members · still in trial</span><span>{x.members} · {x.members - x.rebillDue}</span></div>
-        </div>
-      ))}
-    </div>
-  );
-  return (
-    <div style={{ ...ui.card, padding: "18px 22px", marginBottom: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "12px" }}>
-        <div>
-          <span style={{ fontWeight: 800, fontSize: "15px" }}>A/B test · 3D Secure</span>
-          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "8px" }}>since {fmtDY(ab.from)} · Stripe checkouts (PayPal direct not included)</span>
-        </div>
-        <span style={{ fontSize: "11.5px", color: "#a4adbd" }}>Checkout paid = card payments started that went through · first rebill = members whose trial ended (cancellations during the trial left out)</span>
-      </div>
-      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-        <Col title="Normal checkout" sub="checkout.getjustjenny.com · no forced 3DS" g={ab.standard} />
-        <Col title="3DS checkout" sub="…/3ds links · debit + prepaid confirm with 3DS" g={ab.tds} accent />
-      </div>
-    </div>
-  );
-}
-
-function Cohorts({ week, month }) {
-  const [mode, setMode] = useState("week");
-  const rows = mode === "week" ? week : month;
-  const label = (k) => (mode === "week" ? new Date(k).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }) : new Date(`${k}-01`).toLocaleDateString("en-GB", { month: "long", year: "numeric" }));
-  const ncols = 5;
-  return (
-    <div style={{ ...ui.card, padding: "20px 22px", marginBottom: "20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "8px", marginBottom: "6px" }}>
-        <div><div style={{ fontWeight: 800, fontSize: "15px" }}>Cohort retention</div><div style={{ fontSize: "12px", color: "#8a92a3" }}>by {mode === "week" ? "week" : "month"} of joining · drop-off per cycle (count and % of the cohort) · a cell stays empty, not zero, until that cycle has started for the whole cohort</div></div>
-        <div style={{ display: "flex", gap: "6px" }}><button style={ui.btn(mode === "week")} onClick={() => setMode("week")}>By week</button><button style={ui.btn(mode === "month")} onClick={() => setMode("month")}>By month</button></div>
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead><tr><th style={ui.th}>Cohort ({mode === "week" ? "week of" : "month"})</th><th style={{ ...ui.th, textAlign: "center" }}>Members</th>{Array.from({ length: ncols }, (_, k) => <th key={k} style={{ ...ui.th, textAlign: "center" }}>{k === 0 ? "Trial (7 d)" : `Cycle ${k}`}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.key}>
-                <td style={{ ...ui.td, fontWeight: 600, borderBottom: 0, padding: "5px 6px" }}>{label(r.key)}</td>
-                <td style={{ ...ui.td, textAlign: "center", borderBottom: 0, padding: "5px 6px" }}><span style={{ display: "inline-block", minWidth: "60px", background: "#f1f5f9", borderRadius: "8px", padding: "8px 0", fontWeight: 700 }}>{r.size}</span></td>
-                {r.cells.slice(0, ncols).map((c, k) => (
-                  <td key={k} style={{ ...ui.td, textAlign: "center", borderBottom: 0, padding: "5px 6px" }}>
-                    {c ? <div style={{ background: "#fee2e2", borderRadius: "8px", padding: "6px 0", minWidth: "120px", lineHeight: 1.25 }}><b style={{ display: "block", fontSize: "13px", color: "#991b1b" }}>−{c.dropped} <small style={{ fontWeight: 600, color: "#b91c1c" }}>({(c.rate * 100).toFixed(0)}%)</small></b><span style={{ fontSize: "11px", color: "#7f1d1d" }}>{c.left} left</span></div>
-                      : <span style={{ color: "#c3c9d3", fontSize: "12px" }}>not yet</span>}
-                  </td>
-                ))}
-              </tr>
-            ))}
-            {rows.length === 0 && <tr><td colSpan={ncols + 2} style={{ ...ui.td, color: "#8a92a3" }}>No members yet.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 export default function Subscriptions() {
   const [range, setRange] = useState("today");
@@ -538,9 +465,22 @@ export default function Subscriptions() {
   const [clock, setClock] = useState("");
   useEffect(() => { const t = () => setClock(new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/Brussels" })); t(); const i = setInterval(t, 1000); return () => clearInterval(i); }, []);
 
-  const load = (r) => {
-    setData(null); setErr("");
-    fetch(`/api/subscriptions?range=${r}`).then((x) => x.json()).then((d) => (d.success ? setData(d) : setErr(d.error || "Error"))).catch((e) => setErr(e.message));
+  // Fast first paint: the shared cache (≤ 30 min old) shows right away, then a live update replaces it in the background
+  const [updating, setUpdating] = useState(false);
+  const seq = useRef(0);
+  const load = (r, { fresh = false } = {}) => {
+    const id = ++seq.current;
+    const get = (q) => fetch(`/api/subscriptions?range=${r}${q}`).then((x) => x.json());
+    const live = (q) => { setUpdating(true); get(q).then((d) => { if (id === seq.current) { if (d.success) setData(d); else if (fresh) setErr(d.error || "Error"); } }).catch(() => {}).finally(() => { if (id === seq.current) setUpdating(false); }); };
+    setErr("");
+    if (fresh) return live("&fresh=1");
+    setData(null);
+    get("&cached=1").then((d) => {
+      if (id !== seq.current) return;
+      if (!d.success) { setErr(d.error || "Error"); return; }
+      setData(d);
+      if (d.cached && Date.now() - Date.parse(d.cachedAt) > 60000) live("");
+    }).catch((e) => { if (id === seq.current) setErr(e.message); });
   };
   useEffect(() => { load(range); }, [range]);
 
@@ -561,11 +501,11 @@ export default function Subscriptions() {
   return (
     <div style={ui.page}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "22px" }}>
-        <div><h1 style={{ fontSize: "22px", fontWeight: 800, margin: 0 }}>Membership</h1><div style={{ fontSize: "12.5px", color: "#8a92a3", marginTop: "3px" }}>Health For Life · 7-day trial, then {eur(data?.price ?? 49)} every 28 days{data ? ` · refreshed ${new Date(data.generatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}</div></div>
+        <div><h1 style={{ fontSize: "22px", fontWeight: 800, margin: 0 }}>Membership</h1><div style={{ fontSize: "12.5px", color: "#8a92a3", marginTop: "3px" }}>Health For Life · 7-day trial, then {eur(data?.price ?? 49)} every 28 days{data ? ` · data from ${new Date(data.cachedAt || data.generatedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}{updating ? " · updating…" : ""}</div></div>
         <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
           {RANGES.map(([x, l]) => <button key={x} style={ui.btn(range === x)} onClick={() => setRange(x)}>{l}</button>)}
           <span style={{ width: "1px", height: "20px", background: "#e2e6ec", margin: "0 6px" }} />
-          <button style={ui.btn(false)} onClick={() => load(range)}>Refresh</button>
+          <button style={ui.btn(false)} onClick={() => load(range, { fresh: true })} disabled={updating}>{updating ? "Updating…" : "Refresh"}</button>
         </div>
       </div>
 
@@ -631,9 +571,6 @@ export default function Subscriptions() {
 
           <FailedRebills f={data.failed30} />
 
-          <AbTest ab={data.abTest} />
-
-          <Cohorts week={data.cohortsWeek} month={data.cohortsMonth} />
 
           <div style={{ ...ui.card, padding: "18px 22px", marginBottom: "12px" }}>
             {/* collapsible member list: header always visible, list on demand (state remembered per browser) */}
@@ -676,7 +613,7 @@ export default function Subscriptions() {
             </div>
             </>}
           </div>
-          <p style={{ fontSize: "11.5px", color: "#b6bdc9" }}>Live from Stripe, PayPal, Shopify (orders tagged subscription-frontend) and Meta ({k.campaigns?.length || 0} campaigns behind these orders). Period {data.from} to {data.to} · fetched {new Date(data.generatedAt).toLocaleTimeString("en-GB")}.</p>
+          <p style={{ fontSize: "11.5px", color: "#b6bdc9" }}>Live from Stripe, PayPal, Shopify (orders tagged subscription-frontend) and Meta ({k.campaigns?.length || 0} campaigns behind these orders). Period {data.from} to {data.to} · data from {new Date(data.cachedAt || data.generatedAt).toLocaleTimeString("en-GB")}{data.cached ? " (shared cache)" : ""}.</p>
         </>
       )}
     </div>

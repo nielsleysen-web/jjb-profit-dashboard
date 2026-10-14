@@ -22,6 +22,8 @@ import { shopifyGraphql } from "../../lib/shopify-admin";
 import { pp, paypalConfigured, unpackCustom } from "../../lib/paypal";
 import { canMembership } from "../../lib/dashboard-session";
 import { getPauses, getCancellations } from "../../lib/membership-actions";
+import zlib from "zlib";
+import { redis, storeConfigured } from "../../lib/portal-store";
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 function getSession(req) {
@@ -131,6 +133,8 @@ async function stripeData() {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" });
   const statusMap = { trialing: "trial", active: "active", past_due: "problem", unpaid: "problem", incomplete: "problem", incomplete_expired: "canceled", canceled: "canceled", paused: "paused" };
   const members = [], abStarts = [];
+  // Subscriptions and invoices are listed in parallel (each is many pages of 100)
+  const subsTask = (async () => {
   let n = 0;
   for await (const s of stripe.subscriptions.list({ status: "all", limit: 100, expand: ["data.customer", "data.default_payment_method"] })) {
     if (++n > 5000) break;
@@ -158,10 +162,12 @@ async function stripeData() {
       priceDowngraded: !!s.metadata?.jj_price_downgrade,
     });
   }
+  })();
   const rebills = [], failed = [], pending = [], dunning = [], failHist = [], retries = [];
   const attempts = []; // retry attempts per day (Stripe retries from the charges + discount-ladder steps) → Failed rebills per date
   const histFrom = Date.now() / 1000 - 31 * 86400; // mislukte rebills van de laatste 30 dagen (+1 dag marge voor tijdzones)
-  n = 0;
+  const invTask = (async () => {
+  let n = 0;
   for await (const inv of stripe.invoices.list({ limit: 100, expand: ["data.payment_intent"] })) {
     if (++n > 8000) break;
     if (inv.billing_reason !== "subscription_cycle") continue;
@@ -204,6 +210,8 @@ async function stripeData() {
     else if (!inv.attempted && (inv.status === "draft" || inv.status === "open") && inv.amount_due) pending.push({ subId, at: iso(inv.created * 1000), amount: inv.amount_due / 100, provider: "stripe" });
     else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
   }
+  })();
+  await Promise.all([subsTask, invTask]);
   // Charges of every failed rebill: (1) the reason (after a later successful try Stripe clears last_payment_error)
   // and (2) Stripe's own retries per day — every charge after the first attempt on that invoice
   const withPi = failHist.filter((f) => f.piId).slice(0, 160);
@@ -322,6 +330,32 @@ async function metaSpend(from, to, campaignIds, keywords) {
   return data;
 }
 
+/* ---------------- shared cache of the raw data (Redis, gzip) ---------------- */
+// Building everything live takes long (all Stripe subscriptions + invoices + charges, every PayPal subscription,
+// Shopify orders). The result is the same for every range → computed once, shared by all users and by /api/members.
+const RAW_KEY = "cache:subs:raw:v2";
+async function loadRaw(maxAgeMs) {
+  if (maxAgeMs > 0 && storeConfigured()) {
+    try {
+      const v = await redis(["GET", RAW_KEY]);
+      if (v) {
+        const o = JSON.parse(zlib.gunzipSync(Buffer.from(v, "base64")).toString());
+        if (Date.now() - o.at < maxAgeMs) return { ...o, cached: true };
+      }
+    } catch (e) { console.warn("subscriptions cache read:", e.message); }
+  }
+  const stP = stripeData(); // Stripe does not need the Shopify orders → start it right away
+  const orders = await shopifyOrders();
+  const paypalIds = Object.keys(orders).filter((k) => k.startsWith("I-"));
+  const [st, py] = await Promise.all([stP, paypalData(paypalIds)]);
+  const o = { at: Date.now(), orders, st, py };
+  if (storeConfigured()) {
+    try { await redis(["SET", RAW_KEY, zlib.gzipSync(JSON.stringify(o)).toString("base64"), "EX", "3600"]); }
+    catch (e) { console.warn("subscriptions cache write:", e.message); }
+  }
+  return { ...o, cached: false };
+}
+
 /* ---------------- cycli: in welke cyclus zit/zat een lid, en waar haakte hij af ---------------- */
 // cyclus 0 = proef (dag 0–7), cyclus k = dag 7+(k−1)·28 … 7+k·28. Een lid "start" cyclus k als hij rebill k betaalde.
 function cycleEnd(m, k) { return Date.parse(m.startedAt) + TRIAL_MS + k * CYCLE_MS; }
@@ -345,11 +379,14 @@ export default async function handler(req, res) {
     const inPeriod = (t) => { const ms = typeof t === "number" ? t : Date.parse(t || 0); return ms >= pStart && ms < pEnd; };
     const now = Date.now();
 
-    const orders = await shopifyOrders();
-    const paypalIds = Object.keys(orders).filter((k) => k.startsWith("I-"));
+    // Raw data (Shopify + Stripe + PayPal) comes from a short-lived shared cache: ?cached=1 accepts up to 30 min old
+    // (instant first paint), a normal call up to 60 s, ?fresh=1 always live
+    const maxAge = req.query.fresh === "1" ? 0 : req.query.cached === "1" ? 30 * 60000 : 60000;
+    const raw = await loadRaw(maxAge);
+    const { orders, st, py } = raw;
     const campaignIds = new Set(Object.values(orders).map((o) => o.campaignId).filter(Boolean));
     const keywords = (process.env.SUB_CAMPAIGN_KEYWORDS || "").toLowerCase().split(",").map((k) => k.trim()).filter(Boolean);
-    const [st, py, meta] = await Promise.all([stripeData(), paypalData(paypalIds), metaSpend(from, to, campaignIds, keywords)]);
+    const meta = await metaSpend(from, to, campaignIds, keywords);
 
     // Stripe-rebills aan leden hangen
     const bySub = {};
@@ -437,26 +474,6 @@ export default async function handler(req, res) {
         started: started.length, ended: ended.length, dropped: dropped.length, dropRate: ended.length ? dropped.length / ended.length : null,
         continued: members.filter((m) => m.cycles >= k + 1).length, pending: started.length - ended.length });
       if (started.length === 0) break;
-    }
-
-    /* ---- cohorten (week / maand) ---- */
-    const weekKey = (t) => { const d = new Date(t); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day); return d.toISOString().slice(0, 10); };
-    const monthKey = (t) => new Date(t).toISOString().slice(0, 7);
-    function cohorts(keyFn) {
-      const g = {};
-      for (const m of members) (g[keyFn(m.startedAt)] = g[keyFn(m.startedAt)] || []).push(m);
-      return Object.keys(g).sort().reverse().map((key) => {
-        const list = g[key];
-        const cells = [];
-        for (let k = 0; k <= 6; k++) {
-          const allEnded = list.every((m) => now >= cycleEnd(m, k) || droppedAt(m, now) != null);
-          if (!allEnded) { cells.push(null); continue; }
-          const left = list.filter((m) => m.cycles >= k + 1).length;
-          const prev = k === 0 ? list.length : list.filter((m) => m.cycles >= k).length;
-          cells.push({ dropped: prev - left, left, rate: list.length ? (prev - left) / list.length : 0 });
-        }
-        return { key, size: list.length, cells };
-      });
     }
 
     /* ---- dagreeks voor de periode ---- */
@@ -704,28 +721,8 @@ export default async function handler(req, res) {
       })(),
     };
 
-    /* ---- A/B-test 3D Secure: gewone checkout vs. de /3ds-links, vanaf de eerste bestelling via een /3ds-link ----
-       Afronding = gestarte kaartbetalingen die ook betaald werden (meet de extra 3DS-stap).
-       Eerste rebill = leden van wie de proef voorbij is (zonder opzeg tijdens de proef): gelukt of niet. */
-    const abFrom = Math.min(Infinity, ...(st.abStarts || []).filter((x) => x.variant === "3ds").map((x) => x.created));
-    const abTest = (() => {
-      if (!Number.isFinite(abFrom)) return { running: false };
-      const dp = (f) => f === "debit" || f === "prepaid";
-      const group = (variant, onlyDp) => {
-        const starts = st.abStarts.filter((x) => x.created >= abFrom && x.variant === variant && (!onlyDp || dp(x.funding)));
-        const mem = members.filter((m) => m.provider === "stripe" && m.variant === variant && Date.parse(m.startedAt) >= abFrom * 1000 && (!onlyDp || dp(m.funding)));
-        const due = mem.filter((m) => Date.parse(m.trialEnd) <= now && !(m.canceledAt && Date.parse(m.canceledAt) < Date.parse(m.trialEnd)));
-        const ok = due.filter((m) => m.cycles >= 1).length;
-        // Gewone checkout kent het kaarttype van een NIET-betaalde poging niet (geen kaart vooraf aangemaakt) → afronding per kaarttype onbekend
-        const known = !(onlyDp && variant === "standard");
-        return { started: known ? starts.length : null, paid: known ? starts.filter((x) => x.paid).length : null, completion: known && starts.length ? r2(starts.filter((x) => x.paid).length / starts.length) : null,
-          members: mem.length, rebillDue: due.length, rebillOk: ok, rebillRate: due.length ? r2(ok / due.length) : null, problem: due.filter((m) => m.status === "problem").length };
-      };
-      return { running: true, from: iso(abFrom * 1000), standard: { all: group("standard"), dp: group("standard", true) }, tds: { all: group("3ds"), dp: group("3ds", true) } };
-    })();
-
     const storeHandle = (process.env.SHOPIFY_STORE_URL || "").replace(".myshopify.com", "");
-    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, cohortsWeek: cohorts(weekKey), cohortsMonth: cohorts(monthKey), members, upcoming, dunning, dunningSummary, failed30, abTest, generatedAt: iso(now) });
+    return res.status(200).json({ success: true, range, from, to, price: PRICE, storeHandle, kpis, compare, chart, cycleRows, events, eventsTotal, dueToday, series: Object.values(days), cycles: cyclesOut, members, upcoming, dunning, dunningSummary, failed30, cachedAt: iso(raw.at), cached: !!raw.cached, generatedAt: iso(now) });
   } catch (e) {
     console.error("subscriptions:", e.message);
     return res.status(500).json({ success: false, error: e.message });

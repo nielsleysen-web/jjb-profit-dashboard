@@ -172,7 +172,7 @@ export default function Members() {
   const [brand, setBrand] = useState("neurotone");
   const now = Date.now();
 
-  const load = () => { setData(null); setErr(""); fetch(`/api/members?brand=${brand}`).then((r) => r.json()).then((d) => (d.success ? setData(d) : setErr(d.error || "Error"))).catch((e) => setErr(e.message)); };
+  const load = (fresh) => { setData(null); setErr(""); fetch(`/api/members?brand=${brand}${fresh === true ? "&fresh=1" : ""}`).then((r) => r.json()).then((d) => (d.success ? setData(d) : setErr(d.error || "Error"))).catch((e) => setErr(e.message)); };
   useEffect(load, [brand]); // eslint-disable-line react-hooks/exhaustive-deps
   // Remember the last chosen product (per browser); ?brand=lubrisense in the URL wins
   useEffect(() => {
@@ -205,7 +205,7 @@ export default function Members() {
           <div style={{ display: "inline-flex", border: "1px solid #e2e6ec", borderRadius: "999px", padding: 3, background: "#fff", marginRight: 6 }}>
             {BRAND_OPTS.map(([k, l]) => <button key={k} onClick={() => pickBrand(k)} style={{ padding: "6px 14px", borderRadius: "999px", border: "none", background: brand === k ? "#0f172a" : "transparent", color: brand === k ? "#fff" : "#334155", fontWeight: 700, fontSize: "12.5px", cursor: "pointer" }}>{l}</button>)}
           </div>
-          <button style={ui.btn(false)} onClick={load}>Refresh</button><button style={ui.btn(true)} onClick={download} disabled={!rows.length}>Export CSV ({rows.length})</button>
+          <button style={ui.btn(false)} onClick={() => load(true)}>Refresh</button><button style={ui.btn(true)} onClick={download} disabled={!rows.length}>Export CSV ({rows.length})</button>
         </div>
       </div>
       {err && <div style={{ ...ui.card, padding: 14, color: "#991b1b", marginBottom: 14 }}>{err}</div>}

@@ -7,7 +7,7 @@
 // Toegang: admin, finance of de rol Membership CS Rep.
 import { getDashboardSession, canMembership } from "../../lib/dashboard-session";
 import { pauseMembership, resumeMembership, cancelMembership, sendMagicLink, ActionError } from "../../lib/membership-actions";
-import { storeConfigured, getJson } from "../../lib/portal-store";
+import { storeConfigured, getJson, redis } from "../../lib/portal-store";
 import { memberKey } from "../../lib/portal-members";
 import { normEmail } from "../../lib/portal-auth";
 import { BRANDS, runWithBrand } from "../../lib/portal-brand";
@@ -39,6 +39,7 @@ export default async function handler(req, res) {
       return sendMagicLink({ email: b.email, by });
     });
     console.log(`membership action ${b.action} by ${s.email}: ${b.subscriptionId || b.email}`);
+    await redis(["DEL", "cache:subs:raw:v2"]).catch(() => {}); // Membership/Members pages show the change right away
     return res.status(200).json({ success: true, result });
   } catch (e) {
     console.error("membership action:", b.action, e.message);

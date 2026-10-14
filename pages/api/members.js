@@ -39,7 +39,8 @@ async function liveSubscriptions(req, productKey) {
   try {
     const proto = req.headers["x-forwarded-proto"] || "https";
     const host = req.headers["x-forwarded-host"] || req.headers.host;
-    const r = await fetch(`${proto}://${host}/api/subscriptions?range=all`, { headers: { cookie: req.headers.cookie || "" } });
+    // ?cached=1: uses the shared cache of the Membership page (≤ 30 min old) instead of fetching everything again
+    const r = await fetch(`${proto}://${host}/api/subscriptions?range=all&${req.query.fresh === "1" ? "fresh" : "cached"}=1`, { headers: { cookie: req.headers.cookie || "" } });
     const d = await r.json();
     const by = {};
     // Abonnement van dít product heeft voorrang (iemand kan NeuroTone én LubriSense hebben)
