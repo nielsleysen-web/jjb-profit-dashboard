@@ -14,6 +14,7 @@ import { useT, fmtDate, fmtMoney } from "../../lib/portal-i18n";
 import Library, { GiftBanner } from "../../components/portal/Library";
 import Reactivate, { REACT_CSS } from "../../components/portal/Reactivate";
 import ManageMembership, { MANAGE_CSS } from "../../components/portal/ManageMembership";
+import CourseView, { COURSE_CSS, useDone } from "../../components/portal/Course";
 import { brandCss } from "../../lib/portal-theme";
 import Home, { Bell, SuggestLink } from "../../components/portal/Home";
 import { IcHome, IcGift, IcBooks, IcCap, IcHeart, IcBox, IcCog, IcLogout } from "../../components/portal/Icons";
@@ -59,7 +60,7 @@ export default function Portal() {
   const nav = (r) => { if (window.location.hash !== `#${r}`) window.location.hash = r; else { setRoute(r); setMenu(false); } };
   const logout = async () => { await post("/api/portal/auth/logout"); go("/login"); };
 
-  const [tab, arg] = route.split("/");
+  const [tab, arg, sub] = route.split("/");
   const activeTab = tab === "claim" || tab === "done" ? "free" : tab;
   const m = data?.member;
 
@@ -71,7 +72,10 @@ export default function Portal() {
   else if (tab === "claim") content = <Claim t={t} lang={lang} data={data} slug={arg} nav={nav} reload={load} />;
   else if (tab === "done") content = <Done t={t} lang={lang} data={data} name={decodeURIComponent(arg || "")} nav={nav} />;
   else if (tab === "library") content = <Library t={t} lang={lang} data={data} reload={load} />;
-  else if (tab === "courses") content = <Courses t={t} lang={lang} data={data} />;
+  else if (tab === "courses") {
+    const course = arg && (data.courses || []).find((c) => c.slug === arg && courseReady(c));
+    content = course ? <CourseView t={t} lang={lang} course={course} lessonId={sub} nav={nav} /> : <Courses t={t} lang={lang} data={data} nav={nav} />;
+  }
   else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} brand={brand} nav={nav} reload={load} />;
   else if (tab === "orders") content = <Orders t={t} lang={lang} data={data} />;
   else if (tab === "settings") content = <Settings t={t} lang={lang} data={data} reload={load} />;
@@ -92,6 +96,7 @@ export default function Portal() {
       <PortalStyles />
       <style dangerouslySetInnerHTML={{ __html: REACT_CSS }} />
       <style dangerouslySetInnerHTML={{ __html: brandCss(MANAGE_CSS, brand) }} />
+      <style dangerouslySetInnerHTML={{ __html: brandCss(COURSE_CSS, brand) }} />
       <div className="app">
         <aside className={`side${menu ? " open" : ""}`}>
           <img src={LOGO} alt="Just Jenny" />
@@ -285,32 +290,43 @@ const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
 const pmText = (t, pm, provider) => (pm?.type === "card" ? `${cap(pm.brand)} •••• ${pm.last4}` : pm?.type === "paypal" || provider === "paypal" ? "PayPal" : t("unknown"));
 
 // ---- Corsi ---------------------------------------------------------------------
-function Courses({ t, lang, data }) {
+function Courses({ t, lang, data, nav }) {
   return (
     <>
       <h1>{t("coursesTitle")}</h1>
       <p className="sub">{t("coursesSub")}</p>
       <div className="cg">
-        {data.courses.map((c) => {
-          const txt = c[lang] || c.it;
-          const pct = c.unlockDays ? Math.min(100, Math.round((data.daysIn / c.unlockDays) * 100)) : 100;
-          return (
-            <div key={c.slug} className={`card cc${c.unlocked ? "" : " locked"}`}>
-              <div className={`cov ${c.tone || ""}`}>{c.icon}
-                {!c.unlocked && <div className="lk">{t("unlocksAfter", { n: Math.round(c.unlockDays / 28) })}<small>{t("daysToGo", { d: c.daysLeft, date: fmtDate(lang, c.unlocksAt, { day: "numeric", month: "long" }) })}</small></div>}
-              </div>
-              <div className="bd">
-                <h3>{txt.title}</h3>
-                <p>{txt.desc}</p>
-                {c.unlocked
-                  ? <div className="meta">✓ {t("available")} · {t("videosSoon")}</div>
-                  : <><div className="bar"><i style={{ width: `${pct}%` }} /><b>{t("dayOf", { d: data.daysIn, total: c.unlockDays })}</b></div><div className="meta">{t("locked")}</div></>}
-              </div>
-            </div>
-          );
-        })}
+        {data.courses.map((c) => <CourseCard key={c.slug} t={t} lang={lang} data={data} c={c} nav={nav} />)}
       </div>
     </>
+  );
+}
+const courseReady = (c) => !!(c.unlocked && c.content && c.content.lessons.some((l) => (l.parts || []).length));
+function CourseCard({ t, lang, data, c, nav }) {
+  const txt = c[lang] || c.it;
+  const pct = c.unlockDays ? Math.min(100, Math.round((data.daysIn / c.unlockDays) * 100)) : 100;
+  const [done] = useDone(c.slug);
+  const lessons = c.content?.lessons || [];
+  const nDone = lessons.filter((l) => done[l.id]).length;
+  return (
+    <div className={`card cc${c.unlocked ? "" : " locked"}`}>
+      <div className={`cov ${c.tone || ""}`}>{c.icon}
+        {!c.unlocked && <div className="lk">{t("unlocksAfter", { n: Math.round(c.unlockDays / 28) })}<small>{t("daysToGo", { d: c.daysLeft, date: fmtDate(lang, c.unlocksAt, { day: "numeric", month: "long" }) })}</small></div>}
+      </div>
+      <div className="bd">
+        <h3>{txt.title}</h3>
+        <p>{txt.desc}</p>
+        {courseReady(c)
+          ? <>
+              <div className="meta">{t("lessonsN", { n: lessons.length })}{c.videoLang && c.videoLang !== lang ? ` · ${t("videoInEn")}` : ""}</div>
+              {nDone > 0 && <div className="cpr">{t("lessonsDone", { d: nDone, total: lessons.length })}</div>}
+              <button type="button" className="btn cgo" onClick={() => nav(`courses/${c.slug}`)}>{nDone === 0 ? t("startCourse") : nDone < lessons.length ? t("continueCourse") : t("reviewCourse")}</button>
+            </>
+          : c.unlocked
+            ? <div className="meta">✓ {t("available")} · {t("videosSoon")}</div>
+            : <><div className="bar"><i style={{ width: `${pct}%` }} /><b>{t("dayOf", { d: data.daysIn, total: c.unlockDays })}</b></div><div className="meta">{c.lessons ? `${t("lessonsN", { n: c.lessons })} · ` : ""}{t("locked")}</div></>}
+      </div>
+    </div>
   );
 }
 
