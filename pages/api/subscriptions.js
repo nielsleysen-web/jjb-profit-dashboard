@@ -159,13 +159,26 @@ async function stripeData() {
     });
   }
   const rebills = [], failed = [], pending = [], dunning = [], failHist = [], retries = [];
+  const attempts = []; // retry attempts per day (Stripe retries from the charges + discount-ladder steps) → Failed rebills per date
   const histFrom = Date.now() / 1000 - 31 * 86400; // mislukte rebills van de laatste 30 dagen (+1 dag marge voor tijdzones)
   n = 0;
   for await (const inv of stripe.invoices.list({ limit: 100, expand: ["data.payment_intent"] })) {
     if (++n > 8000) break;
     if (inv.billing_reason !== "subscription_cycle") continue;
     // Kortingsladder bij saldotekort (lib/stripe-dunning.js): alles staat in de factuur-metadata
-    if (inv.metadata?.jj_dunning) dunning.push(dunningRow(inv));
+    if (inv.metadata?.jj_dunning) {
+      const row = dunningRow(inv);
+      dunning.push(row);
+      // Every ladder step that was tried: failed, or paid (date of payment = invoice paid_at)
+      const paidDay = inv.status === "paid" && inv.status_transitions?.paid_at ? dayStr(inv.status_transitions.paid_at * 1000) : null;
+      for (const stp of row.steps) {
+        if (stp.state !== "failed" && stp.state !== "paid") continue;
+        const d = stp.state === "paid" ? paidDay || stp.date : stp.date;
+        if (d && Date.parse(`${d}T12:00:00Z`) / 1000 >= Date.now() / 1000 - 32 * 86400)
+          attempts.push({ d, at: stp.state === "paid" && inv.status_transitions?.paid_at ? iso(inv.status_transitions.paid_at * 1000) : null, kind: "ladder", invoiceId: inv.id, subId: row.subId, email: row.email,
+            amount: stp.amount, label: stp.label, pct: stp.pct, result: stp.state === "paid" ? "paid" : "failed", reason: stp.code || row.code || null });
+      }
+    }
     const subId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
     const pi = typeof inv.payment_intent === "object" ? inv.payment_intent : null;
     // Off-session 3DS-vraag: PaymentIntent blijft op requires_action, vaak zonder last_payment_error → als 3DS tellen
@@ -175,7 +188,7 @@ async function stripeData() {
     // anders vallen de via retries binnengehaalde bedragen buiten rebill-omzet en Total net profit.
     // Historiek mislukte rebills: elke rebill-factuur waarvan minstens één poging mislukte, ook als ze later toch betaald werd
     if (inv.created >= histFrom && inv.attempted && ((inv.attempt_count || 0) > 1 || ["open", "uncollectible", "void"].includes(inv.status) || inv.metadata?.jj_dunning)) {
-      failHist.push({ subId, invoiceId: inv.id, piId: pi?.id || (typeof inv.payment_intent === "string" ? inv.payment_intent : null), at: iso(inv.created * 1000), amount: (inv.amount_due || inv.total || 0) / 100,
+      failHist.push({ email: inv.customer_email || "", subId, invoiceId: inv.id, piId: pi?.id || (typeof inv.payment_intent === "string" ? inv.payment_intent : null), at: iso(inv.created * 1000), amount: (inv.amount_due || inv.total || 0) / 100,
         reason: inv.metadata?.jj_dunning_code || err?.decline_code || err?.code || null, outcome: inv.status === "paid" ? "recovered" : inv.status === "open" ? "open" : "lost",
         paid: inv.status === "paid" ? paidAmount(inv) : 0, ladder: !!inv.metadata?.jj_dunning, provider: "stripe" });
     }
@@ -184,23 +197,30 @@ async function stripeData() {
       const full = (inv.amount_due || 0) / 100;
       if (inv.metadata?.jj_dunning === "1") {
         const nx = dunningRow(inv).steps.find((x) => x.state === "next");
-        retries.push({ subId, invoiceId: inv.id, kind: "ladder", d: nx?.date || null, amount: nx ? nx.amount : full, pct: nx?.pct ?? null, label: nx?.label || null, full });
-      } else retries.push({ subId, invoiceId: inv.id, kind: "stripe", d: inv.next_payment_attempt ? dayStr(inv.next_payment_attempt * 1000) : null, at: inv.next_payment_attempt ? iso(inv.next_payment_attempt * 1000) : null, amount: full, pct: null, full, reason: err?.decline_code || err?.code || null });
+        retries.push({ email: inv.customer_email || "", subId, invoiceId: inv.id, kind: "ladder", d: nx?.date || null, amount: nx ? nx.amount : full, pct: nx?.pct ?? null, label: nx?.label || null, full });
+      } else retries.push({ email: inv.customer_email || "", subId, invoiceId: inv.id, kind: "stripe", d: inv.next_payment_attempt ? dayStr(inv.next_payment_attempt * 1000) : null, at: inv.next_payment_attempt ? iso(inv.next_payment_attempt * 1000) : null, amount: full, pct: null, full, reason: err?.decline_code || err?.code || null });
     }
     if (inv.status === "paid" && (inv.amount_paid || Number(inv.metadata?.jj_dunning_amount) > 0)) rebills.push({ subId, at: iso((inv.status_transitions?.paid_at || inv.created) * 1000), amount: paidAmount(inv), provider: "stripe", recovered: (inv.attempt_count || 1) > 1 || !!inv.metadata?.jj_dunning_amount, discountPct: inv.metadata?.jj_dunning_amount ? Number(String(inv.metadata.jj_dunning_result || "").replace("paid-", "")) || null : null });
     else if (!inv.attempted && (inv.status === "draft" || inv.status === "open") && inv.amount_due) pending.push({ subId, at: iso(inv.created * 1000), amount: inv.amount_due / 100, provider: "stripe" });
     else if (inv.attempted && (inv.status === "open" || inv.status === "uncollectible")) failed.push({ subId, at: iso(inv.created * 1000), amount: (inv.amount_due || 0) / 100, provider: "stripe", reason: err?.decline_code || err?.code || null, attempts: inv.attempt_count || 1, nextAttempt: iso((inv.next_payment_attempt || 0) * 1000) });
   }
-  // Bij een later geslaagde poging wist Stripe last_payment_error → reden halen uit de eerste mislukte charge
-  const unknown = failHist.filter((f) => !f.reason && f.piId).slice(0, 80);
-  for (let i = 0; i < unknown.length; i += 10) {
-    await Promise.all(unknown.slice(i, i + 10).map(async (f) => {
-      const ch = await stripe.charges.list({ payment_intent: f.piId, limit: 10 }).catch(() => null);
-      const bad = (ch?.data || []).filter((c) => c.status === "failed").sort((a, b) => a.created - b.created)[0];
-      if (bad) f.reason = bad.outcome?.reason || bad.failure_code || null;
+  // Charges of every failed rebill: (1) the reason (after a later successful try Stripe clears last_payment_error)
+  // and (2) Stripe's own retries per day — every charge after the first attempt on that invoice
+  const withPi = failHist.filter((f) => f.piId).slice(0, 160);
+  for (let i = 0; i < withPi.length; i += 10) {
+    await Promise.all(withPi.slice(i, i + 10).map(async (f) => {
+      const ch = await stripe.charges.list({ payment_intent: f.piId, limit: 20 }).catch(() => null);
+      const list = (ch?.data || []).sort((a, b) => a.created - b.created);
+      const bad = list.find((c) => c.status === "failed");
+      if (!f.reason && bad) f.reason = bad.outcome?.reason || bad.failure_code || null;
+      for (const c of list.slice(1)) {
+        if (c.status !== "succeeded" && c.status !== "failed") continue;
+        attempts.push({ d: dayStr(c.created * 1000), at: iso(c.created * 1000), kind: "stripe", invoiceId: f.invoiceId, subId: f.subId, email: f.email, amount: c.amount / 100,
+          result: c.status === "succeeded" ? "paid" : "failed", reason: c.status === "failed" ? c.outcome?.reason || c.failure_code || null : null });
+      }
     }));
   }
-  return { members, rebills, failed, pending, dunning, failHist, retries, abStarts };
+  return { members, rebills, failed, pending, dunning, failHist, retries, attempts, abStarts };
 }
 
 /* ---------------- kortingsladder (insufficient funds): schema per mislukte rebill ----------------
@@ -659,6 +679,28 @@ export default async function handler(req, res) {
         return { days, scheduled: list.filter((r) => r.d).length, amount: r2(list.filter((r) => r.d).reduce((a, r) => a + r.amount, 0)), later, none: list.filter((r) => !r.d).length,
           ladderTime: new Date(`${today}T08:10:00Z`).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: TZ }),
           paypalOpen: py.failed.filter((f) => f.outcome === "open").length };
+      })(),
+      // Per date (last 30 days … next 13): what was / is retried that day and what came in
+      perDay: (() => {
+        const today = dayStr(now), first = dayStr(now - 30 * DAY), last = dayStr(now + 13 * DAY);
+        const who = {}; for (const m of members) who[m.id] = m;
+        const out = {};
+        const add = (d, it) => {
+          if (d < first || d > last) return;
+          const m = who[it.subId] || {};
+          (out[d] ||= { items: [] }).items.push({ kind: it.kind, at: it.at || null, amount: r2(it.amount), label: it.label || null, pct: it.pct ?? null, result: it.result, reason: it.reason || null,
+            overdue: !!it.overdue, email: it.email || m.email || "", name: m.name || "", subId: it.subId || null, invoiceId: it.invoiceId || null });
+        };
+        for (const a of st.attempts || []) add(a.d, a);
+        for (const r of st.retries || []) if (r.d) add(r.d < today ? today : r.d, { ...r, result: "scheduled", overdue: r.d < today });
+        const order = { paid: 0, failed: 1, scheduled: 2 };
+        for (const [d, v] of Object.entries(out)) {
+          v.items.sort((a, b) => order[a.result] - order[b.result] || String(a.at || "").localeCompare(String(b.at || "")));
+          const done = v.items.filter((x) => x.result !== "scheduled"), paid = done.filter((x) => x.result === "paid"), sch = v.items.filter((x) => x.result === "scheduled");
+          Object.assign(v, { retried: done.length, retriedAmount: r2(done.reduce((a, x) => a + x.amount, 0)), paid: paid.length, paidAmount: r2(paid.reduce((a, x) => a + x.amount, 0)),
+            failed: done.length - paid.length, scheduled: sch.length, scheduledAmount: r2(sch.reduce((a, x) => a + x.amount, 0)) });
+        }
+        return { today, first, last, days: out };
       })(),
     };
 

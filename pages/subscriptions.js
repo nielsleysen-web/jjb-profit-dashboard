@@ -318,6 +318,104 @@ function RetryStrip({ r }) {
   );
 }
 
+/* ---------- Retries per date: pick a day (default today) → what is/was retried and what came in ---------- */
+const addD = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const RES = { paid: ["Paid", "#15803d", "#ecfdf3"], failed: ["Failed again", "#b91c1c", "#fef2f2"], scheduled: ["Scheduled", "#b45309", "#fffbeb"] };
+const hhmm = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Brussels" });
+function DayRetries({ f }) {
+  const pd = f.perDay, r = f.retries || {};
+  const [sel, setSel] = useState(pd.today);
+  const clamp = (st) => (st < pd.first ? pd.first : addD(st, 13) > pd.last ? addD(pd.last, -13) : st);
+  const [start, setStart] = useState(() => clamp(addD(pd.today, -3)));
+  const tiles = Array.from({ length: 14 }, (_, i) => addD(start, i));
+  const pick = (d) => { if (!d || d < pd.first || d > pd.last) return; setSel(d); if (d < start || d > addD(start, 13)) setStart(clamp(addD(d, -3))); };
+  const empty = { items: [], retried: 0, retriedAmount: 0, paid: 0, paidAmount: 0, failed: 0, scheduled: 0, scheduledAmount: 0 };
+  const v = pd.days[sel] || empty;
+  const isToday = sel === pd.today, future = sel > pd.today;
+  const max = Math.max(1, ...tiles.map((d) => { const x = pd.days[d] || empty; return x.retried + x.scheduled; }));
+  const btn = { border: "1px solid #e2e6ec", background: "#fff", borderRadius: "9px", padding: "6px 11px", fontSize: "12.5px", fontWeight: 700, cursor: "pointer", color: "#334155" };
+  return (
+    <div style={{ borderTop: "1px solid #f0f2f5", marginTop: "18px", paddingTop: "16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
+        <div>
+          <span style={{ fontWeight: 800, fontSize: "13.5px" }}>Retries per day</span>
+          <span style={{ fontSize: "12px", color: "#8a92a3", marginLeft: "8px" }}>{r.scheduled || 0} scheduled · {eur(r.amount || 0, 2)}{r.none ? ` · ${r.none} open without a new try planned` : ""}{r.paypalOpen ? ` · ${r.paypalOpen} PayPal (PayPal retries itself)` : ""}</span>
+        </div>
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <button type="button" style={btn} onClick={() => setStart(clamp(addD(start, -7)))} disabled={start <= pd.first} aria-label="Earlier days">‹</button>
+          <input type="date" value={sel} min={pd.first} max={pd.last} onChange={(e) => pick(e.target.value)} style={{ ...btn, fontWeight: 600, fontFamily: "inherit" }} />
+          <button type="button" style={btn} onClick={() => setStart(clamp(addD(start, 7)))} disabled={addD(start, 13) >= pd.last} aria-label="Later days">›</button>
+          {!isToday && <button type="button" style={{ ...btn, background: "#0f172a", color: "#fff", borderColor: "#0f172a" }} onClick={() => pick(pd.today)}>Today</button>}
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(14, minmax(58px, 1fr))", gap: "6px", overflowX: "auto", paddingBottom: "2px" }}>
+        {tiles.map((d) => {
+          const x = pd.days[d] || empty, on = d === sel, past = d < pd.today, today = d === pd.today;
+          const n = x.retried + x.scheduled;
+          return (
+            <button type="button" key={d} onClick={() => pick(d)} style={{ position: "relative", borderRadius: "12px", padding: "8px 6px 9px", textAlign: "center", cursor: "pointer", font: "inherit", lineHeight: 1.25,
+              background: n ? `rgba(79,109,245,${0.04 + 0.1 * (n / max)})` : "#fafbfc", border: `${on ? 2 : 1}px solid ${on ? "#0f172a" : n ? "#dfe5fd" : "#f0f2f5"}`, opacity: past && !n ? 0.7 : 1 }}>
+              <div style={{ fontSize: "10.5px", fontWeight: 600, color: on || today ? "#0f172a" : "#8a92a3" }}>{today ? "Today" : fmtDay(d, { weekday: "short" })}</div>
+              <div style={{ fontSize: "10.5px", color: "#a4adbd", fontFamily: MONO }}>{fmtDay(d)}</div>
+              <div style={{ fontSize: "18px", fontWeight: 800, color: n ? "#0f172a" : "#cbd2dc", margin: "4px 0 2px", fontVariantNumeric: "tabular-nums" }}>{n || "·"}</div>
+              {x.paid > 0 && <div style={{ fontSize: "10.5px", color: "#15803d", fontWeight: 700 }}>{x.paid} paid</div>}
+              {!x.paid && x.scheduled > 0 && <div style={{ fontSize: "10.5px", color: "#64748b", fontVariantNumeric: "tabular-nums" }}>{eur(x.scheduledAmount, 0)}</div>}
+              {!x.paid && !x.scheduled && x.retried > 0 && <div style={{ fontSize: "10.5px", color: "#b91c1c" }}>0 paid</div>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: "16px", border: "1px solid #eef0f4", borderRadius: "14px", padding: "16px 18px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: "14px" }}>{fmtDay(sel, { weekday: "long", day: "numeric", month: "long" })}{isToday ? " · today" : ""}</div>
+            <div style={{ fontSize: "12px", color: "#8a92a3", marginTop: "2px" }}>
+              {future ? "Planned retries for this day" : isToday ? `Retried so far today and still planned · discount ladder runs at ${r.ladderTime || "10:10"}` : "What was retried on this day and what came in"}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {!future && <NdStat label="Retried" value={v.retried} sub={eur(v.retriedAmount, 0)} />}
+            {!future && <NdStat label="Collected" value={v.paid} sub={`${eur(v.paidAmount, 2)}${v.retried ? ` · ${pct(v.paid / v.retried, 0)}` : ""}`} color="#16a34a" />}
+            {!future && <NdStat label="Failed again" value={v.failed} sub="still open or next step" color={v.failed ? "#b91c1c" : undefined} />}
+            {(isToday || future) && <NdStat label={isToday ? "Still to retry today" : "Scheduled"} value={v.scheduled} sub={eur(v.scheduledAmount, 2)} color="#b45309" />}
+          </div>
+        </div>
+        {v.items.length === 0
+          ? <div style={{ fontSize: "13px", color: "#8a92a3", padding: "6px 0" }}>No retries on this day.</div>
+          : <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12.5px" }}>
+                <thead><tr>{["Time", "Member", "Retry", "Amount", "Result"].map((h) => <th key={h} style={{ textAlign: h === "Amount" ? "right" : "left", fontSize: "11px", fontWeight: 600, color: "#8a92a3", textTransform: "uppercase", letterSpacing: "0.6px", padding: "6px 8px", borderBottom: "1px solid #eef0f4" }}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {v.items.map((it, i) => {
+                    const [rl, rc, rb] = RES[it.result] || RES.scheduled;
+                    const time = it.at ? hhmm(it.at) : it.kind === "ladder" ? `≈ ${r.ladderTime || "10:10"}` : "—";
+                    return (
+                      <tr key={i}>
+                        <td style={{ padding: "8px", borderBottom: "1px solid #f3f4f7", fontFamily: MONO, color: "#64748b", whiteSpace: "nowrap" }}>{time}</td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid #f3f4f7" }}><div style={{ fontWeight: 700 }}>{it.name || it.email || "—"}</div>{it.name && it.email && <div style={{ fontSize: "11.5px", color: "#8a92a3" }}>{it.email}</div>}</td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid #f3f4f7", whiteSpace: "nowrap" }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: "7px", height: "7px", borderRadius: "999px", background: it.kind === "ladder" ? "#f59e0b" : "#4f6df5" }} />
+                            {it.kind === "ladder" ? `Discount ladder${it.label ? ` · ${it.label}` : it.pct ? ` · −${it.pct}%` : ""}` : "Stripe retry"}</span>
+                        </td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid #f3f4f7", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 700 }}>{eur(it.amount, 2)}</td>
+                        <td style={{ padding: "8px", borderBottom: "1px solid #f3f4f7", whiteSpace: "nowrap" }}>
+                          <span style={{ background: rb, color: rc, fontWeight: 700, fontSize: "11px", padding: "3px 8px", borderRadius: "999px" }}>{rl}</span>
+                          {it.result === "failed" && it.reason && <span style={{ fontSize: "11.5px", color: "#8a92a3", marginLeft: "8px" }}>{reasonLabel(it.reason)}</span>}
+                          {it.overdue && <span style={{ fontSize: "11px", color: "#b91c1c", marginLeft: "8px", fontWeight: 700 }}>late — next run</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>}
+        <div style={{ fontSize: "11.5px", color: "#a4adbd", marginTop: "10px" }}>Card rebills only (Stripe retries + discount ladder). PayPal retries failed rebills itself and is not included. Ladder times are approximate (daily run).</div>
+      </div>
+    </div>
+  );
+}
+
 function FailedRebills({ f }) {
   if (!f) return null;
   const max = Math.max(1, ...f.byReason.map((b) => b.count));
@@ -349,7 +447,7 @@ function FailedRebills({ f }) {
         ))}
       </div>
       {f.byReason.length > 0 && <div style={{ display: "flex", gap: "16px", marginTop: "14px", fontSize: "12px", color: "#64748b" }}>{FOUT.map(([k, l, c]) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><span style={{ width: "10px", height: "10px", borderRadius: "3px", background: c }} />{l}</span>)}</div>}
-      {f.retries && <RetryStrip r={f.retries} />}
+      {f.perDay ? <DayRetries f={f} /> : f.retries && <RetryStrip r={f.retries} />}
     </div>
   );
 }
