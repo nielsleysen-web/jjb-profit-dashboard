@@ -13,6 +13,8 @@ import { LOGO, SUPPORT_EMAIL, post, go, onEnter } from "../../components/portal/
 import { useT, fmtDate, fmtMoney } from "../../lib/portal-i18n";
 import Library, { GiftBanner } from "../../components/portal/Library";
 import Reactivate, { REACT_CSS } from "../../components/portal/Reactivate";
+import ManageMembership, { MANAGE_CSS } from "../../components/portal/ManageMembership";
+import { brandCss } from "../../lib/portal-theme";
 import Home, { Bell, SuggestLink } from "../../components/portal/Home";
 import { IcHome, IcGift, IcBooks, IcCap, IcHeart, IcBox, IcCog, IcLogout } from "../../components/portal/Icons";
 
@@ -64,13 +66,13 @@ export default function Portal() {
   let content;
   if (error) content = <div className="center">{t("loadError")}</div>;
   else if (!data) content = <div className="center">{t("loading")}</div>;
-  else if (data.deactivated) content = <Reactivate t={t} lang={lang} data={data} reload={load} />;
+  else if (data.deactivated) content = <Reactivate t={t} lang={lang} data={data} reload={load} brand={brand} />;
   else if (data.ended) content = <Ended t={t} />;
   else if (tab === "claim") content = <Claim t={t} lang={lang} data={data} slug={arg} nav={nav} reload={load} />;
   else if (tab === "done") content = <Done t={t} lang={lang} data={data} name={decodeURIComponent(arg || "")} nav={nav} />;
   else if (tab === "library") content = <Library t={t} lang={lang} data={data} reload={load} />;
   else if (tab === "courses") content = <Courses t={t} lang={lang} data={data} />;
-  else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} brand={brand} />;
+  else if (tab === "membership") content = <Membership t={t} lang={lang} data={data} brand={brand} nav={nav} reload={load} />;
   else if (tab === "orders") content = <Orders t={t} lang={lang} data={data} />;
   else if (tab === "settings") content = <Settings t={t} lang={lang} data={data} reload={load} />;
   else if (tab === "free") content = <FreeItems t={t} lang={lang} data={data} nav={nav} reload={load} />;
@@ -89,6 +91,7 @@ export default function Portal() {
       </Head>
       <PortalStyles />
       <style dangerouslySetInnerHTML={{ __html: REACT_CSS }} />
+      <style dangerouslySetInnerHTML={{ __html: brandCss(MANAGE_CSS, brand) }} />
       <div className="app">
         <aside className={`side${menu ? " open" : ""}`}>
           <img src={LOGO} alt="Just Jenny" />
@@ -312,12 +315,14 @@ function Courses({ t, lang, data }) {
 }
 
 // ---- Il mio abbonamento --------------------------------------------------------
-function Membership({ t, lang, data, brand }) {
+function Membership({ t, lang, data, brand, nav, reload }) {
   const ms = data.membership;
+  const [focus, setFocus] = useState(false); // pause/cancel screens are shown on their own
   const lp = ms.lastPayment;
   const subject = encodeURIComponent(t("changeSubject"));
   return (
     <>
+      {!focus && <>
       <h1>{t("memberTitle")}</h1>
       <p className="sub">{brand === "lubrisense" ? "Intimate Care Membership" : "Health For Life Membership"}</p>
       <div className="card rows">
@@ -327,6 +332,8 @@ function Membership({ t, lang, data, brand }) {
         <div className="r"><span>{t("payMethod")}</span><b>{pmText(t, ms.paymentMethod, ms.provider)} &nbsp;·&nbsp; <a href={`mailto:${SUPPORT_EMAIL}?subject=${subject}`}>{t("change")}</a></b></div>
       </div>
       <p className="note-s">{t("changeNote")}</p>
+      </>}
+      {data.manage && <ManageMembership t={t} lang={lang} data={data} reload={reload} nav={nav} brand={brand} onFocus={setFocus} />}
     </>
   );
 }

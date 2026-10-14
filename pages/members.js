@@ -60,7 +60,7 @@ function toCsv(rows) {
   return [head.join(","), ...lines].join("\n");
 }
 
-const EVENT_LABEL = { registered: "Signed up (first payment)", login: "Logged in", password_set: "Password set", claim: "Free product ordered", ebook: "E-book unlocked", rebill: "Rebill paid", cancelled: "Cancelled", reactivated: "Membership reactivated", streak_reward: "Streak gift ready", streak_saver: "Streak saver used", birthday_gift: "Birthday gift ready", suggestion: "Idea submitted", paused: "Paused by customer service", resumed: "Pause ended", cs_cancelled: "Cancelled by customer service", magic_link: "Magic link sent", secret_gift: "Secret gift earned (abandoned checkout mail)" };
+const EVENT_LABEL = { registered: "Signed up (first payment)", login: "Logged in", password_set: "Password set", claim: "Free product ordered", ebook: "E-book unlocked", rebill: "Rebill paid", cancelled: "Cancelled", reactivated: "Membership reactivated", streak_reward: "Streak gift ready", streak_saver: "Streak saver used", birthday_gift: "Birthday gift ready", suggestion: "Idea submitted", paused: "Paused by customer service", resumed: "Pause ended", cs_cancelled: "Cancelled by customer service", magic_link: "Magic link sent", secret_gift: "Secret gift earned (abandoned checkout mail)", self_paused: "Paused by member (portal)", self_resumed: "Pause ended by member (portal)", offer_accepted: "Retention offer accepted (portal)", self_cancelled: "Cancelled by member (portal)", cancel_undone: "Cancellation undone by member (portal)" };
 
 // One label/value line in the side panel
 const Row = ({ label, children }) => (
@@ -151,7 +151,7 @@ function Detail({ email, row, brand, onClose }) {
               {(d.log || []).map((e, i) => (
                 <div key={i} style={{ display: "grid", gridTemplateColumns: "150px 1fr", gap: 12, padding: "7px 0", borderBottom: "1px solid #f3f4f7", fontSize: 12.5 }}>
                   <div style={{ color: "#8a92a3", fontVariantNumeric: "tabular-nums" }}>{fmtDT(e.at)}</div>
-                  <div><b>{EVENT_LABEL[e.type] || e.type}</b>{e.method ? ` · ${e.method}` : ""}{e.days ? ` · ${e.days} days` : ""}{e.reason ? ` · "${e.reason}"` : ""}{e.chargebackRisk ? ` · risk ${e.chargebackRisk}` : ""}{e.by ? ` · by ${e.by}` : ""}{e.slug ? ` · ${e.slug}` : ""}{e.order ? ` · ${e.order}` : ""}{e.amount != null ? ` · ${eur(e.amount)}` : ""}{e.gift ? " · 🎁" : ""}{e.regift ? " · regalo" : ""}{e.provider ? ` · ${e.provider}` : ""}</div>
+                  <div><b>{EVENT_LABEL[e.type] || e.type}</b>{e.method ? ` · ${e.method}` : ""}{e.days ? ` · ${e.days} days` : ""}{e.reason ? ` · "${e.reason}"` : ""}{e.chargebackRisk ? ` · risk ${e.chargebackRisk}` : ""}{e.by ? ` · by ${e.by}` : ""}{e.slug ? ` · ${e.slug}` : ""}{e.order ? ` · ${e.order}` : ""}{e.amount != null ? ` · ${eur(e.amount)}` : ""}{e.gift ? " · 🎁" : ""}{e.regift ? " · regalo" : ""}{e.provider ? ` · ${e.provider}` : ""}{e.offer ? ` · ${e.offer === "price" ? "€24,95" : "15% off"}` : ""}{e.note ? ` · "${e.note}"` : ""}{e.until ? ` · until ${fmtD(e.until)}` : ""}</div>
                 </div>
               ))}
             </Section>
@@ -247,8 +247,85 @@ export default function Members() {
           </div>
         </>
       )}
+      <PaypalDisputes />
       <Suggestions brand={brand} />
       {open && <Detail email={open} brand={brand} row={data?.members?.find((x) => x.email === open)} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+// PayPal disputes: in the inquiry phase we send the buyer a friendly message BEFORE it becomes a claim (lib/paypal-disputes.js)
+const DSTAGE = { INQUIRY: ["Inquiry", "#fef9c3", "#854d0e"], CHARGEBACK: ["Claim / chargeback", "#fee2e2", "#991b1b"], PRE_ARBITRATION: ["Pre-arbitration", "#fee2e2", "#991b1b"], ARBITRATION: ["Arbitration", "#fee2e2", "#991b1b"] };
+function PaypalDisputes() {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [msg, setMsg] = useState(null);
+  const [show, setShow] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [openOnly, setOpenOnly] = useState(true);
+  const load = () => fetch("/api/paypal-disputes").then((r) => r.json()).then(setD).catch((e) => setD({ success: false, error: e.message }));
+  useEffect(() => { try { setShow(localStorage.getItem("jj-pp-disputes-open") === "1"); } catch {} load(); }, []);
+  const toggle = () => setShow((v) => { try { localStorage.setItem("jj-pp-disputes-open", v ? "0" : "1"); } catch {} return !v; });
+  const send = async (x) => {
+    if (!window.confirm(`Send our "${d.templates?.[x.template]?.label}" message to the buyer in PayPal dispute ${x.id}?`)) return;
+    setBusy(x.id); setMsg(null);
+    const r = await fetch("/api/paypal-disputes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: x.id }) }).then((r) => r.json()).catch((e) => ({ success: false, error: e.message }));
+    setMsg(r.success ? { ok: true, t: `Message sent in ${x.id}.` } : { ok: false, t: r.error || "Could not send" });
+    setBusy(null); load();
+  };
+  const list = (d?.disputes || []).filter((x) => !openOnly || x.status !== "RESOLVED");
+  const openInquiries = (d?.disputes || []).filter((x) => x.stage === "INQUIRY" && x.status !== "RESOLVED").length;
+  return (
+    <div style={{ ...ui.card, padding: "16px 18px", marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", cursor: "pointer" }} onClick={toggle}>
+        <span style={{ fontSize: 12, color: "#8a92a3" }}>{show ? "▾" : "▸"}</span>
+        <div style={{ fontWeight: 800, fontSize: 15 }}>PayPal disputes</div>
+        {d?.success && <span style={{ fontSize: 12, color: "#8a92a3" }}>{openInquiries} open inquir{openInquiries === 1 ? "y" : "ies"} · {(d.disputes || []).length} in total</span>}
+        {d?.success && <span style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: d.autoreply ? "#dcfce7" : "#f1f5f9", color: d.autoreply ? "#166534" : "#64748b" }}>Auto-message {d.autoreply ? "ON" : "OFF"}</span>}
+      </div>
+      {show && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12.5, color: "#64748b", lineHeight: 1.5, marginBottom: 10 }}>
+            A PayPal dispute starts as an <b>inquiry</b>: before the buyer escalates it to a claim, we can send a friendly message (cancel + solution).
+            {d?.autoreply ? " New disputes get the message automatically." : " Automatic sending is off (env PAYPAL_DISPUTE_AUTOREPLY=on); you can send it here per dispute."} Card chargebacks via the bank have no inquiry phase.
+          </div>
+          {d && !d.success && <div style={{ color: "#991b1b", fontSize: 13 }}>{d.error}</div>}
+          {d?.configured === false && <div style={{ color: "#8a92a3", fontSize: 13 }}>PayPal is not configured.</div>}
+          {msg && <div style={{ fontSize: 13, fontWeight: 600, color: msg.ok ? "#166534" : "#991b1b", marginBottom: 8 }}>{msg.t}</div>}
+          {d?.success && (
+            <>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                <button style={ui.btn(openOnly)} onClick={() => setOpenOnly(true)}>Open</button>
+                <button style={ui.btn(!openOnly)} onClick={() => setOpenOnly(false)}>All</button>
+                <span style={{ fontSize: 12, color: "#8a92a3", marginLeft: 6 }}>Messages:</span>
+                {Object.entries(d.templates || {}).map(([k, t]) => <button key={k} style={ui.btn(preview === k)} onClick={() => setPreview(preview === k ? null : k)}>{t.label}</button>)}
+              </div>
+              {preview && <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5, background: "#f8fafc", border: "1px solid #eceef2", borderRadius: 10, padding: "12px 14px", margin: "0 0 12px" }}>{d.templates[preview].preview}</pre>}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead><tr>{["Opened", "Dispute", "Reason", "Amount", "Stage", "Status", "Our message"].map((h) => <th key={h} style={{ ...ui.th, cursor: "default" }}>{h}</th>)}</tr></thead>
+                  <tbody>
+                    {list.map((x) => { const [t, bg, fg] = DSTAGE[x.stage] || [x.channel === "EXTERNAL" ? "Card chargeback" : x.stage || "—", "#f1f5f9", "#64748b"]; return (
+                      <tr key={x.id}>
+                        <td style={ui.td}>{fmtDT(x.created)}</td>
+                        <td style={{ ...ui.td, fontFamily: "ui-monospace, monospace", fontSize: 11.5 }}>{x.id}</td>
+                        <td style={ui.td}>{x.reasonLabel}</td>
+                        <td style={ui.td}>{eur(x.amount)}</td>
+                        <td style={ui.td}><span style={{ background: bg, color: fg, fontWeight: 700, fontSize: 11, padding: "3px 8px", borderRadius: 999 }}>{x.channel === "EXTERNAL" ? "Card chargeback" : t}</span></td>
+                        <td style={{ ...ui.td, color: "#64748b" }}>{String(x.status || "").replace(/_/g, " ").toLowerCase()}</td>
+                        <td style={ui.td}>{x.messaged ? <span style={{ color: "#166534", fontWeight: 700 }}>✓ sent {fmtD(x.messaged.at)}{x.messaged.by && x.messaged.by !== "auto" ? ` · ${x.messaged.by}` : x.messaged.by === "auto" ? " · auto" : ""}</span>
+                          : x.canMessage ? <button disabled={busy === x.id} onClick={() => send(x)} style={{ ...ui.btn(true), padding: "5px 10px", fontSize: 11.5 }}>{busy === x.id ? "Sending…" : `Send “${d.templates?.[x.template]?.label}”`}</button>
+                          : <span style={{ color: "#94a3b8", fontSize: 11.5 }}>{x.why || "—"}</span>}</td>
+                      </tr>); })}
+                    {!list.length && <tr><td colSpan={7} style={{ ...ui.td, color: "#8a92a3" }}>No {openOnly ? "open " : ""}PayPal disputes.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+          {!d && <div style={{ color: "#8a92a3", fontSize: 13 }}>Loading PayPal disputes…</div>}
+        </div>
+      )}
     </div>
   );
 }

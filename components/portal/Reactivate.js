@@ -4,6 +4,7 @@
 // PayPal: knop → /api/portal/reactivate {action:"paypal"} → redirect naar PayPal → terug op /riattiva?pp=1.
 import { useEffect, useRef, useState } from "react";
 import { post, SUPPORT_EMAIL } from "./AuthShell";
+import ManageMembership from "./ManageMembership";
 
 export const REACT_CSS = `
 .rx{max-width:560px;margin:0 auto}
@@ -26,7 +27,7 @@ export const REACT_CSS = `
 .rx .alt{margin-top:18px;text-align:center;font-size:14px;color:#666}
 `;
 
-export default function Reactivate({ t, lang, data, reload }) {
+export default function Reactivate({ t, lang, data, reload, brand }) {
   const reason = data.deactivatedReason; // "payment_failed" | "cancelled" | "paused"
   const provider = data.membership?.provider;
   const [cfg, setCfg] = useState(null);
@@ -34,6 +35,7 @@ export default function Reactivate({ t, lang, data, reload }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(false);
+  const [focus, setFocus] = useState(false); // paused: pause/cancel sub-screens shown on their own
   const stripeRef = useRef(null), elRef = useRef(null), cardRef = useRef(null), secretRef = useRef(null);
 
   useEffect(() => { fetch("/api/checkout-config").then((r) => r.json()).then(setCfg).catch(() => setCfg({})); }, []);
@@ -100,15 +102,17 @@ export default function Reactivate({ t, lang, data, reload }) {
     setErr(t(errKey(r.error))); setBusy(false);
   }
 
-  // Gepauzeerd door customer service: geen betaalscherm, alleen uitleg + einddatum
+  // Gepauzeerd (door CS of door het lid zelf): geen betaalscherm, uitleg + einddatum + hervatten/annuleren (ManageMembership)
   if (reason === "paused") {
     const until = data.pausedUntil ? new Date(data.pausedUntil).toLocaleDateString(lang === "it" ? "it-IT" : "en-GB", { day: "numeric", month: "long", year: "numeric" }) : "";
     return (
       <div className="rx">
-        <div className="badge">⏸ {t("rxBadge")}</div>
+        {!focus && <><div className="badge">{t("rxBadge")}</div>
         <h1>{t("rxTitlePaused")}</h1>
-        <p className="why">{t("rxWhyPaused", { date: until })}</p>
-        <p className="fine" style={{ textAlign: "left" }}>{t("rxPausedHelp", { email: SUPPORT_EMAIL })}</p>
+        <p className="why">{t("rxWhyPaused", { date: until })}</p></>}
+        {data.manage
+          ? <ManageMembership t={t} lang={lang} data={data} reload={reload} brand={brand} onFocus={setFocus} />
+          : <p className="fine" style={{ textAlign: "left" }}>{t("rxPausedHelp", { email: SUPPORT_EMAIL })}</p>}
       </div>
     );
   }
