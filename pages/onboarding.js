@@ -324,24 +324,40 @@ function Editor({ initial, roles, onSaved }) {
 
 /* ---------------- admin: team progress ---------------- */
 function Team({ team }) {
-  if (!team?.length) return <div style={{ ...ui.card, padding: "22px", color: "#64748b" }}>Nobody has started yet. Progress shows up here as soon as someone marks a lesson as done.</div>;
+  if (!team?.length) return <div style={{ ...ui.card, padding: "22px", color: "#64748b" }}>No editors, designers or strategists yet. Give someone one of these roles in Accounts and they show up here.</div>;
+  const td = { padding: "11px 6px", borderBottom: "1px solid #f3f4f7", verticalAlign: "middle" };
+  const STATUS = { invited: "Invited — no account yet", pending: "Waiting for approval" };
+  const started = team.filter((p) => p.done > 0).length;
+  const finished = team.filter((p) => p.total && p.done === p.total).length;
   return (
-    <div style={{ ...ui.card, padding: "6px 20px" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-        <thead><tr>{["Person", "Role", "Progress", "", "Last activity"].map((h, i) => <th key={i} style={{ ...ui.label, textAlign: "left", padding: "12px 6px", borderBottom: "1px solid #eceef2" }}>{h}</th>)}</tr></thead>
-        <tbody>
-          {team.map((p) => (
-            <tr key={p.email}>
-              <td style={{ padding: "11px 6px", borderBottom: "1px solid #f3f4f7" }}><div style={{ fontWeight: 700 }}>{p.name}</div><div style={{ fontSize: "11.5px", color: "#8a92a3" }}>{p.email}</div></td>
-              <td style={{ padding: "11px 6px", borderBottom: "1px solid #f3f4f7" }}><RoleChips roles={p.roles} /></td>
-              <td style={{ padding: "11px 6px", borderBottom: "1px solid #f3f4f7", width: "30%" }}><Bar value={p.total ? p.done / p.total : 0} /></td>
-              <td style={{ padding: "11px 6px", borderBottom: "1px solid #f3f4f7", fontWeight: 700, whiteSpace: "nowrap" }}>{p.done}/{p.total}{p.total && p.done === p.total ? " ✓" : ""}</td>
-              <td style={{ padding: "11px 6px", borderBottom: "1px solid #f3f4f7", color: "#64748b", whiteSpace: "nowrap" }}>{p.last ? new Date(p.last).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <div style={{ display: "flex", gap: "18px", margin: "0 0 12px 2px", fontSize: "13px", color: "#64748b" }}>
+        <span><b style={{ color: "#0f172a" }}>{team.length}</b> people</span>
+        <span><b style={{ color: "#0f172a" }}>{started}</b> started</span>
+        <span><b style={{ color: "#0f172a" }}>{finished}</b> completed</span>
+        <span><b style={{ color: "#0f172a" }}>{team.length - started}</b> not started</span>
+      </div>
+      <div style={{ ...ui.card, padding: "6px 20px" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+          <thead><tr>{["Person", "Role", "Progress", "", "Next lesson", "Last activity"].map((h, i) => <th key={i} style={{ ...ui.label, textAlign: "left", padding: "12px 6px", borderBottom: "1px solid #eceef2" }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {team.map((p) => {
+              const complete = p.total && p.done === p.total;
+              return (
+                <tr key={p.email}>
+                  <td style={td}><div style={{ fontWeight: 700 }}>{p.name}</div><div style={{ fontSize: "11.5px", color: "#8a92a3" }}>{p.email}</div>{STATUS[p.status] && <div style={{ fontSize: "11px", color: "#b45309", marginTop: 2 }}>{STATUS[p.status]}</div>}</td>
+                  <td style={td}><RoleChips roles={p.roles} /></td>
+                  <td style={{ ...td, width: "24%" }}><Bar value={p.total ? p.done / p.total : 0} /></td>
+                  <td style={{ ...td, fontWeight: 700, whiteSpace: "nowrap" }}>{p.done}/{p.total}{complete ? " ✓" : ""}</td>
+                  <td style={{ ...td, color: complete ? "#16a34a" : p.done ? "#0f172a" : "#94a3b8" }}>{complete ? "Completed" : p.done ? p.next : "Not started"}</td>
+                  <td style={{ ...td, color: "#64748b", whiteSpace: "nowrap" }}>{p.last ? new Date(p.last).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

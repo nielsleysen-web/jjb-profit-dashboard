@@ -111,12 +111,28 @@ export default async function handler(req, res) {
       const mine = forRoles(course, roles, isAdmin);
       const out = { success: true, isAdmin, roles: COURSE_ROLES, course: mine, progress: progressAll[email]?.done || {} };
       if (isAdmin) {
-        // Team overview: per person how many of THEIR lessons are done
-        out.team = Object.entries(progressAll).map(([e, p]) => {
-          const theirs = forRoles(course, p.roles || [], false).modules.flatMap((m) => m.lessons.map((l) => l.id));
-          const done = theirs.filter((id) => p.done?.[id]).length;
-          return { email: e, name: p.name || e, roles: p.roles || [], done, total: theirs.length, last: p.last || null };
-        }).sort((a, b) => String(b.last || "").localeCompare(String(a.last || "")));
+        // Team overview: everyone with a course role (also those who haven't started yet) + anyone with progress.
+        // Per person how many of THEIR lessons are done and which lesson is next.
+        const accounts = (await readData("accounts")) || { users: [] };
+        const people = {};
+        for (const u of accounts.users || []) {
+          const e = String(u.email || "").toLowerCase();
+          const r = Array.isArray(u.roles) ? u.roles : [];
+          if (!e || e === ADMIN_EMAIL || u.status === "disabled" || !r.some((x) => COURSE_ROLES.includes(x))) continue;
+          people[e] = { name: u.name || e, roles: r, status: u.status || "active" };
+        }
+        for (const [e, p] of Object.entries(progressAll)) {
+          const acc = (accounts.users || []).find((u) => String(u.email || "").toLowerCase() === e);
+          if (acc?.status === "disabled") continue;
+          people[e] = { name: acc?.name || p.name || e, roles: acc?.roles?.length ? acc.roles : p.roles || [], status: acc?.status || "active", ...people[e] };
+        }
+        out.team = Object.entries(people).map(([e, a]) => {
+          const p = progressAll[e] || {};
+          const lessons = forRoles(course, a.roles, e === ADMIN_EMAIL).modules.flatMap((m) => m.lessons);
+          const done = lessons.filter((l) => p.done?.[l.id]).length;
+          const next = lessons.find((l) => !p.done?.[l.id]);
+          return { email: e, name: a.name, roles: a.roles, status: a.status, done, total: lessons.length, next: next ? next.title : null, last: p.last || null };
+        }).sort((a, b) => (b.last ? 1 : 0) - (a.last ? 1 : 0) || String(b.last || "").localeCompare(String(a.last || "")) || a.name.localeCompare(b.name));
       }
       return res.status(200).json(out);
     }
