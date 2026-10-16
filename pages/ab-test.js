@@ -244,11 +244,33 @@ function TdsTest() {
         </div>
         <Col g={B} title="3DS-checkout" sub={`/3ds-links · debit + prepaid bevestigen met 3DS${B.tdsAsked != null && seg !== "credit" ? ` (${B.tdsPaid}/${B.tdsAsked} 3DS-betalingen gelukt)` : ""}`} color={COL.B} win={winB} />
       </div>
+      {seg !== "credit" && d.flow3ds?.asked > 0 && <Flow3ds f={d.flow3ds} />}
       <p style={{ fontSize: "11.5px", color: "#b6bdc9", lineHeight: 1.6, margin: "14px 0 0" }}>
         Alleen Stripe-betalingen (PayPal rechtstreeks valt erbuiten). 1e rebill = leden van wie de proef voorbij is; wie in de proef opzegde telt niet mee. “Meteen gelukt” = eerste poging betaald; “uiteindelijk betaald” = ook na een Stripe-retry of de kortingsladder.
         Zekerheid via 2-proporties z-test op “1e rebill meteen gelukt”; kies pas vanaf 95% en minstens {MIN_DUE} eerste rebills per kant.
         {seg !== "all" && " * Bij de gewone checkout is het kaarttype van een niet-betaalde poging onbekend, dus checkout- en omzet-per-checkoutcijfers per kaarttype bestaan alleen voor de 3DS-variant; vergelijk die op “Alle kaarten”."}
       </p>
+    </div>
+  );
+}
+
+// Eén stille regel onder de test: waar de checkouts met 3DS eindigen (betaald / bevestiging niet afgerond / geweigerd),
+// en of de betaalde frictionless gingen (geen extra stap) of na een bevestiging.
+function Flow3ds({ f }) {
+  const parts = [
+    ["betaald", f.paid, "#16a34a"],
+    ["3DS niet afgerond", f.notCompleted, "#f59e0b"],
+    ["geweigerd door de bank", f.declined, "#ef4444"],
+    ["niet bevestigd", f.other, "#cbd5e1"],
+  ].filter(([, v]) => v > 0);
+  return (
+    <div style={{ marginTop: "14px", padding: "12px 14px", borderRadius: "12px", background: "#fafbfc", border: "1px solid #f0f2f5", fontSize: "12.5px", color: "#64748b", lineHeight: 1.6 }}>
+      <div style={{ display: "flex", height: "5px", borderRadius: "99px", overflow: "hidden", gap: "2px", marginBottom: "9px", background: "#fafbfc" }}>
+        {parts.map(([l, v, c]) => <span key={l} title={`${l}: ${v}`} style={{ flex: v, background: c, borderRadius: "99px" }} />)}
+      </div>
+      <b style={{ color: "#334155" }}>3DS gevraagd bij {f.asked}</b>
+      {parts.map(([l, v, c]) => <span key={l}> · <span style={{ display: "inline-block", width: "7px", height: "7px", borderRadius: "50%", background: c, margin: "0 4px 1px 2px", verticalAlign: "middle" }} />{v} {l}</span>)}
+      {f.paid > 0 && <div style={{ color: "#94a3b8" }}>Van de {f.paid} betaalde: {f.frictionless} zonder extra stap (frictionless) · {f.challenge} na bevestiging in de bank-app{f.paid - f.frictionless - f.challenge > 0 ? ` · ${f.paid - f.frictionless - f.challenge} onbekend` : ""}</div>}
     </div>
   );
 }

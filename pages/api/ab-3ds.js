@@ -9,7 +9,10 @@
 //              meteen gelukt · later toch betaald (Stripe-retry of kortingsladder) · nog open · verloren
 //   omzet      front-end + rebills, per gestarte checkout en per lid
 // Zekerheid: 2-proporties z-test (kans dat de 3DS-variant écht beter is). Alleen Stripe (PayPal rechtstreeks valt erbuiten).
-// GET → { success, running, start, groups: { standard: { all, dp, credit }, tds: {…} }, compare: {…} }
+// flow3ds: wat er gebeurde bij de checkouts waar 3DS gevraagd werd: frictionless (bank keurde zonder extra stap goed)
+//   of challenge (klant moest bevestigen), en bij niet-betaald: 3DS niet afgerond (afgehaakt/geannuleerd/mislukt)
+//   of geweigerd door de bank.
+// GET → { success, running, start, groups: { standard: { all, dp, credit }, tds: {…} }, compare: {…}, flow3ds }
 
 import Stripe from "stripe";
 import { getDashboardSession } from "../../lib/dashboard-session";
@@ -80,10 +83,12 @@ export default async function handler(req, res) {
     // --- facturen sinds de start: front-end (subscription_create) + rebills (subscription_cycle) ---
     const fe = {}, cycles = {};
     n = 0;
-    for await (const inv of stripe.invoices.list({ limit: 100, created: { gte: start - 3600 }, expand: ["data.payment_intent"] })) {
+    const firstPi = {}; // abonnement met verplichte 3DS → PaymentIntent van de eerste factuur (met de charge)
+    for await (const inv of stripe.invoices.list({ limit: 100, created: { gte: start - 3600 }, expand: ["data.payment_intent.latest_charge"] })) {
       if (++n > 8000) break;
       const sid = idOf(inv.subscription);
       if (!sid || !byId[sid]) continue;
+      if (inv.billing_reason === "subscription_create" && byId[sid].forced && typeof inv.payment_intent === "object") firstPi[sid] = inv.payment_intent;
       if (inv.billing_reason === "subscription_create" && inv.status === "paid") fe[sid] = (inv.amount_paid || 0) / 100;
       if (inv.billing_reason === "subscription_cycle") (cycles[sid] ||= []).push(inv);
     }
@@ -148,7 +153,25 @@ export default async function handler(req, res) {
         completion: a.started != null && b.started != null ? probBetter(a.paid, a.started, b.paid, b.started) : null,
       };
     }
-    return res.status(200).json({ success: true, running: true, start: new Date(start * 1000).toISOString(), days: Math.max(1, Math.ceil((now - start) / DAY)), groups, compare, generatedAt: new Date().toISOString() });
+    // --- 3DS-verloop bij de checkouts waar 3DS gevraagd werd ---
+    const flow3ds = { asked: 0, frictionless: 0, challenge: 0, paid: 0, notCompleted: 0, declined: 0, other: 0 };
+    for (const x of inTest) {
+      if (x.variant !== "tds" || !x.forced) continue;
+      flow3ds.asked++;
+      const pi = firstPi[x.id] || null;
+      const ch = pi && typeof pi.latest_charge === "object" ? pi.latest_charge : null;
+      const flow = ch?.payment_method_details?.card?.three_d_secure?.authentication_flow || null;
+      const err = pi?.last_payment_error;
+      if (x.paid) {
+        flow3ds.paid++;
+        if (flow === "frictionless") flow3ds.frictionless++; // betaald zonder dat de klant iets moest bevestigen
+        else if (flow === "challenge") flow3ds.challenge++; // betaald na bevestiging in de bank-app / sms
+      }
+      else if (pi?.status === "requires_action" || err?.code === "payment_intent_authentication_failure") flow3ds.notCompleted++;
+      else if (err?.type === "card_error" || ch?.status === "failed") flow3ds.declined++;
+      else flow3ds.other++; // nooit bevestigd (pagina verlaten vóór de betaling)
+    }
+    return res.status(200).json({ success: true, running: true, start: new Date(start * 1000).toISOString(), days: Math.max(1, Math.ceil((now - start) / DAY)), groups, compare, flow3ds, generatedAt: new Date().toISOString() });
   } catch (e) {
     console.error("ab-3ds:", e.message);
     return res.status(500).json({ success: false, error: e.message });
