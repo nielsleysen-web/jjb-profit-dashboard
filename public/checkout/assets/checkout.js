@@ -1317,6 +1317,25 @@ function sendStartedCheckout() {
     }).catch(() => {});
   } catch (e) {}
 }
+// Telefoonnummer → Klaviyo-profiel zodra de klant het veld verlaat (ook als er daarna niet betaald wordt).
+// Geen zichtbare wijziging; alleen nummer + naam (api/checkout/phone.js), toestemmingen blijven ongemoeid.
+const _sentPhones = new Set();
+function sendCheckoutPhone() {
+  try {
+    const em = ($('#email') && $('#email').value.trim().toLowerCase()) || '';
+    const ph = ($('#phone') && $('#phone').value.trim()) || '';
+    const digits = ph.replace(/\D/g, '');
+    if (!/^\S+@\S+\.\S+$/.test(em) || digits.length < 8) return;
+    const key = em + '|' + digits;
+    if (_sentPhones.has(key)) return;
+    _sentPhones.add(key);
+    const name = [($('#first-name') && $('#first-name').value.trim()) || '', ($('#last-name') && $('#last-name').value.trim()) || ''].filter(Boolean).join(' ');
+    fetch('/api/checkout/phone', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+      body: JSON.stringify({ email: em, phone: ph, name, product: PRODUCT_KEY }),
+    }).catch(() => {});
+  } catch (e) {}
+}
 function showGift() {
   if (BONUS) return showPerks();
   if (!GIFT) return;
@@ -1421,6 +1440,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (em) {
       em.addEventListener('change', sendStartedCheckout);
       em.addEventListener('blur', sendStartedCheckout);
+      em.addEventListener('blur', sendCheckoutPhone); // telefoon al ingevuld vóór het e-mailadres
+    }
+    const phoneEl = $('#phone');
+    if (phoneEl) {
+      phoneEl.addEventListener('change', sendCheckoutPhone);
+      phoneEl.addEventListener('blur', sendCheckoutPhone);
     }
     // Terug via mail 2: cadeau onthouden voor dit e-mailadres (ook als het al ingevuld was)
     if ((GIFT || BONUS) && em && em.value) sendStartedCheckout();

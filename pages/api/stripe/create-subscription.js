@@ -14,6 +14,7 @@
 
 import Stripe from "stripe";
 import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor } from "../../../lib/checkout";
+import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 const CURRENCY = "eur";
@@ -73,6 +74,8 @@ export default async function handler(req, res) {
     if (!address.line1 || !address.city || !/^\d{5}$/.test(address.postal_code)) {
       return res.status(400).json({ error: "Controlla l’indirizzo di spedizione" });
     }
+    // Telefoonnummer meteen naar Klaviyo (ook als de betaling hierna niet doorgaat); blokkeert de checkout nooit
+    const klPhone = saveCheckoutPhone({ email, phone, name }).catch((e) => console.error("klaviyo phone:", e.message));
 
     // Echte IP + browser van de koper (voor Meta CAPI later)
     const clientIp = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
@@ -201,6 +204,7 @@ export default async function handler(req, res) {
       shipping: { name: name || email, phone: phone || undefined, address },
     });
 
+    await Promise.race([klPhone, new Promise((r) => setTimeout(r, 1500))]); // meestal al klaar; nooit langer dan 1,5 s wachten
     return res.status(200).json({ clientSecret: pi.client_secret, subscriptionId: subscription.id, amount: pi.amount });
   } catch (e) {
     console.error("stripe/create-subscription:", e.message);

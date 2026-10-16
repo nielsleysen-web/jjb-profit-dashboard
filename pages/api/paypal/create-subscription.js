@@ -4,6 +4,7 @@
 
 import { paypalConfigured, planFor, pp, packCustom, saveCheckoutContext } from "../../../lib/paypal";
 import { getProduct, TRACK_KEYS } from "../../../lib/checkout";
+import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const clean = (s, max = 120) => String(s || "").trim().slice(0, max);
 
@@ -46,6 +47,8 @@ export default async function handler(req, res) {
     }
     if (Object.keys(subscriber).length) body.subscriber = subscriber;
 
+    // Telefoonnummer meteen naar Klaviyo (ook als de betaling hierna niet doorgaat); blokkeert de checkout nooit
+    const klPhone = saveCheckoutPhone({ email: subscriber.email_address, phone: b.phone || s.phone, name }).catch((e) => console.error("klaviyo phone:", e.message));
     const sub = await pp("post", "/v1/billing/subscriptions", body);
     // Tracking (fbc/fbp/ad-id) + IP/browser bewaren: maakt de webhook de order, dan gaat dit toch mee naar Shopify + Meta
     const t = b.track && typeof b.track === "object" ? b.track : {};
@@ -56,6 +59,7 @@ export default async function handler(req, res) {
       clientIp: String(req.headers["x-forwarded-for"] || "").split(",")[0].trim(),
       userAgent: String(req.headers["user-agent"] || "").slice(0, 450),
     });
+    await Promise.race([klPhone, new Promise((r) => setTimeout(r, 1500))]);
     return res.status(200).json({ id: sub.id });
   } catch (e) {
     console.error("paypal/create-subscription:", e.message);
