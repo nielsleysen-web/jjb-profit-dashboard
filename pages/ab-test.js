@@ -244,7 +244,7 @@ function TdsTest() {
         </div>
         <Col g={B} title="3DS-checkout" sub={`/3ds-links · debit + prepaid bevestigen met 3DS${B.tdsAsked != null && seg !== "credit" ? ` (${B.tdsPaid}/${B.tdsAsked} 3DS-betalingen gelukt)` : ""}`} color={COL.B} win={winB} />
       </div>
-      {seg !== "credit" && d.flow3ds?.asked > 0 && <Flow3ds f={d.flow3ds} />}
+      {d.flow && <CheckoutFlow flow={d.flow} seg={seg} />}
       <p style={{ fontSize: "11.5px", color: "#b6bdc9", lineHeight: 1.6, margin: "14px 0 0" }}>
         Alleen Stripe-betalingen (PayPal rechtstreeks valt erbuiten). 1e rebill = leden van wie de proef voorbij is; wie in de proef opzegde telt niet mee. “Meteen gelukt” = eerste poging betaald; “uiteindelijk betaald” = ook na een Stripe-retry of de kortingsladder.
         Zekerheid via 2-proporties z-test op “1e rebill meteen gelukt”; kies pas vanaf 95% en minstens {MIN_DUE} eerste rebills per kant.
@@ -254,23 +254,36 @@ function TdsTest() {
   );
 }
 
-// Eén stille regel onder de test: waar de checkouts met 3DS eindigen (betaald / bevestiging niet afgerond / geweigerd),
-// en of de betaalde frictionless gingen (geen extra stap) of na een bevestiging.
-function Flow3ds({ f }) {
-  const parts = [
-    ["betaald", f.paid, "#16a34a"],
-    ["3DS niet afgerond", f.notCompleted, "#f59e0b"],
-    ["geweigerd door de bank", f.declined, "#ef4444"],
-    ["niet bevestigd", f.other, "#cbd5e1"],
-  ].filter(([, v]) => v > 0);
+// Stil blok onder de test: waar de kaartcheckouts eindigen, per variant (zelfde kaarttype-filter als bovenaan).
+// betaald · 3DS niet afgerond · geweigerd door de bank · nooit bevestigd; en hoe de betaalde gingen (3DS of niet).
+const FLOW_PARTS = [["paid", "betaald", "#16a34a"], ["notCompleted", "3DS niet afgerond", "#f59e0b"], ["declined", "geweigerd door de bank", "#ef4444"], ["other", "pagina verlaten vóór betaling", "#cbd5e1"]];
+function FlowRow({ f, label, color }) {
+  if (!f || !f.started) return <div style={{ padding: "8px 0", color: "#b6bdc9" }}><b style={{ color: "#64748b", fontWeight: 600 }}>{label}</b> · nog geen kaartcheckouts</div>;
+  const parts = FLOW_PARTS.filter(([k]) => f[k] > 0);
+  const pct = (v) => `${Math.round((v / f.started) * 100)}%`;
+  const how = [[f.paidNo3ds, "zonder 3DS"], [f.paidFrictionless, "3DS zonder extra stap"], [f.paidChallenge, "na bevestiging in de bank-app"]].filter(([v]) => v > 0);
   return (
-    <div style={{ marginTop: "14px", padding: "12px 14px", borderRadius: "12px", background: "#fafbfc", border: "1px solid #f0f2f5", fontSize: "12.5px", color: "#64748b", lineHeight: 1.6 }}>
-      <div style={{ display: "flex", height: "5px", borderRadius: "99px", overflow: "hidden", gap: "2px", marginBottom: "9px", background: "#fafbfc" }}>
-        {parts.map(([l, v, c]) => <span key={l} title={`${l}: ${v}`} style={{ flex: v, background: c, borderRadius: "99px" }} />)}
+    <div style={{ padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: color, flex: "none" }} />
+        <b style={{ color: "#334155", fontWeight: 600, minWidth: "130px" }}>{label}</b>
+        <div style={{ display: "flex", flex: 1, height: "5px", borderRadius: "99px", overflow: "hidden", gap: "2px" }}>
+          {parts.map(([k, l, c]) => <span key={k} title={`${l}: ${f[k]}`} style={{ flex: f[k], background: c, borderRadius: "99px" }} />)}
+        </div>
       </div>
-      <b style={{ color: "#334155" }}>3DS gevraagd bij {f.asked}</b>
-      {parts.map(([l, v, c]) => <span key={l}> · <span style={{ display: "inline-block", width: "7px", height: "7px", borderRadius: "50%", background: c, margin: "0 4px 1px 2px", verticalAlign: "middle" }} />{v} {l}</span>)}
-      {f.paid > 0 && <div style={{ color: "#94a3b8" }}>Van de {f.paid} betaalde: {f.frictionless} zonder extra stap (frictionless) · {f.challenge} na bevestiging in de bank-app{f.paid - f.frictionless - f.challenge > 0 ? ` · ${f.paid - f.frictionless - f.challenge} onbekend` : ""}</div>}
+      <div style={{ paddingLeft: "18px" }}>
+        {f.started} gestart{parts.map(([k, l, c]) => <span key={k}> · <span style={{ display: "inline-block", width: "7px", height: "7px", borderRadius: "50%", background: c, margin: "0 4px 1px 2px", verticalAlign: "middle" }} />{f[k]} {l} <span style={{ color: "#b6bdc9" }}>({pct(f[k])})</span></span>)}
+        {how.length > 0 && <div style={{ color: "#94a3b8" }}>Betaald: {how.map(([v, l]) => `${v} ${l}`).join(" · ")}</div>}
+      </div>
+    </div>
+  );
+}
+function CheckoutFlow({ flow, seg }) {
+  return (
+    <div style={{ marginTop: "14px", padding: "6px 14px", borderRadius: "12px", background: "#fafbfc", border: "1px solid #f0f2f5", fontSize: "12.5px", color: "#64748b", lineHeight: 1.6 }}>
+      <FlowRow f={flow.tds?.[seg]} label="3DS-checkout" color={COL.B} />
+      <div style={{ borderTop: "1px solid #f0f2f5" }} />
+      <FlowRow f={flow.standard?.[seg]} label="Gewone checkout" color={COL.A} />
     </div>
   );
 }
