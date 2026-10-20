@@ -7,7 +7,7 @@
 //
 // POST { sub, sid, first, answers: [..], questions: [..], product? }
 // POST { standalone: true, product, sid, first, answers, questions }  ← losse pagina /sondaggio/<product> (anoniem, geen sub)
-//   product "lubrisense" → zelfde Sheet, tabblad "LubriSense" (wordt aangemaakt met kopregel) + Klaviyo-event
+//   product "lubrisense" → zelfde Sheet, tabblad "LubriSense" (wordt aangemaakt met kopregel) + Klaviyo-event; "emorroidi" → tabblad "Emorroidi"
 //   "LubriSense Quiz Completed" bij afronding (om de herinneringsmail in Klaviyo te stoppen).
 // Env: QUIZ_SHEET_ID (ID uit de Sheet-URL), GOOGLE_SA_EMAIL, GOOGLE_SA_PRIVATE_KEY, STRIPE_SECRET_KEY
 
@@ -19,7 +19,7 @@ import { trackEvent, klaviyoConfigured } from "../../lib/klaviyo";
 import { getProduct } from "../../lib/checkout";
 
 // Per product: tabblad in de Sheet (leeg = eerste tabblad, zoals NeuroTone altijd al) + Klaviyo-prefix
-const QUIZ_TAB = { neurotone: "", lubrisense: "LubriSense" };
+const QUIZ_TAB = { neurotone: "", lubrisense: "LubriSense", emorroidi: "Emorroidi" };
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
 const MAX_Q = 11;

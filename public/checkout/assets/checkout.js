@@ -29,8 +29,9 @@ const CONFIG = {
    Bedragen moeten gelijk zijn aan PRODUCTS in lib/checkout.js. */
 const _pq = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
 const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisense') ? 'lubrisense'
-  : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium' : 'neurotone';
-/* A/B-test 3D Secure: de aparte links checkout.getjustjenny.com/3ds, /lubrisense/3ds en /magnesium/3ds
+  : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium'
+  : (/emorroidi/i.test(location.pathname) || _pq === 'emorroidi') ? 'emorroidi' : 'neurotone';
+/* A/B-test 3D Secure: de aparte links checkout.getjustjenny.com/3ds, /lubrisense/3ds, /magnesium/3ds en /emorroidi/3ds
    (of ?ab=3ds) → debit- en prepaidkaarten krijgen bij de eerste betaling een verplichte 3DS-bevestiging.
    De gewone links werken exact zoals voorheen. */
 const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(location.search).get('ab') === '3ds';
@@ -47,6 +48,13 @@ const PRODUCT_CONFIG = {
     SUCCESS_PATH: '/checkout/offerta', // post-purchase upsell 1+1 (€34,95); daarna /checkout/grazie
     MEMBERSHIP_NAME: 'Just Jenny Intimate Care Membership',
     META_CONTENT_IDS: ['10597036163338'],
+  },
+  // Emorroidi Cerotti: eigen membership (zelfde voorwaarden als NeuroTone), testfase zonder upsellpagina
+  emorroidi: {
+    PRODUCT_NAME: 'Emorroidi Cerotti',
+    SUCCESS_PATH: '/checkout/grazie',
+    MEMBERSHIP_NAME: 'Just Jenny Comfort Care Membership',
+    META_CONTENT_IDS: ['10602127065354'],
   },
 };
 CONFIG.MEMBERSHIP_NAME = 'Just Jenny Health For Life Membership';
@@ -99,7 +107,14 @@ const PACKS_MAGNESIUM = {
   3: { label: '3x Magnesium Freeze™', amount: 5495, compare: 0, save: 0, savePct: 0, img: IMG + MF + '6.png?v=1786453406&width=240' },
   5: { label: '5x Magnesium Freeze™', amount: 6495, compare: 0, save: 0, savePct: 0, img: IMG + MF + '5.png?v=1786453406&width=240', gift: true },
 };
-const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PACKS_NEUROTONE;
+// Emorroidi Cerotti (Shopify-product 10602127065354, zelfde bestandsprefix als Magnesium): prijzen/doorstreepprijzen als NeuroTone
+const PACKS_EMORROIDI = {
+  1: { label: '1x Emorroidi Cerotti™', amount: 2995, compare: 6000, save: 3005, savePct: 50, img: IMG + MF + '1_faf2ffad-e1e4-41ac-9f1b-5a0f7e859dc5.png?v=1787828803&width=240' },
+  2: { label: '2x Emorroidi Cerotti™', amount: 3995, compare: 12000, save: 8005, savePct: 67, img: IMG + MF + '2_7d9c8636-c5be-4c96-8530-106a94542664.png?v=1787828803&width=240' },
+  3: { label: '3x Emorroidi Cerotti™', amount: 4995, compare: 18000, save: 13005, savePct: 72, img: IMG + MF + '3_53ea0f9e-d272-4b65-b25d-4679da9f597c.png?v=1787828802&width=240' },
+  5: { label: '5x Emorroidi Cerotti™', amount: 5995, compare: 30000, save: 24005, savePct: 80, img: IMG + MF + '4_27df4bba-5842-4628-abc1-01dd1c406bd4.png?v=1787828802&width=240', gift: true },
+};
+const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
   free:    { cents: 0,   title: 'Standard (5-8 giorni lavorativi)' },
@@ -1303,6 +1318,7 @@ const COPY_GIFT = {
 };
 if (PRODUCT_KEY === 'lubrisense') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName = '1x LubriSense'; }
 if (PRODUCT_KEY === 'magnesium') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName = '1x Magnesium Freeze'; }
+if (PRODUCT_KEY === 'emorroidi') { COPY_GIFT.value = 2995; COPY_GIFT.bonusName = '1x Emorroidi Cerotti'; }
 const GIFT = params.get('gift') === '1';
 const BONUS = params.get('bonus') === '1'; // mail 2: 1 flacone in omaggio (+ regalo segreto)
 const _sentEmails = new Set();
@@ -1421,9 +1437,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (PRODUCT_KEY !== 'neurotone') {
       document.title = 'Checkout — ' + CONFIG.PRODUCT_NAME + ' — Just Jenny';
-      // LubriSense: eigen voorwaarden; de NeuroTone-membershippagina past niet (opzeggen staat in de voorwaarden).
+      // LubriSense/Emorroidi: eigen voorwaarden; de NeuroTone-membershippagina past niet (opzeggen staat in de voorwaarden).
       // Magnesium Freeze heeft (voorlopig) de NeuroTone-membership → gewoon de NeuroTone-pagina's.
-      if (PRODUCT_KEY === 'lubrisense') {
+      if (PRODUCT_KEY === 'lubrisense' || PRODUCT_KEY === 'emorroidi') {
         $$('a[href^="/checkout/termini"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY; });
         $$('a[href^="/checkout/membership"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY + '#membership'; });
       }

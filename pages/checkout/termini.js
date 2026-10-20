@@ -39,9 +39,11 @@ a{color:#c96f43;font-weight:700}
 
 export default function Termini() {
   // ?p=lubrisense → zelfde voorwaarden met de naam van de LubriSense-membership; de NeuroTone-voordelen vallen weg
-  const [lubri, setLubri] = useState(false);
-  useEffect(() => { setLubri(/^lubrisense$/i.test(new URLSearchParams(window.location.search).get("p") || "")); }, []);
-  const MNAME = lubri ? "Intimate Care Membership" : "Health For Life Membership";
+  // ?p=emorroidi → Comfort Care Membership (Emorroidi Cerotti): zelfde voorwaarden, nog geen ledenportaal → beheer via e-mail
+  const [prod, setProd] = useState("neurotone");
+  useEffect(() => { const q = (new URLSearchParams(window.location.search).get("p") || "").toLowerCase(); setProd(q === "lubrisense" || q === "emorroidi" ? q : "neurotone"); }, []);
+  const lubri = prod === "lubrisense", emor = prod === "emorroidi";
+  const MNAME = lubri ? "Intimate Care Membership" : emor ? "Comfort Care Membership" : "Health For Life Membership";
   const PORTAL = lubri ? PORTAL_LUBRI : PORTAL_NT;
   return (
     <>
@@ -74,7 +76,7 @@ export default function Termini() {
 
           <h2 id="membership">Termini della {MNAME}</h2>
           <div className="box">
-            <p><b>In breve:</b> la {MNAME} inizia con una prova gratuita di <b>7 giorni</b>. Se non annulli prima della fine della prova, il tuo metodo di pagamento sarà addebitato di <b>49,00 €</b> ogni <b>28 giorni</b>, fino a quando non annulli. Puoi annullare in qualsiasi momento dall'area membri o scrivendo a <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. Ti inviamo un promemoria via e-mail <b>3 giorni prima</b> di ogni addebito.</p>
+            <p><b>In breve:</b> la {MNAME} inizia con una prova gratuita di <b>7 giorni</b>. Se non annulli prima della fine della prova, il tuo metodo di pagamento sarà addebitato di <b>49,00 €</b> ogni <b>28 giorni</b>, fino a quando non annulli. Puoi annullare in qualsiasi momento {emor ? "scrivendo a" : "dall'area membri o scrivendo a"} <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. Ti inviamo un promemoria via e-mail <b>3 giorni prima</b> di ogni addebito.</p>
           </div>
 
           <h3>Programma in abbonamento</h3>
@@ -84,16 +86,20 @@ export default function Termini() {
           <p>La tua membership inizia con una prova gratuita di 7 giorni. Salvo annullamento prima della fine della prova, autorizzi Just Jenny ad addebitare automaticamente sul metodo di pagamento utilizzato per l'ordine originale l'importo di 49,00 € ogni 28 giorni, fino a quando non annulli.</p>
 
           <h3>Vantaggi della membership</h3>
-          {lubri
+          {emor
+            ? <p>Finché la tua membership è attiva, puoi accedere ai vantaggi riservati ai membri, tra cui: prodotti e contenuti idonei per il comfort e il benessere quotidiano, offerte riservate ai membri, assistenza dedicata e altri vantaggi messi a disposizione da Just Jenny. I vantaggi disponibili, le quantità, la disponibilità, gli eventuali contributi di spedizione e gestione e le altre condizioni ti vengono comunicati via e-mail all'inizio di ogni ciclo di fatturazione.</p>
+            : lubri
             ? <p>Finché la tua membership è attiva, puoi accedere ai vantaggi riservati ai membri, tra cui: a ogni ciclo di fatturazione ciascuno dei prodotti idonei per il benessere intimo gratuito (un pezzo per prodotto per ciclo), tra cui LubriSense, pagando soltanto il contributo di spedizione e gestione indicato per ciascun articolo (per LubriSense 9,95 €); la Biblioteca dell'Intimità con e-book scaricabili; offerte riservate ai membri; assistenza dedicata e altri vantaggi messi a disposizione da Just Jenny.</p>
             : <p>Finché la tua membership è attiva, puoi accedere ai vantaggi riservati ai membri, tra cui: a ogni ciclo di fatturazione un prodotto idoneo per il benessere dell'udito gratuito, pagando soltanto il contributo di spedizione e gestione indicato per ciascun articolo; la Biblioteca Tinnitus con e-book scaricabili; offerte riservate ai membri; assistenza dedicata e altri vantaggi messi a disposizione da Just Jenny.</p>}
-          <p>I prodotti idonei e i vantaggi sono accessibili tramite l'<a href={PORTAL} target="_blank" rel="noopener">Area Membri</a>. L'idoneità dei prodotti, le quantità, la disponibilità, i contributi di spedizione e gestione e le altre condizioni sono indicati nell'area membri al momento della selezione.</p>
+          {!emor && <p>I prodotti idonei e i vantaggi sono accessibili tramite l'<a href={PORTAL} target="_blank" rel="noopener">Area Membri</a>. L'idoneità dei prodotti, le quantità, la disponibilità, i contributi di spedizione e gestione e le altre condizioni sono indicati nell'area membri al momento della selezione.</p>}
 
           <h3>Gestione della membership</h3>
-          <p>Puoi accedere all'<a href={PORTAL} target="_blank" rel="noopener">Area Membri</a> per: visualizzare e gestire la tua membership; aggiornare i tuoi dati di pagamento; modificare o annullare la tua membership; accedere ai vantaggi disponibili; richiedere i prodotti idonei gratuiti e pagare gli eventuali contributi di spedizione e gestione.</p>
+          {emor
+            ? <p>Puoi gestire la tua membership scrivendo a <a href={`mailto:${EMAIL}`}>{EMAIL}</a>: visualizzare lo stato della membership, aggiornare i tuoi dati di pagamento, modificare o annullare la membership. Rispondiamo entro un giorno lavorativo.</p>
+            : <p>Puoi accedere all'<a href={PORTAL} target="_blank" rel="noopener">Area Membri</a> per: visualizzare e gestire la tua membership; aggiornare i tuoi dati di pagamento; modificare o annullare la tua membership; accedere ai vantaggi disponibili; richiedere i prodotti idonei gratuiti e pagare gli eventuali contributi di spedizione e gestione.</p>}
 
           <h3>Annullamento</h3>
-          <p>Puoi annullare la tua membership in qualsiasi momento tramite l'Area Membri oppure inviando un'e-mail a <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. Per evitare l'addebito ricorrente successivo, l'annullamento deve essere completato prima della data del prossimo addebito programmato.</p>
+          <p>Puoi annullare la tua membership in qualsiasi momento {emor ? "inviando un'e-mail a" : "tramite l'Area Membri oppure inviando un'e-mail a"} <a href={`mailto:${EMAIL}`}>{EMAIL}</a>. Per evitare l'addebito ricorrente successivo, l'annullamento deve essere completato prima della data del prossimo addebito programmato.</p>
           <p>L'annullamento della membership interrompe gli addebiti futuri, ma non annulla né rimborsa automaticamente ordini o addebiti già elaborati.</p>
 
           <h3>Descrizione sull'estratto conto</h3>
@@ -113,7 +119,7 @@ export default function Termini() {
           <p>La garanzia soddisfatti o rimborsati di 90 giorni si applica esclusivamente ai prodotti <b>non aperti</b>, con sigillo integro, restituiti entro 90 giorni dalla data dell'ordine. I prodotti consumabili che sono stati aperti non possono essere restituiti né rimborsati, per motivi di igiene e sicurezza. Per avviare una richiesta di rimborso, scrivi a <a href={`mailto:${EMAIL}`}>{EMAIL}</a> indicando il numero d'ordine: riceverai le istruzioni per la restituzione. Il rimborso viene elaborato sul metodo di pagamento originale dopo la ricezione e la verifica dei prodotti restituiti.</p>
 
           <h2 id="prodotti">Prodotti</h2>
-          <p>NeuroTone Drops è un prodotto per il benessere e non è un medicinale né un dispositivo medico; non è destinato a diagnosticare, trattare, curare o prevenire alcuna malattia. In caso di disturbi persistenti, consulta il tuo medico.</p>
+          <p>{lubri ? "LubriSense" : emor ? "Emorroidi Cerotti" : "NeuroTone Drops"} è un prodotto per il benessere e non è un medicinale né un dispositivo medico; non è destinato a diagnosticare, trattare, curare o prevenire alcuna malattia. In caso di disturbi persistenti, consulta il tuo medico.</p>
           <p>Alcuni prodotti o servizi possono essere disponibili esclusivamente online tramite il sito. Tali prodotti o servizi possono avere quantità limitate e sono soggetti a restituzione o sostituzione esclusivamente in conformità alla nostra Garanzia soddisfatti o rimborsati di cui sopra. Abbiamo fatto il possibile per mostrare nel modo più accurato i colori e le immagini dei nostri prodotti; non possiamo garantire che la visualizzazione sul tuo schermo sia esatta. Ci riserviamo il diritto, senza esserne obbligati, di limitare la vendita dei nostri prodotti o Servizi a qualsiasi persona, area geografica o giurisdizione, caso per caso, e di limitare le quantità dei prodotti o servizi offerti. Tutte le descrizioni e i prezzi dei prodotti sono soggetti a modifica in qualsiasi momento senza preavviso, a nostra esclusiva discrezione. Ci riserviamo il diritto di interrompere la vendita di qualsiasi prodotto in qualsiasi momento. Qualsiasi offerta di prodotti o servizi presente su questo sito è nulla ove vietata.</p>
 
           <h2 id="sms">Comunicazioni via SMS</h2>
@@ -176,7 +182,7 @@ export default function Termini() {
           <p>Le domande sui Termini di servizio e sulla tua membership vanno inviate a <a href={`mailto:${EMAIL}`}>{EMAIL}</a>.</p>
           <p>{COMPANY} · {ADDRESS} · EIN {EIN}</p>
         </div>
-        <p className="foot">© {new Date().getFullYear()} Just Jenny · <a href={PORTAL}>Area Membri</a> · <a href={`mailto:${EMAIL}`}>{EMAIL}</a></p>
+        <p className="foot">© {new Date().getFullYear()} Just Jenny · {!emor && <><a href={PORTAL}>Area Membri</a> · </>}<a href={`mailto:${EMAIL}`}>{EMAIL}</a></p>
       </div>
     </>
   );

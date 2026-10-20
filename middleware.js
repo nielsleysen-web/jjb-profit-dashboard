@@ -4,7 +4,8 @@
 //   checkout.getjustjenny.com/         → /checkout/index.html
 //   checkout.getjustjenny.com/grazie   → /checkout/grazie        (bedankpagina met quiz)
 //   checkout.getjustjenny.com/lubrisense → /checkout/index.html  (LubriSense; ook /checkout?p=lubrisense)
-//   checkout.getjustjenny.com/3ds, /lubrisense/3ds, /magnesium/3ds → idem, A/B-test 3D Secure voor debit/prepaid
+//   checkout.getjustjenny.com/emorroidi → /checkout/index.html  (Emorroidi Cerotti; ook /checkout?p=emorroidi)
+//   checkout.getjustjenny.com/3ds, /lubrisense/3ds, /magnesium/3ds, /emorroidi/3ds → idem, A/B-test 3D Secure voor debit/prepaid
 // Het ledenportaal: members.getjustjenny.com/<pad> en intimate.getjustjenny.com/<pad> → /portal/<pad> (pages/portal/*).
 //   API-routes (/api/portal/*) en Next-assets blijven op hun eigen pad.
 // Het Operations Centre blijft gewoon op het dashboard-domein bereikbaar.
@@ -35,8 +36,8 @@ export function middleware(req) {
 
   // LubriSense: checkout.getjustjenny.com/lubrisense → zelfde checkoutpagina; checkout.js leest het product uit het pad
   // Magnesium Freeze (zonder membership): checkout.getjustjenny.com/magnesium → zelfde pagina
-  // A/B-test 3DS: /3ds, /lubrisense/3ds en /magnesium/3ds → zelfde checkoutpagina (checkout.js leest "/3ds" uit het pad)
-  const lubri = onCheckoutHost && /^\/(?:(lubrisense|magnesium)(?:\/3ds)?|3ds)\/?$/.test(url.pathname);
+  // A/B-test 3DS: /3ds, /lubrisense/3ds, /magnesium/3ds en /emorroidi/3ds → zelfde checkoutpagina (checkout.js leest "/3ds" uit het pad)
+  const lubri = onCheckoutHost && /^\/(?:(lubrisense|magnesium|emorroidi)(?:\/3ds)?|3ds)\/?$/.test(url.pathname);
   if (url.pathname === "/checkout" || url.pathname === "/checkout/" || (onCheckoutHost && url.pathname === "/") || lubri) {
     const to = url.clone();
     to.pathname = "/checkout/index.html";
