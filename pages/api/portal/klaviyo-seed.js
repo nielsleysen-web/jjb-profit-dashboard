@@ -7,12 +7,17 @@
 // GET /api/portal/klaviyo-seed?email=<testadres>&only=all    → ALLE metrics van het portaal in één keer (Membership Started,
 //     Portal Login Link, Portal Order Confirmed, Membership Renewal Reminder, Membership Renewed, Payment Failed, Reactivated)
 //     + profielveld trial_ends. Met &brand=lubrisense (op de dashboard-host) → "LubriSense …"-metrics, zonder testbestelling.
+// GET /api/portal/klaviyo-seed?email=<testadres>&product=emorroidi → product zonder portaal (lib/checkout.js portal:false):
+//     stuurt "<Titel> Membership Started" (+ "Checkout Completed") met dezelfde velden als een echte bestelling, en zet het
+//     testadres op de productlijst (KLAVIYO_LIST_ID_<PRODUCT>). Zo is de metric kiesbaar als flow-trigger vóór de eerste order.
 //
 // Het testprofiel komt daardoor ook in de flows terecht zodra die live staan — gebruik dus een eigen testadres.
 import crypto from "crypto";
 import { trackEvent, klaviyoConfigured, setProfileProperties } from "../../../lib/klaviyo";
 import { PORTAL_URL, portalUrl } from "../../../lib/portal-auth";
 import { withPortalBrand, currentBrand } from "../../../lib/portal-brand";
+import { PRODUCTS, SHIPPING } from "../../../lib/checkout";
+import { syncProductMember } from "../../../lib/klaviyo";
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 function dashboardSession(req) {
@@ -41,6 +46,18 @@ async function handler(req, res) {
   const stamp = Date.now();
   const sent = [];
   try {
+    const pkey = String(req.query.product || "").toLowerCase();
+    if (pkey) {
+      const product = PRODUCTS[pkey];
+      if (!product || product.portal) return res.status(400).json({ ok: false, error: "product onbekend of heeft een portaal (gebruik dan &brand=…)" });
+      const b = product.bundles[3] || Object.values(product.bundles)[0];
+      await syncProductMember(product, "started", {
+        email, firstName: "Test", lastName: "Seed", provider: "stripe", subscriptionId: `sub_test_seed_${stamp}`, invoiceId: `in_test_seed_${stamp}`,
+        qty: b.qty, bundleLabel: b.label, shippingTitle: SHIPPING.insured.title, amountPaid: (b.price + SHIPPING.insured.price) / 100,
+        trialEnds: new Date(Date.now() + product.membership.trialDays * 86400000), orderName: "#TEST",
+      });
+      return res.status(200).json({ ok: true, product: product.key, email, sent: [`${product.title} Membership Started`, "Checkout Completed"], note: "Metric verschijnt binnen ±1 minuut in Klaviyo → Flows → trigger → Your metrics. Testadres staat ook op de productlijst." });
+    }
     if (only === "cancelled") {
       // Alleen "Membership Cancelled" (nodig voor de flowfilters "zero times since starting this flow")
       await trackEvent("Membership Cancelled", email, { provider: "stripe", subscription_id: "sub_test_seed", reason: "test", test: true }, { uniqueId: `seed-cancel-${stamp}` });
