@@ -37,6 +37,10 @@ export default async function handler(req, res) {
     const token = process.env.META_ACCESS_TOKEN;
     if (!token) return res.status(400).json({ success: false, error: "META_ACCESS_TOKEN ontbreekt" });
 
+    // ?purchases=1&days=3 → aankopen zoals Meta ze telt (per account per dag) + pixel-events via de CAPI-token,
+    // om naast de echte orders te leggen (Operations Centre → Attribution)
+    if (req.query.purchases) return purchasesReport(req, res, token);
+
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || "")) ? String(req.query.date) : new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     const one = String(req.query.account || "").replace(/^act_/, "");
     const accountIds = one ? [one] : (process.env.META_AD_ACCOUNT_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -112,4 +116,48 @@ export default async function handler(req, res) {
   } catch (e) {
     return res.status(500).json({ success: false, error: e.message });
   }
+}
+
+async function purchasesReport(req, res, token) {
+  const days = Math.min(14, Math.max(1, parseInt(req.query.days || "3", 10) || 3));
+  const until = new Date().toISOString().slice(0, 10);
+  const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const accountIds = (process.env.META_AD_ACCOUNT_IDS || "").split(",").map((x) => x.trim()).filter(Boolean);
+  const out = { success: true, since, until, meta: {}, totals: {}, pixel: {} };
+  const PURCHASE = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"];
+  const pick = (arr, types) => { for (const t of types) { const a = (arr || []).find((x) => x.action_type === t); if (a) return parseFloat(a.value || 0); } return 0; };
+  await Promise.all(accountIds.map(async (id) => {
+    try {
+      const r = await get(`act_${id}/insights`, token, { level: "account", fields: "spend,actions,action_values", time_range: JSON.stringify({ since, until }), time_increment: 1 });
+      for (const row of r.data || []) {
+        const d = row.date_start;
+        const o = { spend: parseFloat(row.spend || 0), purchases: pick(row.actions, PURCHASE), purchaseValue: pick(row.action_values, PURCHASE), initiateCheckout: pick(row.actions, ["omni_initiated_checkout", "initiate_checkout"]) };
+        if (o.spend || o.purchases || o.initiateCheckout) (out.meta[id] = out.meta[id] || {})[d] = o;
+        const t = (out.totals[d] = out.totals[d] || { spend: 0, purchases: 0, purchaseValue: 0, initiateCheckout: 0 });
+        t.spend += o.spend; t.purchases += o.purchases; t.purchaseValue += o.purchaseValue; t.initiateCheckout += o.initiateCheckout;
+      }
+    } catch (e) { out.meta[id] = { error: fbErr(e) }; }
+  }));
+  for (const t of Object.values(out.totals)) { t.spend = +t.spend.toFixed(2); t.purchaseValue = +t.purchaseValue.toFixed(2); }
+  // Pixel + CAPI: wat ziet de pixel de laatste dagen (browser + server), met de CAPI-token van de webhook
+  const pixelId = process.env.META_PIXEL_ID, capiToken = process.env.META_CAPI_ACCESS_TOKEN || process.env.META_CAPI_TOKEN;
+  out.pixel.configured = !!(pixelId && capiToken);
+  if (out.pixel.configured) {
+    try {
+      const info = await get(pixelId, capiToken, { fields: "name,last_fired_time,is_unavailable" });
+      out.pixel.info = info;
+    } catch (e) { out.pixel.infoError = fbErr(e); }
+    try {
+      const st = await get(`${pixelId}/stats`, capiToken, { aggregation: "event", start_time: Math.floor(new Date(since + "T00:00:00Z").getTime() / 1000) });
+      // stats: per uur per event; samenvatten per event per dag
+      const byDay = {};
+      for (const b of st.data || []) {
+        const d = String(b.start_time || "").slice(0, 10);
+        for (const x of b.data || []) { byDay[d] = byDay[d] || {}; byDay[d][x.value] = (byDay[d][x.value] || 0) + (x.count || 0); }
+      }
+      out.pixel.eventsByDay = byDay;
+      out.pixel.note = "Aantallen per dag per event zoals de pixel ze ontvangt (browser-pixel + Conversions API samen, vóór deduplicatie).";
+    } catch (e) { out.pixel.statsError = fbErr(e); }
+  }
+  return res.status(200).json(out);
 }
