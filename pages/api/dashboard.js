@@ -413,32 +413,43 @@ async function fetchMetaData(dateFrom, dateTo) {
       try {
         // Daily spend per campagne — daarmee kunnen we zowel de chart
         // als de product-matching voeden.
-        const response = await axios.get(
-          `https://graph.facebook.com/v21.0/act_${accountId}/insights`,
-          {
-            params: {
-              access_token: token,
-              level: "campaign",
-              fields: "campaign_name,spend,impressions,clicks,unique_outbound_clicks",
-              time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
-              time_increment: 1,
-              limit: 500,
-            },
-            timeout: 15000,
+        // Spend en outbound clicks in twee aparte aanroepen. Sinds 21/10/2026 geeft Meta voor deze token rijen met
+        // spend "0" terug zodra clicks/unique_outbound_clicks in dezelfde aanroep staan (zie /api/meta-check);
+        // de spend-aanroep bevat die velden daarom niet meer, en een probleem met de clicks raakt de spend niet.
+        const base = {
+          access_token: token,
+          level: "campaign",
+          time_range: JSON.stringify({ since: dateFrom, until: dateTo }),
+          time_increment: 1,
+          limit: 500,
+        };
+        const url = `https://graph.facebook.com/v21.0/act_${accountId}/insights`;
+        const getAll = async (fields) => {
+          const out = [];
+          let next = url, params = { ...base, fields };
+          for (let p = 0; p < 10 && next; p++) {
+            const r = await axios.get(next, { params, timeout: 15000 });
+            out.push(...(r.data?.data || []));
+            next = r.data?.paging?.next || null; params = undefined; // de next-URL bevat alle parameters al
           }
-        );
-
-        const rows = response.data?.data || [];
+          return out;
+        };
+        const rows = await getAll("campaign_id,campaign_name,spend,impressions");
+        const clicksByKey = {};
+        try {
+          for (const row of await getAll("campaign_id,unique_outbound_clicks")) {
+            // unique_outbound_clicks komt als actie-array: [{ action_type: "outbound_click", value: "12" }]
+            clicksByKey[`${row.campaign_id}:${row.date_start}`] = (row.unique_outbound_clicks || []).reduce((sum, a) => sum + parseFloat(a.value || 0), 0);
+          }
+        } catch (err) {
+          console.warn(`Meta outbound clicks voor account ${accountId}:`, err.response?.data?.error?.message || err.message);
+        }
         let accountTotal = 0;
 
         for (const row of rows) {
           const spend = parseFloat(row.spend || 0);
           const day = row.date_start;
-          // unique_outbound_clicks komt als actie-array: [{ action_type: "outbound_click", value: "12" }]
-          const outboundClicks = (row.unique_outbound_clicks || []).reduce(
-            (sum, a) => sum + parseFloat(a.value || 0),
-            0
-          );
+          const outboundClicks = clicksByKey[`${row.campaign_id}:${day}`] || 0;
           accountTotal += spend;
           dailySpend[day] = (dailySpend[day] || 0) + spend;
           campaignSpend.push({ name: row.campaign_name || "", spend, outboundClicks, date: day });

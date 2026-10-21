@@ -88,6 +88,16 @@ export default async function handler(req, res) {
           throttle: r.headers?.["x-fb-ads-insights-throttle"] || null, usage: r.headers?.["x-business-use-case-usage"] || r.headers?.["x-ad-account-usage"] || null };
       } catch (e) { a.asDashboardError = fbErr(e); }
       if (one) {
+        // Welk veld maakt de spend 0? Zelfde aanroep met verschillende veldcombinaties
+        const variants = { spend: "spend", spend_impressions: "spend,impressions", spend_clicks: "spend,clicks", spend_uoc: "spend,unique_outbound_clicks", spend_actions: "spend,actions", dashboard_fields: "campaign_name,spend,impressions,clicks,unique_outbound_clicks" };
+        a.variants = {};
+        await Promise.all(Object.entries(variants).map(async ([k, fields]) => {
+          try {
+            const r = await axios.get(`${G}/act_${id}/insights`, { params: { access_token: token, level: "campaign", fields, time_range: timeRange, time_increment: 1, limit: 500 }, timeout: 20000 });
+            const rows = r.data?.data || [];
+            a.variants[k] = { rows: rows.length, spend: rows.reduce((t, x) => t + parseFloat(x.spend || 0), 0).toFixed(2) };
+          } catch (e) { a.variants[k] = { error: fbErr(e) }; }
+        }));
         try {
           // Alle campagnes die de token in dit account kan zien (ook gepauzeerd/gearchiveerd)
           const c = await get(`act_${id}/campaigns`, token, { fields: "id,name,status,effective_status,created_time", limit: 200 });
