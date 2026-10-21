@@ -142,48 +142,52 @@ async function fetchAdSpend(since, until) {
   await Promise.all(
     accountIds.map(async (accountId) => {
       try {
-        let url = `https://graph.facebook.com/v21.0/act_${accountId}/insights`;
-        let params = {
-          access_token: token,
-          level: "ad",
-          fields: "ad_id,ad_name,adset_name,campaign_id,campaign_name,spend,impressions,unique_outbound_clicks",
-          time_range: JSON.stringify({ since, until }),
-          time_increment: 1, // per dag → eerste/laatste actieve dag per ad
-          limit: 500,
-        };
-        for (let p = 0; p < 6 && url; p++) {
-          const r = await axios.get(url, { params, timeout: 20000 });
-          for (const row of r.data?.data || []) {
-            const id = row.ad_id;
-            if (!id) continue;
-            const spend = parseFloat(row.spend || 0);
-            if (!byAd[id]) {
-              byAd[id] = {
-                adId: id,
-                adName: row.ad_name || "",
-                adsetName: row.adset_name || "",
-                campaignId: row.campaign_id || "",
-                campaignName: row.campaign_name || "",
-                spend: 0,
-                impressions: 0,
-                clicks: 0,
-                firstDay: row.date_start,
-                lastDay: row.date_start,
-                activeDays: 0,
-              };
-            }
-            const a = byAd[id];
-            a.spend += spend;
-            a.impressions += parseFloat(row.impressions || 0);
-            a.clicks += (row.unique_outbound_clicks || []).reduce((s, x) => s + parseFloat(x.value || 0), 0);
-            if (spend > 0) {
-              a.activeDays += 1;
-              if (row.date_start < a.firstDay) a.firstDay = row.date_start;
-              if (row.date_start > a.lastDay) a.lastDay = row.date_start;
-            }
+        // Spend en outbound clicks in twee aparte aanroepen: sinds 21/10/2026 geeft Meta spend "0" terug zodra
+        // clicks/unique_outbound_clicks in dezelfde insights-aanroep staan (zie /api/meta-check).
+        const base = { access_token: token, level: "ad", time_range: JSON.stringify({ since, until }), time_increment: 1, limit: 500 };
+        const getAll = async (fields) => {
+          const out = [];
+          let url = `https://graph.facebook.com/v21.0/act_${accountId}/insights`, params = { ...base, fields };
+          for (let p = 0; p < 6 && url; p++) {
+            const r = await axios.get(url, { params, timeout: 20000 });
+            out.push(...(r.data?.data || []));
+            url = r.data?.paging?.next || null; params = undefined; // de next-URL bevat alle parameters al
           }
-          url = r.data?.paging?.next || null;
-          params = undefined;
+          return out;
+        };
+        const rows = await getAll("ad_id,ad_name,adset_name,campaign_id,campaign_name,spend,impressions");
+        const clicksByKey = {};
+        try {
+          for (const row of await getAll("ad_id,unique_outbound_clicks")) clicksByKey[`${row.ad_id}:${row.date_start}`] = (row.unique_outbound_clicks || []).reduce((s, x) => s + parseFloat(x.value || 0), 0);
+        } catch (e) { console.warn(`Creatives Data — Meta clicks (act ${accountId}):`, e.response?.data?.error?.message || e.message); }
+        for (const row of rows) {
+          const id = row.ad_id;
+          if (!id) continue;
+          const spend = parseFloat(row.spend || 0);
+          if (!byAd[id]) {
+            byAd[id] = {
+              adId: id,
+              adName: row.ad_name || "",
+              adsetName: row.adset_name || "",
+              campaignId: row.campaign_id || "",
+              campaignName: row.campaign_name || "",
+              spend: 0,
+              impressions: 0,
+              clicks: 0,
+              firstDay: row.date_start,
+              lastDay: row.date_start,
+              activeDays: 0,
+            };
+          }
+          const a = byAd[id];
+          a.spend += spend;
+          a.impressions += parseFloat(row.impressions || 0);
+          a.clicks += clicksByKey[`${id}:${row.date_start}`] || 0;
+          if (spend > 0) {
+            a.activeDays += 1;
+            if (row.date_start < a.firstDay) a.firstDay = row.date_start;
+            if (row.date_start > a.lastDay) a.lastDay = row.date_start;
+          }
         }
       } catch (e) {
         console.warn(`Creatives Data — Meta error (act ${accountId}):`, e.response?.data?.error?.message || e.message);

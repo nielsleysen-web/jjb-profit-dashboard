@@ -9,6 +9,8 @@
 //   GET /api/meta-check?account=956757448158555 → één account, met de campagnelijst (status + spend)
 import axios from "axios";
 import crypto from "crypto";
+import { redis, getJson, storeConfigured } from "../../lib/portal-store";
+import { shopifyGraphql } from "../../lib/shopify-admin";
 
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SHOPIFY_CLIENT_SECRET || "";
 function getSession(req) {
@@ -159,5 +161,32 @@ async function purchasesReport(req, res, token) {
       out.pixel.note = "Aantallen per dag per event zoals de pixel ze ontvangt (browser-pixel + Conversions API samen, vóór deduplicatie).";
     } catch (e) { out.pixel.statsError = fbErr(e); }
   }
+  // Per order: is het server-event (Conversions API) geslaagd? (bewaard door lib/meta-capi.js sinds 21/10/2026)
+  out.orders = await ordersWithCapi(since, until);
   return res.status(200).json(out);
+}
+
+// Shopify-orders in de periode (checkout.getjustjenny.com: tags stripe/paypal) + CAPI-resultaat uit Redis
+async function ordersWithCapi(since, until) {
+  const out = { note: "capi: ok = server-event door Meta ontvangen; missing = geen resultaat bekend (order van vóór 21/10 of webhook zonder CAPI); error = afgewezen/mislukt", byDay: {}, rows: [] };
+  try {
+    const d = await shopifyGraphql(
+      `query($q: String!) { orders(first: 250, query: $q, sortKey: CREATED_AT, reverse: true) { nodes { name createdAt tags totalPriceSet { shopMoney { amount } } customAttributes { key value } } } }`,
+      { q: `created_at:>=${since}T00:00:00Z created_at:<=${until}T23:59:59Z (tag:stripe OR tag:paypal)` }
+    );
+    const nodes = d?.orders?.nodes || [];
+    for (const o of nodes) {
+      const attrs = Object.fromEntries((o.customAttributes || []).map((a) => [a.key, a.value]));
+      const capi = storeConfigured() ? await getJson(`capi:${o.name.replace("#", "")}`).catch(() => null) : null;
+      const day = o.createdAt.slice(0, 10);
+      const status = capi ? (capi.ok ? "ok" : "error") : "missing";
+      const b = (out.byDay[day] = out.byDay[day] || { orders: 0, capiOk: 0, capiError: 0, capiMissing: 0, withFbc: 0, paypal: 0 });
+      b.orders++; b[status === "ok" ? "capiOk" : status === "error" ? "capiError" : "capiMissing"]++;
+      if (attrs.jjb_fbc) b.withFbc++;
+      if ((o.tags || []).includes("paypal")) b.paypal++;
+      out.rows.push({ order: o.name, at: o.createdAt, value: o.totalPriceSet?.shopMoney?.amount, provider: (o.tags || []).includes("paypal") ? "paypal" : "stripe",
+        path: attrs.jjb_path || "", adId: attrs.jjb_ad_id || "", fbc: !!attrs.jjb_fbc, fbp: !!attrs.jjb_fbp, capi: status, capiError: capi?.error, capiAt: capi?.at });
+    }
+  } catch (e) { out.error = e.message; }
+  return out;
 }

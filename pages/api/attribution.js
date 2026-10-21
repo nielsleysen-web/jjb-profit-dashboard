@@ -167,31 +167,38 @@ async function fetchAdInsights(since, until) {
   await Promise.all(
     accountIds.map(async (accountId) => {
       try {
-        let url = `https://graph.facebook.com/v21.0/act_${accountId}/insights`;
-        let params = {
-          access_token: token,
-          level: "ad",
-          fields: "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions,unique_outbound_clicks,actions",
-          time_range: JSON.stringify({ since, until }),
-          limit: 500,
+        // Spend apart van clicks/actions: sinds 21/10/2026 geeft Meta spend "0" terug zodra clicks of actions in
+        // dezelfde insights-aanroep staan (zie /api/meta-check).
+        const base = { access_token: token, level: "ad", time_range: JSON.stringify({ since, until }), limit: 500 };
+        const getAll = async (fields) => {
+          const out = [];
+          let url = `https://graph.facebook.com/v21.0/act_${accountId}/insights`, params = { ...base, fields };
+          for (let p = 0; p < 3 && url; p++) {
+            const r = await axios.get(url, { params, timeout: 15000 });
+            out.push(...(r.data?.data || []));
+            url = r.data?.paging?.next || null; params = undefined; // de next-URL bevat alle parameters al
+          }
+          return out;
         };
-        for (let p = 0; p < 3 && url; p++) {
-          const r = await axios.get(url, { params, timeout: 15000 });
-          for (const row of r.data?.data || []) {
-            const id = row.ad_id;
-            if (!id) continue;
-            if (!byAd[id]) {
-              byAd[id] = { adName: row.ad_name || "", adsetId: row.adset_id || "", adsetName: row.adset_name || "", campaignId: row.campaign_id || "", campaignName: row.campaign_name || "", spend: 0, impressions: 0, outboundClicks: 0, checkouts: 0 };
-            }
-            byAd[id].spend += parseFloat(row.spend || 0);
-            byAd[id].impressions += parseFloat(row.impressions || 0);
-            byAd[id].outboundClicks += (row.unique_outbound_clicks || []).reduce((s, a) => s + parseFloat(a.value || 0), 0);
+        const rows = await getAll("ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,spend,impressions");
+        const extra = {};
+        try {
+          for (const row of await getAll("ad_id,unique_outbound_clicks,actions")) {
             const acts = row.actions || [];
             const ic = acts.find((a) => a.action_type === "initiate_checkout") || acts.find((a) => a.action_type === "omni_initiated_checkout");
-            byAd[id].checkouts += ic ? parseFloat(ic.value || 0) : 0;
+            extra[row.ad_id] = { clicks: (row.unique_outbound_clicks || []).reduce((s, a) => s + parseFloat(a.value || 0), 0), checkouts: ic ? parseFloat(ic.value || 0) : 0 };
           }
-          url = r.data?.paging?.next || null;
-          params = undefined; // de next-URL bevat alle parameters al
+        } catch (e) { console.warn(`Ad clicks/actions error (act ${accountId}):`, e.response?.data?.error?.message || e.message); }
+        for (const row of rows) {
+          const id = row.ad_id;
+          if (!id) continue;
+          if (!byAd[id]) {
+            byAd[id] = { adName: row.ad_name || "", adsetId: row.adset_id || "", adsetName: row.adset_name || "", campaignId: row.campaign_id || "", campaignName: row.campaign_name || "", spend: 0, impressions: 0, outboundClicks: 0, checkouts: 0 };
+          }
+          byAd[id].spend += parseFloat(row.spend || 0);
+          byAd[id].impressions += parseFloat(row.impressions || 0);
+          byAd[id].outboundClicks += extra[id]?.clicks || 0;
+          byAd[id].checkouts += extra[id]?.checkouts || 0;
         }
       } catch (e) {
         console.warn(`Ad insights error (act ${accountId}):`, e.response?.data?.error?.message || e.message);
