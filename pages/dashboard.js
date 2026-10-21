@@ -159,6 +159,8 @@ export default function Dashboard() {
     );
   if (!data) return <div style={ui.page}>No data</div>;
 
+  // Meta-accounts die een fout gaven (token verlopen, rate limit, …) — getoond onder "Ad Spend (Meta)"
+  const metaErrors = Object.entries(data?.metaAccounts || {}).filter(([, a]) => a && a.error).map(([id, a]) => ({ id, message: a.message || "unknown error" }));
   return (
     <div
       style={{
@@ -295,7 +297,9 @@ export default function Dashboard() {
           small
           label="Ad Spend (Meta)"
           value={formatCurrency(data.adSpend)}
-          sub={`${(data.adSpendPercent || 0).toFixed(1)}% of revenue`}
+          sub={metaErrors.length
+            ? <span style={{ color: "#dc2626" }} title={metaErrors.map((e) => `act_${e.id}: ${e.message}`).join("\n")}>Meta: {metaErrors[0].message}{metaErrors.length > 1 ? ` (${metaErrors.length} accounts)` : ""}</span>
+            : `${(data.adSpendPercent || 0).toFixed(1)}% of revenue`}
         />
         <Card
           compareLabel={data.sameTimeCompare ? "vs. yesterday, same time" : undefined}

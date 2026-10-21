@@ -446,11 +446,11 @@ async function fetchMetaData(dateFrom, dateTo) {
 
         accountsData[accountId] = { spend: accountTotal };
       } catch (err) {
-        console.warn(
-          `Meta API error voor account ${accountId}:`,
-          err.response?.data?.error?.message || err.message
-        );
-        accountsData[accountId] = { spend: 0, error: true };
+        const fb = err.response?.data?.error || {};
+        const message = fb.message || err.message;
+        console.warn(`Meta API error voor account ${accountId}:`, message);
+        // Foutmelding meegeven, zodat het dashboard laat zien waarom de ad spend €0 is (token verlopen, rate limit, …)
+        accountsData[accountId] = { spend: 0, error: true, code: fb.code, message: String(message).slice(0, 200) };
       }
     })
   );
