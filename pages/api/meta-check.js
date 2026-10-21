@@ -77,6 +77,16 @@ export default async function handler(req, res) {
         a.campaignLevel = { rows: rows.length, pages, spend: rows.reduce((t, r) => t + parseFloat(r.spend || 0), 0).toFixed(2),
           campaigns: rows.filter((r) => parseFloat(r.spend || 0) > 0).sort((x, y) => parseFloat(y.spend) - parseFloat(x.spend)).slice(0, 15).map((r) => ({ id: r.campaign_id, name: r.campaign_name, spend: r.spend })) };
       } catch (e) { a.campaignLevelError = fbErr(e); }
+      try {
+        // Exact dezelfde aanroep als pages/api/dashboard.js (zelfde velden, twee dagen: de dag ervoor + de dag zelf),
+        // met het ruwe antwoord en de throttle-headers van Meta — om een verschil met de dashboardcijfers te verklaren
+        const since = new Date(new Date(date + "T12:00:00Z").getTime() - 86400000).toISOString().slice(0, 10);
+        const r = await axios.get(`${G}/act_${id}/insights`, { params: { access_token: token, level: "campaign", fields: "campaign_name,spend,impressions,clicks,unique_outbound_clicks", time_range: JSON.stringify({ since, until: date }), time_increment: 1, limit: 500 }, timeout: 20000 });
+        const rows = r.data?.data || [];
+        a.asDashboard = { since, until: date, rows: rows.length, hasNextPage: !!r.data?.paging?.next, spend: rows.reduce((t, x) => t + parseFloat(x.spend || 0), 0).toFixed(2),
+          sample: rows.slice(0, 5).map((x) => ({ campaign: x.campaign_name, date: x.date_start, spend: x.spend })),
+          throttle: r.headers?.["x-fb-ads-insights-throttle"] || null, usage: r.headers?.["x-business-use-case-usage"] || r.headers?.["x-ad-account-usage"] || null };
+      } catch (e) { a.asDashboardError = fbErr(e); }
       if (one) {
         try {
           // Alle campagnes die de token in dit account kan zien (ook gepauzeerd/gearchiveerd)
