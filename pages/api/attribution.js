@@ -323,7 +323,7 @@ async function runScan(force, lookbackDays = LOOKBACK_DAYS) {
       // CAPI: alleen als de schakelaar aan staat (na de WeTracked-omschakeling)
       // Membership-orders (checkout.getjustjenny.com) sturen hun Purchase al vanuit de Stripe/PayPal-webhook
       const isMembership = (order.tags || []).includes("subscription-frontend");
-      if (process.env.CAPI_ENABLED === "1" && !store.capi[order.name] && !isMembership) {
+      if (process.env.CAPI_ENABLED === "1" && process.env.META_TRACKING !== "off" && !store.capi[order.name] && !isMembership) {
         try {
           await sendCapiPurchase(order, { ...entry, lastUrl: "" });
           store.capi[order.name] = { at: new Date().toISOString() };

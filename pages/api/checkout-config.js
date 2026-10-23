@@ -4,6 +4,7 @@
 //   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY  pk_test_… of pk_live_…
 //   STRIPE_PAYPAL=1                     PayPal tonen (eerst aanzetten in Stripe → Betaalmethoden)
 //   META_PIXEL_ID                       optioneel: Meta Pixel op de checkout
+//   META_TRACKING=off                   alle Meta-events vanuit deze code uit (pixel + CAPI); zie lib/meta-capi.js
 //   PAYPAL_CLIENT_ID (+ PAYPAL_ENV)     PayPal-knoppen (rechtstreeks, buiten Stripe)
 
 export default function handler(req, res) {
@@ -11,7 +12,8 @@ export default function handler(req, res) {
   res.status(200).json({
     stripePk: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
     paypal: process.env.STRIPE_PAYPAL === "1",
-    pixelId: process.env.META_PIXEL_ID || "",
+    // META_TRACKING=off → geen Meta Pixel en geen CAPI vanuit de checkout (externe tracking, bv. WeTracked)
+    pixelId: String(process.env.META_TRACKING || "").toLowerCase() === "off" ? "" : process.env.META_PIXEL_ID || "",
     paypalClientId: process.env.PAYPAL_CLIENT_SECRET ? process.env.PAYPAL_CLIENT_ID || "" : "",
   });
 }

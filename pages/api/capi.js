@@ -52,6 +52,7 @@ export default async function handler(req, res) {
 
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
+  if (String(process.env.META_TRACKING || "").toLowerCase() === "off") return res.status(200).json({ ok: false, skipped: "META_TRACKING=off" });
   if (!TOKEN || !PIXEL_ID) return res.status(200).json({ ok: false, error: "missing META_PIXEL_ID / META_CAPI_ACCESS_TOKEN" });
 
   const b = await readBody(req);
