@@ -308,6 +308,8 @@ export default function Offerta() {
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;0,900;1,700&display=swap" />
         <style dangerouslySetInnerHTML={{ __html: themeCss + css }} />
+        {/* WeTracked (externe Meta-tracking): zelfde snippet als op de funnelpagina's en de Shopify-store */}
+        <script src="https://pixel.wetracked.io/funnel/init.js" async />
       </Head>
 
       {done ? (
