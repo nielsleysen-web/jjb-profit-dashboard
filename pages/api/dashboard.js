@@ -504,6 +504,11 @@ function lineItemCOGS(item) {
   return 0; // COGS onbekend → 0, wordt zichtbaar in dashboard
 }
 
+// Upsell-regels ("NeuroTone Drops · 1+1 GRATIS (2 Flaconi)") horen bij het hoofdproduct: zelfde rij, één blended ROAS.
+// De naam vóór " · " is het hoofdproduct; hoofdletters kunnen verschillen (Neurotone/NeuroTone) → case-insensitief samenvoegen.
+const isUpsellTitle = (t) => /\s·\s.*1\+1/i.test(String(t || ""));
+const productBaseTitle = (t) => (isUpsellTitle(t) ? String(t).split(" · ")[0] : String(t || "")).trim();
+
 function summarizeOrders(orders) {
   let totalOrders = 0;
   let revenue = 0;
@@ -541,7 +546,8 @@ function summarizeOrders(orders) {
     // zodat productomzet optelt tot de totale omzet
     const itemsTotal = order.lineItems.nodes.reduce((t, it) => t + parseFloat(it.discountedTotalSet?.shopMoney?.amount || 0), 0);
     for (const item of order.lineItems.nodes) {
-      const name = item.product?.title || item.title;
+      const title = item.product?.title || item.title;
+      const name = productBaseTitle(title).toLowerCase(); // sleutel; de getoonde naam is die van het hoofdproduct
       const itemCogs = lineItemCOGS(item);
       const itemBase = parseFloat(item.discountedTotalSet?.shopMoney?.amount || 0);
       const itemRevenue = itemBase + (itemsTotal > 0 ? ship * (itemBase / itemsTotal) : 0);
@@ -552,12 +558,19 @@ function summarizeOrders(orders) {
       if (itemRevenue === 0 && itemCogs === 0) continue; // gratis geschenken overslaan
 
       if (!productMap[name]) {
-        productMap[name] = { name, image: null, orders: 0, revenue: 0, cogs: 0, fees: 0, adSpend: 0, outboundClicks: 0 };
+        productMap[name] = { name: productBaseTitle(title), image: null, orders: 0, units: 0, revenue: 0, cogs: 0, fees: 0, adSpend: 0, outboundClicks: 0, _orders: new Set(), _fromUpsell: isUpsellTitle(title) };
       }
-      if (!productMap[name].image && item.image?.url) {
+      // Naam en foto van het hoofdproduct, niet van de upsell-regel
+      if (!isUpsellTitle(title)) {
+        if (productMap[name]._fromUpsell) { productMap[name].name = title; productMap[name].image = null; productMap[name]._fromUpsell = false; }
+        if (!productMap[name].image && item.image?.url) productMap[name].image = item.image.url;
+      } else if (!productMap[name].image && item.image?.url) {
         productMap[name].image = item.image.url;
       }
-      productMap[name].orders += item.quantity;
+      // Orders = aantal bestellingen met dit product (een upsell in dezelfde order telt niet als extra order)
+      productMap[name]._orders.add(order.name || order.id);
+      productMap[name].orders = productMap[name]._orders.size;
+      productMap[name].units += item.quantity;
       productMap[name].revenue += itemRevenue;
       productMap[name].cogs += itemCogs;
       // Betaalkosten van de order naar rato meegeven, zodat productwinst optelt tot de netto winst
@@ -760,7 +773,7 @@ function buildDashboard(orders, meta, { dateFrom, dateTo, prevFrom, prevTo, alia
 
   // Producten gesorteerd op winst
   const products = Object.values(cur.productMap)
-    .map((p) => {
+    .map(({ _orders, _fromUpsell, ...p }) => {
       const profit = p.revenue - p.cogs - (p.fees || 0) - p.adSpend;
       return {
         ...p,
