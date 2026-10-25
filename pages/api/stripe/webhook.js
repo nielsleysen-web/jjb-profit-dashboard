@@ -281,9 +281,12 @@ export default async function handler(req, res) {
     if (event.type === "invoice.payment_failed") {
       // Mislukte rebill: het portaal deactiveert het lid (status live uit Stripe) → Klaviyo-event voor de herinneringsmail
       const inv = event.data.object;
-      // Saldotekort → kortingsladder (10/20/30%, lib/stripe-dunning.js); andere declines blijven bij Stripe's Smart Retries
+      // Saldotekort → kortingsladder (10/20/30%, lib/stripe-dunning.js); andere declines blijven bij Stripe's Smart Retries,
+      // behalve kansloze declines (3DS vereist, fout kaartnummer, pick-up card, kaartlimiet): meteen gevoid + opgezegd
       let dunning = null;
       if (inv.billing_reason === "subscription_cycle") dunning = await startDunning(inv).catch((e) => ({ started: false, reason: e.message }));
+      // Meteen opgezegd → geen "betaling mislukt"-mail (de opzegflow volgt via customer.subscription.deleted)
+      if (dunning?.cancelled) return res.status(200).json({ received: true, paymentFailed: true, dunning });
       if (inv.customer_email && inv.billing_reason === "subscription_cycle") {
         const fsubId = typeof inv.subscription === "string" ? inv.subscription : inv.subscription?.id;
         const fsub = fsubId ? await stripe.subscriptions.retrieve(fsubId).catch(() => null) : null;

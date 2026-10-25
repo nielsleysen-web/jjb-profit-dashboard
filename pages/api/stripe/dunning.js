@@ -9,8 +9,11 @@
 //   /api/stripe/dunning?enroll=1          → die alsnog in de ladder zetten (10% = vandaag), nog geen afschrijving
 //   /api/stripe/dunning?enroll=1&run=1    → in de ladder zetten ÉN meteen de 10%-poging doen
 //   /api/stripe/dunning?run=1&force=1     → negeert de wachtdagen (alleen om te testen)
+//   /api/stripe/dunning?noretry=1&dry=1   → open mislukte rebills met een kansloze decline (3DS/fout nummer/pick-up/limiet) nog in Stripe's retry-rij: lijst
+//   /api/stripe/dunning?noretry=1         → die meteen voiden + opzeggen (zoals de webhook vanaf nu doet)
+//   /api/stripe/dunning?report=1&days=60  → wat de kortingsladder heeft opgeleverd (per trede, € binnengehaald, opgezegd)
 import crypto from "crypto";
-import { runDunning, enrollOpenFailures } from "../../../lib/stripe-dunning";
+import { runDunning, enrollOpenFailures, cancelNoRetryFailures, ladderReport } from "../../../lib/stripe-dunning";
 
 export const config = { maxDuration: 60 };
 
@@ -41,6 +44,8 @@ export default async function handler(req, res) {
     if (fromDashboard && !fromCron) {
       const out = {};
       if (q.enroll === "1") out.enroll = await enrollOpenFailures({ dry });
+      if (q.noretry === "1") out.noretry = await cancelNoRetryFailures({ dry });
+      if (q.report === "1") out.report = await ladderReport({ days: parseInt(q.days || "90", 10) || 90 });
       if (q.run === "1" && !dry) out.run = await runDunning({ force: q.force === "1" });
       else out.status = await runDunning({ dry: true });
       return res.status(200).json(out);
