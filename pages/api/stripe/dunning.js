@@ -1,13 +1,13 @@
 // pages/api/stripe/dunning.js — Vercel-cron (dagelijks, zie vercel.json): kortingsladder bij mislukte rebills
-// door saldotekort (10% → 20% → 30%, daarna opzeggen). Logica in lib/stripe-dunning.js.
+// door saldotekort (−20% → €24,95 → €19,95, daarna opzeggen). Logica in lib/stripe-dunning.js.
 // Beveiligd met CRON_SECRET (Authorization: Bearer …) of een ingelogde dashboard-admin/finance.
 //
 // Handmatig (ingelogd in het dashboard, gewoon in de browser):
 //   /api/stripe/dunning?dry=1             → wie is vandaag aan de beurt, wie wacht nog; doet niets
 //   /api/stripe/dunning?run=1             → voert de pogingen van vandaag uit
 //   /api/stripe/dunning?enroll=1&dry=1    → bestaande mislukte rebills (insufficient_funds) die nog niet in de ladder zitten: lijst
-//   /api/stripe/dunning?enroll=1          → die alsnog in de ladder zetten (10% = vandaag), nog geen afschrijving
-//   /api/stripe/dunning?enroll=1&run=1    → in de ladder zetten ÉN meteen de 10%-poging doen
+//   /api/stripe/dunning?enroll=1          → die alsnog in de ladder zetten (−20% = vandaag), nog geen afschrijving
+//   /api/stripe/dunning?enroll=1&run=1    → in de ladder zetten ÉN meteen de −20%-poging doen
 //   /api/stripe/dunning?run=1&force=1     → negeert de wachtdagen (alleen om te testen)
 //   /api/stripe/dunning?noretry=1&dry=1   → open mislukte rebills met een kansloze decline (3DS/fout nummer/pick-up/limiet) nog in Stripe's retry-rij: lijst
 //   /api/stripe/dunning?noretry=1         → die meteen voiden + opzeggen (zoals de webhook vanaf nu doet)
