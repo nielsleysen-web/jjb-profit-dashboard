@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Checkout — Just Jenny</title>
-<link rel="stylesheet" href="/checkout/assets/checkout.css?v=14">
+<link rel="stylesheet" href="/checkout/assets/checkout.css?v=15">
 <script src="https://js.stripe.com/v3/"></script>
 <!-- Meta Pixel wordt geladen door checkout.js zodra META_PIXEL_ID in Vercel staat (uit met META_TRACKING=off) -->
 <!-- WeTracked (externe Meta-tracking): zelfde snippet als op de funnelpagina's en de Shopify-store -->
@@ -50,12 +50,6 @@
 
     <form id="checkout-form" novalidate>
 
-      <!-- Reserveringstimer (7 minuten, blijft doorlopen bij verversen) -->
-      <div class="jj-timer" id="jj-timer">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v6.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.2" fill="currentColor"/></svg>
-        <span id="jj-timer-text">A causa dell’elevata richiesta, il tuo ordine è riservato per: <b id="jj-timer-clock">7:00</b> minuti</span>
-      </div>
-
       <!-- Express checkout (PayPal / Google Pay / Apple Pay via Stripe) -->
       <section class="express-section" id="express-section" hidden>
         <p class="express-caption">Check-out rapido</p>
@@ -69,6 +63,28 @@
         </div>
         <div class="or-divider"><span>OPPURE</span></div>
       </section>
+
+      <!-- Reserveringstimer (7 minuten, blijft doorlopen bij verversen) — onder de snelle knoppen -->
+      <div class="jj-timer" id="jj-timer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v6.2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.2" fill="currentColor"/></svg>
+        <span id="jj-timer-text">SCORTE LIMITATE | RISERVATO: <b id="jj-timer-clock">07:00</b></span>
+      </div>
+
+      <!-- Garanties onder de timer: klanten · verzending · 90 dagen garantie -->
+      <div class="trust-row trust-top" aria-hidden="false">
+        <div class="trust-item">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 6h32a4 4 0 014 4v22a4 4 0 01-4 4H22l-9 8v-8H8a4 4 0 01-4-4V10a4 4 0 014-4z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><path d="M15 29V18h4v11zM19 19l5-8c2.2 0 3.4 1.4 3 3.6L26.5 18H32a2.6 2.6 0 012.5 3.2l-1.6 6.3A2.6 2.6 0 0130.4 29H19" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>
+          <span><b>40.000+</b>clienti soddisfatti</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M10 12h20v20H10z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><path d="M30 18h8l6 7v7h-14z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><circle cx="16" cy="34" r="3.4" fill="#fff" stroke="currentColor" stroke-width="2.6"/><circle cx="37" cy="34" r="3.4" fill="#fff" stroke="currentColor" stroke-width="2.6"/><path d="M2 17h7M2 22h5M2 27h7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          <span><b>Spedito in 24h</b>lun–ven</span>
+        </div>
+        <div class="trust-item">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="6" y="10" width="34" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M6 19h34M15 6v8M31 6v8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="34" cy="33" r="8" fill="#fff" stroke="currentColor" stroke-width="2.6"/><path d="M34 28.5V33l3 2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          <span><b>Garanzia</b>90 giorni</span>
+        </div>
+      </div>
 
       <!-- Contact -->
       <section>
@@ -150,7 +166,6 @@
             <span class="ship-radio"></span>
             <span class="ship-info">
               <span class="ship-title">Standard (5-8 giorni lavorativi)</span>
-              <span class="ship-date" data-ship-date="5,8"></span>
               <span class="ship-sub">Spedizione gratuita</span>
             </span>
             <span class="ship-price">GRATIS</span>
@@ -160,9 +175,26 @@
             <span class="ship-radio"></span>
             <span class="ship-info">
               <span class="ship-title">Express (3-5 giorni lavorativi)</span>
-              <span class="ship-date" data-ship-date="3,5"></span>
             </span>
             <span class="ship-price">3,95 €</span>
+          </label>
+        </div>
+
+        <!-- Verzendverzekering (4,95 €, standaard aan) -->
+        <div class="ins-block" id="ins-block">
+          <h3 class="ins-head">Proteggi il tuo ordine con l’assicurazione Premium!</h3>
+          <label class="ins-card checked" id="ins-card">
+            <input type="checkbox" id="ins-check" name="insurance" value="1" checked>
+            <span class="ins-badge" aria-hidden="true">
+              <svg viewBox="0 0 64 64"><path d="M12 24l20-9 20 9v18l-20 9-20-9z" fill="#fff" opacity=".95"/><path d="M12 24l20 9 20-9M32 33v18" fill="none" stroke="#4e7a2b" stroke-width="2.2" stroke-linejoin="round"/><path d="M16 21l20-7 10 4.5" fill="none" stroke="#4e7a2b" stroke-width="2.2" stroke-linejoin="round"/><circle cx="46" cy="42" r="10" fill="#4e7a2b" stroke="#fff" stroke-width="2.5"/><path d="M41.5 42l3.2 3.2 6-6.4" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span>SPEDIZIONE<br>ASSICURATA</span>
+            </span>
+            <span class="ins-text">
+              <span class="ins-title">Assicurazione spedizione</span>
+              <span class="ins-sub">contro danni, furto o smarrimento per soli <span class="js-ins-price">4,95 €</span></span>
+              <span class="ins-desc">Goditi la tranquillità con la nostra Garanzia di consegna, che copre qualsiasi danno, furto o smarrimento durante il trasporto.</span>
+            </span>
+            <span class="ins-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-8.5" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
           </label>
         </div>
       </section>
@@ -277,21 +309,6 @@
       <div id="pay-error" class="pay-error" role="alert" hidden></div>
       <button type="submit" id="pay-btn" class="pay-btn"><span id="pay-btn-text">Sì! Confermo l’ordine!</span><span id="pay-spinner" class="spinner" hidden></span></button>
 
-      <div class="trust-row" aria-hidden="false">
-        <div class="trust-item">
-          <svg width="22" height="24" viewBox="0 0 22 24"><path d="M11 1l9 3.5v6c0 5.8-3.8 10.4-9 12.5-5.2-2.1-9-6.7-9-12.5v-6L11 1z" fill="none" stroke="#2c6e65" stroke-width="1.6"/><path d="M7 11.5l2.8 2.8L15 9" fill="none" stroke="#2c6e65" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span><b>Garanzia 90 giorni</b>Soddisfatti o rimborsati</span>
-        </div>
-        <div class="trust-item">
-          <svg width="26" height="24" viewBox="0 0 26 24"><path d="M1.5 5.5h13v11h-13z" fill="none" stroke="#2c6e65" stroke-width="1.6" stroke-linejoin="round"/><path d="M14.5 9.5h5l4 4v3h-9z" fill="none" stroke="#2c6e65" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6" cy="18.5" r="2.2" fill="#fff" stroke="#2c6e65" stroke-width="1.6"/><circle cx="19" cy="18.5" r="2.2" fill="#fff" stroke="#2c6e65" stroke-width="1.6"/></svg>
-          <span><b>Ordina entro le 23:00</b>= spedito domani ✔</span>
-        </div>
-        <div class="trust-item">
-          <svg width="20" height="24" viewBox="0 0 18 22"><rect x="1.5" y="9" width="15" height="11.5" rx="2" fill="none" stroke="#2c6e65" stroke-width="1.6"/><path d="M5 9V6a4 4 0 018 0v3" fill="none" stroke="#2c6e65" stroke-width="1.6"/><circle cx="9" cy="14.5" r="1.4" fill="#2c6e65"/></svg>
-          <span><b>Pagamento sicuro</b>Crittografia SSL</span>
-        </div>
-      </div>
-
       <!-- Informativa abbonamento — moet zichtbaar blijven bij de bestelknop (kaartnetwerken / consumentenrecht):
            bedrag, cyclus, proefperiode en hoe je opzegt. Bedragen worden ingevuld door updateAmounts(). -->
       <p class="sub-terms legal">Cliccando su «Sì! Confermo l’ordine!» accetto di essere vincolato/a ai
@@ -337,6 +354,7 @@
     <div class="t-row"><span>Subtotale</span><span class="js-subtotal">49,95 €</span></div>
     <div class="t-row js-discount-line" hidden><span class="js-discount-label">Sconto</span><span class="js-discount-amt"></span></div>
     <div class="t-row"><span>Spedizione</span><span class="js-shipping">GRATIS</span></div>
+    <div class="t-row js-ins-line"><span>Assicurazione spedizione</span><span class="js-ins-amt">4,95 €</span></div>
     <div class="t-row t-total"><span>Totale</span><span><span class="usd">EUR</span> <strong class="js-total">53,90 €</strong></span></div>
   </div>
   <ul class="sum-trust">
@@ -346,6 +364,6 @@
   </ul>
 </template>
 
-<script src="/checkout/assets/checkout.js?v=28"></script>
+<script src="/checkout/assets/checkout.js?v=29"></script>
 </body>
 </html>
