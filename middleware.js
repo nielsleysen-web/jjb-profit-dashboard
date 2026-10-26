@@ -19,13 +19,14 @@ export const config = { matcher: ["/((?!_next/|api/|favicon.ico|checkout/|.*\\..
      niet gezet / "50"  → 50% variant B, 50% A (een getal 0–100 = % naar B)
      "off" of "a"       → iedereen A (test uit, cookie wordt gewist)
      "b"                → iedereen B
-   ?ab=a / ?ab=b in de link dwingt een variant af (om te bekijken); de cookie jj_ab houdt een bezoeker 30 dagen in
+   ?ab=a / ?ab=b in de link dwingt een variant af (om te bekijken); ?ab=c = variant C (c.html, 3 offers op de checkout); de cookie jj_ab houdt een bezoeker 30 dagen in
    dezelfde variant. Alleen NeuroTone op de gewone link — /lubrisense, /magnesium, /emorroidi en de /3ds-links
    doen niet mee. */
 const AB_COOKIE = "jj_ab";
 function abVariant(req, onCheckoutHost) {
   const q = req.nextUrl.searchParams.get("ab");
   if (q === "a" || q === "b") return { v: q, cookie: "set" };
+  if (q === "c") return { v: "c", cookie: null }; // variant C (offers op de checkout): enkel via de link ?ab=c van de nieuwe salespagina, geen cookie
   const mode = String(process.env.JJ_CHECKOUT_AB || "50").trim().toLowerCase();
   if (mode === "off" || mode === "a") return { v: "a", cookie: req.cookies.get(AB_COOKIE) ? "clear" : null };
   if (!onCheckoutHost) return { v: "a", cookie: null }; // dashboard-domein (/checkout): standaard A, niet meetellen
@@ -66,7 +67,7 @@ export function middleware(req) {
   if (neuroRoot) {
     const ab = abVariant(req, onCheckoutHost);
     const to = url.clone();
-    to.pathname = ab.v === "b" ? "/checkout/b.html" : "/checkout/index.html";
+    to.pathname = ab.v === "b" ? "/checkout/b.html" : ab.v === "c" ? "/checkout/c.html" : "/checkout/index.html";
     const res = NextResponse.rewrite(to);
     if (ab.cookie === "set") res.cookies.set(AB_COOKIE, ab.v, { path: "/", maxAge: 30 * 86400, sameSite: "lax", secure: true });
     if (ab.cookie === "clear") res.cookies.set(AB_COOKIE, "", { path: "/", maxAge: 0 });
