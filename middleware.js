@@ -17,7 +17,8 @@ export const config = { matcher: ["/((?!_next/|api/|favicon.ico|checkout/|.*\\..
 
 /* A/B-test checkout NeuroTone (2026-10): env JJ_CHECKOUT_AB
      niet gezet / "50"  → 50% variant B, 50% A (een getal 0–100 = % naar B)
-     "off" of "a"       → iedereen A (test uit, cookie wordt gewist)
+     "off"              → iedereen A (test uit, cookie wordt gewist, niet gemeten)
+     "a"                → iedereen A, wél gemeten (cookie jj_ab=a → tag checkout-ab-a): controlegroep voor variant C
      "b"                → iedereen B
    ?ab=a / ?ab=b in de link dwingt een variant af (om te bekijken); ?ab=c = variant C (c.html, 3 offers op de checkout); de cookie jj_ab houdt een bezoeker 30 dagen in
    dezelfde variant. Alleen NeuroTone op de gewone link — /lubrisense, /magnesium, /emorroidi en de /3ds-links
@@ -28,9 +29,9 @@ function abVariant(req, onCheckoutHost) {
   if (q === "a" || q === "b") return { v: q, cookie: "set" };
   if (q === "c") return { v: "c", cookie: null }; // variant C (offers op de checkout): enkel via de link ?ab=c van de nieuwe salespagina, geen cookie
   const mode = String(process.env.JJ_CHECKOUT_AB || "50").trim().toLowerCase();
-  if (mode === "off" || mode === "a") return { v: "a", cookie: req.cookies.get(AB_COOKIE) ? "clear" : null };
+  if (mode === "off") return { v: "a", cookie: req.cookies.get(AB_COOKIE) ? "clear" : null };
   if (!onCheckoutHost) return { v: "a", cookie: null }; // dashboard-domein (/checkout): standaard A, niet meetellen
-  if (mode === "b") return { v: "b", cookie: "set" };
+  if (mode === "a" || mode === "b") return { v: mode, cookie: "set" }; // iedereen A (of B), wel gemeten (tag checkout-ab-a/-b) — bv. als controlegroep voor variant C
   const c = req.cookies.get(AB_COOKIE)?.value;
   if (c === "a" || c === "b") return { v: c, cookie: null };
   const pct = Math.max(0, Math.min(100, parseInt(mode, 10)));
