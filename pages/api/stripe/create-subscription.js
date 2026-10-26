@@ -13,7 +13,7 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor } from "../../../lib/checkout";
+import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor, INSURANCE } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
@@ -57,6 +57,7 @@ export default async function handler(req, res) {
     const MEMBERSHIP = product.membership, PRODUCT_TITLE = product.title;
     const bundle = pickBundleFor(product, b.pack);
     const ship = SHIPPING[b.ship_method] || SHIPPING.insured;
+    const insurance = b.insurance === true || b.insurance === "1" || b.insurance === 1; // verzendverzekering (4,95 €, eenmalig)
 
     const email = clean(b.email, 120).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Inserisci un indirizzo email valido" });
@@ -94,6 +95,8 @@ export default async function handler(req, res) {
       shipping: ship.code,
       amount_frontend: String(bundle.price),
       amount_shipping: String(ship.price),
+      ...(insurance ? { insurance: "1", amount_insurance: String(INSURANCE.price) } : {}),
+      ...(["a", "b"].includes(b.checkout_ab) ? { jj_checkout_ab: b.checkout_ab } : {}), // A/B-test checkout NeuroTone
       ...(clientIp ? { client_ip: clientIp } : {}),
       ...(clientUa ? { client_ua: clientUa } : {}),
     };
@@ -135,6 +138,14 @@ export default async function handler(req, res) {
         product_data: { name: ship.title },
       });
       addInvoiceItems.push({ price: shipPrice, quantity: 1 });
+    }
+    if (insurance) {
+      const insPrice = await getOrCreatePrice(`jj_insurance_${INSURANCE.price}_${V}`, {
+        currency: CURRENCY,
+        unit_amount: INSURANCE.price,
+        product_data: { name: INSURANCE.title },
+      });
+      addInvoiceItems.push({ price: insPrice, quantity: 1 });
     }
 
     // --- klant (hergebruik op e-mail) ---

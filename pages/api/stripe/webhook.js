@@ -11,7 +11,7 @@
 
 import Stripe from "stripe";
 import axios from "axios";
-import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT } from "../../../lib/checkout";
+import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem } from "../../../lib/checkout";
 import { runWithBrand } from "../../../lib/portal-brand";
 import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
@@ -100,6 +100,8 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   if (bundle.gift) tags.push(BUNDLE_GIFT.tag);
   // A/B-test 3DS: aankopen via de aparte 3DS-checkoutlinks herkenbaar in Shopify
   if (md.jj_checkout_variant === "3ds") tags.push(md.jj_3ds === "forced" ? "checkout-3ds-forced" : "checkout-3ds");
+  // A/B-test checkout NeuroTone (variant A = huidige checkout, B = nieuwe): tag voor /api/ab-checkout
+  if (md.jj_checkout_ab === "a" || md.jj_checkout_ab === "b") tags.push(`checkout-ab-${md.jj_checkout_ab}`);
   // Kortingscode in Stripe → zelfde korting op de Shopify-order, zodat de bedragen kloppen
   const discountCents = (invoice.total_discount_amounts || []).reduce((t, d) => t + (d.amount || 0), 0);
 
@@ -134,6 +136,8 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
     order.discountCode = { itemFixedDiscountCode: { code: md.promo_code || "STRIPE", amountSet: { shopMoney: { amount: (discountCents / 100).toFixed(2), currencyCode: "EUR" } } } };
   }
 
+  // Verzendverzekering (4,95 €, aangevinkt op de checkout) → eigen orderregel, zodat de betaling en de order kloppen
+  if (md.insurance === "1") { order.lineItems.push(insuranceLineItem()); order.tags.push("shipping-insurance"); order.note += ` + ${INSURANCE.title} (${(INSURANCE.price / 100).toFixed(2).replace(".", ",")} €)`; }
   // Abandoned-checkout-mail 2: 1 flacone in omaggio
   // Bundel met gratis cadeau (e-book, €0) → zelfde regel als de oude Shopify-cartlink
   if (bundle.gift) { order.lineItems.push(giftLineItem()); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
@@ -243,6 +247,7 @@ export default async function handler(req, res) {
           address: { address1: addr.line1, city: addr.city, zip: addr.postal_code, province: addr.state, country: addr.country || "IT" },
           provider: "stripe", subscriptionId: subscription?.id || subId, stripeCustomerId: custId, qty,
           bundleLabel: (product.bundles[qty] || product.bundles[3]).label, shippingTitle: (SHIPPING[md.shipping] || SHIPPING.insured).title,
+          insurance: md.insurance === "1" ? INSURANCE.price / 100 : 0,
           amountPaid: (inv.amount_paid || 0) / 100, trialEnds: subscription?.trial_end ? subscription.trial_end * 1000 : null,
           orderName: order.name, membershipPrice: product.membership.price / 100, intervalDays: product.membership.intervalDays,
           startedAt: inv.created * 1000, nextChargeAt: subscription?.current_period_end ? subscription.current_period_end * 1000 : null,
