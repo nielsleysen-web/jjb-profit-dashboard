@@ -101,7 +101,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   // A/B-test 3DS: aankopen via de aparte 3DS-checkoutlinks herkenbaar in Shopify
   if (md.jj_checkout_variant === "3ds") tags.push(md.jj_3ds === "forced" ? "checkout-3ds-forced" : "checkout-3ds");
   // A/B-test checkout NeuroTone (variant A = huidige checkout, B = nieuwe): tag voor /api/ab-checkout
-  if (md.jj_checkout_ab === "a" || md.jj_checkout_ab === "b") tags.push(`checkout-ab-${md.jj_checkout_ab}`);
+  if (["a", "b", "c"].includes(md.jj_checkout_ab)) tags.push(`checkout-ab-${md.jj_checkout_ab}`);
   // Kortingscode in Stripe → zelfde korting op de Shopify-order, zodat de bedragen kloppen
   const discountCents = (invoice.total_discount_amounts || []).reduce((t, d) => t + (d.amount || 0), 0);
 

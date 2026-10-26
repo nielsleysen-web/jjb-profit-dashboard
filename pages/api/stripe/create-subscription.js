@@ -96,7 +96,7 @@ export default async function handler(req, res) {
       amount_frontend: String(bundle.price),
       amount_shipping: String(ship.price),
       ...(insurance ? { insurance: "1", amount_insurance: String(INSURANCE.price) } : {}),
-      ...(["a", "b"].includes(b.checkout_ab) ? { jj_checkout_ab: b.checkout_ab } : {}), // A/B-test checkout NeuroTone
+      ...(["a", "b", "c"].includes(b.checkout_ab) ? { jj_checkout_ab: b.checkout_ab } : {}), // A/B-test checkout NeuroTone
       ...(clientIp ? { client_ip: clientIp } : {}),
       ...(clientUa ? { client_ua: clientUa } : {}),
     };
