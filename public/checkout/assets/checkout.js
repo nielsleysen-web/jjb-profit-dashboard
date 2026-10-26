@@ -39,7 +39,7 @@ const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(
    B (b.html, <body data-ab="b">) en zet cookie jj_ab. De variant gaat mee naar Stripe/PayPal → Shopify-tag
    checkout-ab-a / checkout-ab-b; paginaweergaven via /api/checkout/ab-view. Leeg = niet in de test. */
 const AB_VARIANT = (() => {
-  if (document.body && (document.body.dataset.ab === 'b' || document.body.dataset.ab === 'c')) return document.body.dataset.ab; // c = offers op de checkout (c.html)
+  if (document.body && (document.body.dataset.ab === 'b' || document.body.dataset.ab === 'c')) return document.body.dataset.ab; // c = checkout A + 3 offers (c.html)
   if (PRODUCT_KEY !== 'neurotone' || TDS_VARIANT) return '';
   const m = document.cookie.match(/(?:^|;\s*)jj_ab=(a|b)(?:;|$)/);
   return m ? m[1] : '';
@@ -1151,7 +1151,7 @@ function startTimer() {
       return;
     }
     const m = Math.floor(left / 60000), sec = Math.floor((left % 60000) / 1000);
-    clock.textContent = (AB_VARIANT === 'b' || AB_VARIANT === 'c' ? String(m).padStart(2, '0') : String(m)) + ':' + String(sec).padStart(2, '0');
+    clock.textContent = (AB_VARIANT === 'b' ? String(m).padStart(2, '0') : String(m)) + ':' + String(sec).padStart(2, '0');
     setTimeout(tick, 1000 - (Date.now() % 1000));
   };
   tick();
