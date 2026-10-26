@@ -16,13 +16,14 @@ export default async function handler(req, res) {
     // Geen PayPal-plannen voor dit product (Magnesium Freeze: paypal:false, of eenmalig zonder membership)
     const prod = getProduct(b.product);
     if (!prod.membership || prod.paypal === false) return res.status(400).json({ error: "PayPal non disponibile per questo prodotto: paga con carta, Apple Pay o Google Pay." });
-    const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product);
+    const insurance = b.insurance === true || b.insurance === "1" || b.insurance === 1; // verzendverzekering (4,95 €, in de setup fee)
+    const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product, insurance);
     const s = b.shipping || {};
     const full = !!(s.line1 && s.city && /^\d{5}$/.test(String(s.postal_code || "")) && (s.name || b.name));
 
     const body = {
       plan_id: plan.id,
-      custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}, plan.product.key),
+      custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}, plan.product.key, plan.insurance, b.checkout_ab),
       application_context: {
         brand_name: "Just Jenny",
         locale: "it-IT",
