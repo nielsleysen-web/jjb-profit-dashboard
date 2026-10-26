@@ -544,13 +544,19 @@ function summarizeOrders(orders) {
 
     // Shipping van deze order naar rato van de itemomzet over de producten verdelen,
     // zodat productomzet optelt tot de totale omzet
-    const itemsTotal = order.lineItems.nodes.reduce((t, it) => t + parseFloat(it.discountedTotalSet?.shopMoney?.amount || 0), 0);
+    // Verzendverzekering ("Assicurazione spedizione", eigen orderregel zonder product) telt mee als omzet, maar is geen product:
+    // net als de verzending naar rato over de echte producten verdelen
+    const isIns = (it) => /^assicurazione spedizione$/i.test(String(it.product?.title || it.title || "").trim());
+    const insTotal = order.lineItems.nodes.filter(isIns).reduce((t, it) => t + parseFloat(it.discountedTotalSet?.shopMoney?.amount || 0), 0);
+    const itemsTotal = order.lineItems.nodes.filter((it) => !isIns(it)).reduce((t, it) => t + parseFloat(it.discountedTotalSet?.shopMoney?.amount || 0), 0);
+    const spread = ship + insTotal;
     for (const item of order.lineItems.nodes) {
+      if (isIns(item)) continue;
       const title = item.product?.title || item.title;
       const name = productBaseTitle(title).toLowerCase(); // sleutel; de getoonde naam is die van het hoofdproduct
       const itemCogs = lineItemCOGS(item);
       const itemBase = parseFloat(item.discountedTotalSet?.shopMoney?.amount || 0);
-      const itemRevenue = itemBase + (itemsTotal > 0 ? ship * (itemBase / itemsTotal) : 0);
+      const itemRevenue = itemBase + (itemsTotal > 0 ? spread * (itemBase / itemsTotal) : 0);
 
       cogs += itemCogs;
       daily[day].cogs += itemCogs;
