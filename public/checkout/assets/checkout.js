@@ -39,7 +39,7 @@ const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(
    B (b.html, <body data-ab="b">) en zet cookie jj_ab. De variant gaat mee naar Stripe/PayPal → Shopify-tag
    checkout-ab-a / checkout-ab-b; paginaweergaven via /api/checkout/ab-view. Leeg = niet in de test. */
 const AB_VARIANT = (() => {
-  if (document.body && document.body.dataset.ab === 'b') return 'b';
+  if (document.body && (document.body.dataset.ab === 'b' || document.body.dataset.ab === 'c')) return document.body.dataset.ab; // c = offers op de checkout (c.html)
   if (PRODUCT_KEY !== 'neurotone' || TDS_VARIANT) return '';
   const m = document.cookie.match(/(?:^|;\s*)jj_ab=(a|b)(?:;|$)/);
   return m ? m[1] : '';
@@ -139,8 +139,8 @@ const TRACK_KEYS = ['ad_id','adset_id','campaign_id','fbclid','fbc','fbp','vid',
 const PLANS = CONFIG.PAYPAL_PLANS;
 const params = new URLSearchParams(location.search);
 const _pk = params.get('b') || params.get('pack') || params.get('bundle');
-const pack = PACKS[_pk] ? _pk : '3';
-const P = PACKS[pack];
+let pack = PACKS[_pk] ? _pk : '3'; // variant C (c.html) wisselt de bundel op de pagina, zie setPack()
+let P = PACKS[pack];
 
 // InitiateCheckout fires ONCE, from the DOMContentLoaded handler below, with a
 // dedup eventID + matching server CAPI event. (A second, un-deduped IC used to
@@ -1151,10 +1151,20 @@ function startTimer() {
       return;
     }
     const m = Math.floor(left / 60000), sec = Math.floor((left % 60000) / 1000);
-    clock.textContent = (AB_VARIANT === 'b' ? String(m).padStart(2, '0') : String(m)) + ':' + String(sec).padStart(2, '0');
+    clock.textContent = (AB_VARIANT === 'b' || AB_VARIANT === 'c' ? String(m).padStart(2, '0') : String(m)) + ':' + String(sec).padStart(2, '0');
     setTimeout(tick, 1000 - (Date.now() % 1000));
   };
   tick();
+}
+
+/* Variant C: de klant kiest de bundel op de checkout zelf (.offer met radio value=1/3/5). Wisselt pack/P zonder
+   herladen; Stripe/PayPal lezen pack pas bij het betalen, het Google/Apple Pay-bedrag volgt via updateAmounts(). */
+function setPack(k) {
+  if (!PACKS[k]) return;
+  pack = k; P = PACKS[k];
+  $$('.offer').forEach(o => { const r = o.querySelector('input'); const on = !!r && r.value === k; o.classList.toggle('selected', on); if (r) r.checked = on; });
+  try { const u = new URL(location.href); u.searchParams.set('b', k); history.replaceState(history.state, '', u.href); } catch (e) {}
+  updateAmounts();
 }
 
 // A/B-test: één weergave per variant per sessie tellen (noemer voor de conversie)
@@ -1213,6 +1223,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // verzendverzekering
   const insCheck = $('#ins-check');
   if (insCheck) insCheck.addEventListener('change', () => { $('#ins-card').classList.toggle('checked', insCheck.checked); updateAmounts(); });
+
+  // variant C: bundelkeuze op de checkout
+  $$('.offer input').forEach(r => r.addEventListener('change', () => { if (r.checked) setPack(r.value); }));
+  if ($('.offer')) $$('.offer').forEach(o => { const r = o.querySelector('input'); const on = !!r && r.value === pack; o.classList.toggle('selected', on); if (r) r.checked = on; });
 
   // shipping method radios
   $$('.ship-opt input').forEach(r => r.addEventListener('change', () => {
