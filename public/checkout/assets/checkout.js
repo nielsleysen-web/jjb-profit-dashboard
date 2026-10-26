@@ -35,6 +35,15 @@ const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisens
    (of ?ab=3ds) → debit- en prepaidkaarten krijgen bij de eerste betaling een verplichte 3DS-bevestiging.
    De gewone links werken exact zoals voorheen. */
 const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(location.search).get('ab') === '3ds';
+/* A/B-test checkout (NeuroTone): middleware.js verdeelt checkout.getjustjenny.com/ over variant A (index.html) en
+   B (b.html, <body data-ab="b">) en zet cookie jj_ab. De variant gaat mee naar Stripe/PayPal → Shopify-tag
+   checkout-ab-a / checkout-ab-b; paginaweergaven via /api/checkout/ab-view. Leeg = niet in de test. */
+const AB_VARIANT = (() => {
+  if (document.body && document.body.dataset.ab === 'b') return 'b';
+  if (PRODUCT_KEY !== 'neurotone' || TDS_VARIANT) return '';
+  const m = document.cookie.match(/(?:^|;\s*)jj_ab=(a|b)(?:;|$)/);
+  return m ? m[1] : '';
+})();
 const PRODUCT_CONFIG = {
   // Magnesium Freeze: voorlopig met de NeuroTone-membership (Health For Life); geen upsellpagina.
   // NO_MEMBERSHIP: true → eenmalige aankoop (dan ook geen PayPal rechtstreeks).
@@ -150,12 +159,14 @@ function shipCents() { return (SHIP[shipMethod] || SHIP.free).cents; }
 // including the one-time express-shipping item — mirror that here.
 function discountCents() {
   if (!promo) return 0;
-  const base = P.amount + shipCents();
+  const base = P.amount + shipCents() + insCents(); // Stripe past de code toe op de hele eerste factuur, ook op de verzekering
   if (promo.amount_off) return Math.min(promo.amount_off, base);
   if (promo.percent_off) return Math.round(base * promo.percent_off / 100);
   return 0;
 }
-function totalCents() { return P.amount + shipCents() - discountCents(); }
+const INS_PRICE = 495; // verzendverzekering (4,95 €), standaard aangevinkt
+function insCents() { const c = document.getElementById('ins-check'); return c && c.checked ? INS_PRICE : 0; }
+function totalCents() { return P.amount + shipCents() + insCents() - discountCents(); }
 // Wat de membership daarna kost: vol bedrag, tenzij de kortingscode "forever" geldt
 function renewalCents() {
   const M = CONFIG.MEMBERSHIP_CENTS;
@@ -223,7 +234,12 @@ function updateAmounts() {
       el.classList.remove('t-muted');
     }
   });
+  $$('.js-ins-line').forEach(el => el.hidden = !insCents());
+  $$('.js-ins-amt').forEach(el => el.textContent = money(INS_PRICE));
   $$('.js-total').forEach(el => el.textContent = money(totalCents()));
+  // Normale prijs doorgestreept boven het totaal (onderaan op mobiel): totaal + de korting op de bundel
+  const cmpTotal = hasCompare ? totalCents() + (P.compare - P.amount) : 0;
+  $$('.js-total-compare').forEach(el => { el.textContent = cmpTotal ? money(cmpTotal) : ''; el.hidden = !cmpTotal; });
   // Disclosure shows the RECURRING amount, not today's total — a one-off promo or
   // express shipping changes the first charge but not what rebills every 28 days.
   $$('.js-renewal-amt').forEach(el => el.textContent = money(renewalCents()));
@@ -751,7 +767,7 @@ function initPayPal() {
         const r = await fetch('/api/paypal/create-subscription', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            pack, product: PRODUCT_KEY, ship_method: shipMethod, track: attribution(),
+            pack, product: PRODUCT_KEY, ship_method: shipMethod, insurance: insCents() > 0, checkout_ab: AB_VARIANT || undefined, track: attribution(),
             email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh,
           }),
         });
@@ -807,7 +823,7 @@ function keyHash(s) {
 }
 function subCacheKey(customer) {
   return JSON.stringify([
-    pack, shipMethod, promo ? promo.code : '',
+    pack, shipMethod, insCents(), promo ? promo.code : '',
     customer.email || '', customer.name || '', customer.shipping || null,
     customer.card_funding || '', customer.checkout_variant || '', // ander kaarttype → ander 3DS-besluit → nieuw abonnement
   ]);
@@ -829,6 +845,8 @@ function createSubscription(customer) {
         pack,
         product: PRODUCT_KEY,
         ship_method: shipMethod,
+        insurance: insCents() > 0,
+        checkout_ab: AB_VARIANT || undefined,
         promo_code: promo ? promo.code : null,
         track: attribution(),
         // Deterministic per (config): the server uses it as a Stripe idempotency
@@ -973,7 +991,8 @@ function showError(msg) {
   box.hidden = false;
   setBusy(false);
 }
-const PAY_LABEL = 'Sì! Confermo l’ordine!';
+// Tekst van de bestelknop zoals in de HTML (variant A: "Sì! Confermo l’ordine!", variant B: "Completa l’ordine")
+const PAY_LABEL = ((document.getElementById('pay-btn-text') || {}).textContent || 'Sì! Confermo l’ordine!').trim();
 function setBusy(busy) {
   $('#pay-btn').disabled = busy;
   $('#pay-spinner').hidden = !busy;
@@ -1043,7 +1062,7 @@ function saveOrderForThankYou(extra) {
   const shipping = extra.shipping || collectShipping();
   sessionStorage.setItem('checkout_order', JSON.stringify({
     pack, label: P.label,
-    amount: P.amount, discount: discountCents(), shipping_cents: shipCents(), total: totalCents(),
+    amount: P.amount, discount: discountCents(), shipping_cents: shipCents(), insurance_cents: insCents(), total: totalCents(),
     email: extra.email || $('#email').value.trim(),
     name: extra.name || shipping.name,
     first_name: ($('#first-name').value || '').trim(),
@@ -1132,14 +1151,28 @@ function startTimer() {
       return;
     }
     const m = Math.floor(left / 60000), sec = Math.floor((left % 60000) / 1000);
-    clock.textContent = m + ':' + String(sec).padStart(2, '0');
+    clock.textContent = (AB_VARIANT === 'b' ? String(m).padStart(2, '0') : String(m)) + ':' + String(sec).padStart(2, '0');
     setTimeout(tick, 1000 - (Date.now() % 1000));
   };
   tick();
 }
 
+// A/B-test: één weergave per variant per sessie tellen (noemer voor de conversie)
+function abView() {
+  if (!AB_VARIANT) return;
+  try {
+    const k = 'jj_ab_view_' + AB_VARIANT;
+    if (sessionStorage.getItem(k)) return;
+    sessionStorage.setItem(k, '1');
+  } catch (e) {}
+  try {
+    fetch('/api/checkout/ab-view', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ v: AB_VARIANT }) }).catch(() => {});
+  } catch (e) {}
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   startTimer();
+  abView();
   await loadConfig();
   fillCountries($('#country'));
   fillCountries($('#bill-country'));
@@ -1177,6 +1210,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   initPayPal();
   if (CONFIG.STRIPE_PAYPAL && stripe) { $('#pm-paypal').hidden = false; }
 
+  // verzendverzekering
+  const insCheck = $('#ins-check');
+  if (insCheck) insCheck.addEventListener('change', () => { $('#ins-card').classList.toggle('checked', insCheck.checked); updateAmounts(); });
+
   // shipping method radios
   $$('.ship-opt input').forEach(r => r.addEventListener('change', () => {
     shipMethod = r.value;
@@ -1195,11 +1232,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!row.hidden) row.querySelector('input').focus();
   });
 
-  // Total row caret opens the order-summary drawer
+  // Pijltje bij het totaal: overzicht ter plekke open-/dichtklappen, zonder naar boven te springen
+  // (variant A zonder #mt-summary: zoals vroeger de lade bovenaan openen)
   $('#mobile-total').addEventListener('click', () => {
-    const drawer = $('.summary-mobile');
-    drawer.open = !drawer.open;
-    if (drawer.open) drawer.scrollIntoView({ behavior: 'smooth' });
+    const box = $('#mt-summary');
+    if (!box) {
+      const drawer = $('.summary-mobile');
+      drawer.open = !drawer.open;
+      if (drawer.open) drawer.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    box.hidden = !box.hidden;
+    $('#mobile-total').classList.toggle('open', !box.hidden);
   });
 
   // billing address toggle
@@ -1429,7 +1473,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Geen membership (Magnesium Freeze): abonnementstekst onderaan weg → alleen de algemene voorwaarden van de winkel
     if (CONFIG.NO_MEMBERSHIP) {
       $$('.sub-terms').forEach(el => {
-        el.innerHTML = 'Cliccando su «Sì! Confermo l’ordine!» accetto i '
+        el.innerHTML = 'Cliccando su «' + PAY_LABEL + '» accetto i '
           + '<a href="https://www.getjustjenny.com/policies/terms-of-service" target="_blank" rel="noopener">Termini e condizioni</a> '
           + 'e l’<a href="https://www.getjustjenny.com/policies/privacy-policy" target="_blank" rel="noopener">Informativa sulla privacy</a>. '
           + 'Pagamento unico: nessun abbonamento e nessun addebito successivo.';
