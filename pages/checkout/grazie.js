@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { SHIPPING, fmtEur, upsellFor, getProduct, pickBundleFor, BUNDLE_GIFT } from "../../lib/checkout";
+import { SHIPPING, fmtEur, upsellFor, getProduct, pickBundleFor, BUNDLE_GIFT, INSURANCE } from "../../lib/checkout";
 import { QUIZ_INTRO, QUIZZES } from "../../lib/quiz";
 
 // Enquête (post-purchase quiz): vragen + intro in lib/quiz.js (per product). Antwoorden → Google Sheet via /api/checkout-quiz.
@@ -48,7 +48,8 @@ const PREVIEW = {
   created: Math.floor(Date.now() / 1000),
   qty: 3,
   shipping: "insured",
-  amountPaid: 5390,
+  insurance: 495,
+  amountPaid: 5885,
   email: "mario.rossi@example.it",
   name: "Mario Rossi",
   phone: "3331234567",
@@ -255,7 +256,8 @@ export default function Grazie() {
   const ship = SHIPPING[data?.shipping] || SHIPPING.insured;
   const UPSELL = upsellFor(product.key);
   const hasUpsell = !!(data?.order?.upsell || q?.up);
-  const total = (data?.amountPaid ?? bundle.price + ship.price) + (hasUpsell ? UPSELL.price : 0);
+  const insurance = Number(data?.insurance) || 0; // verzendverzekering (centen), 0 als niet gekozen
+  const total = (data?.amountPaid ?? bundle.price + ship.price + insurance) + (hasUpsell ? UPSELL.price : 0);
   const date = fmtDate(data?.created || Math.floor(Date.now() / 1000));
   const addr = data?.address || {};
 
@@ -389,6 +391,7 @@ export default function Grazie() {
               <div style={{ marginTop: "26px" }}>
                 <div className="gz-line"><span>Subtotale</span><span>{fmtEur(bundle.price + (hasUpsell ? UPSELL.price : 0))}</span></div>
                 <div className="gz-line"><span>Spedizione</span><span>{ship.price ? fmtEur(ship.price) : "Gratuita"}</span></div>
+                {insurance > 0 && <div className="gz-line"><span>{INSURANCE.title}</span><span>{fmtEur(insurance)}</span></div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "14px" }}>
                   <span style={{ fontSize: "18px", fontWeight: 700 }}>Totale</span>
                   <span><span style={{ fontSize: "12px", color: "#6b6b6b", marginRight: "6px" }}>EUR</span><b style={{ fontSize: "19px" }}>{fmtEur(total)}</b></span>
