@@ -584,3 +584,29 @@ h2 + .fld { margin-top: 0; }
 .express-row > div{flex:1;min-width:0}
 .express-row > div:empty{display:none}
 .paypal-container{margin:0}
+
+/* v15: timer onder de snelle knoppen (compact, gecentreerd) + garantiebadges eronder, ook op desktop */
+.jj-timer{justify-content:center;margin:16px 0 0;padding:13px 14px;font-size:15px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;color:#7a1414}
+.jj-timer.done{text-transform:none;letter-spacing:0;font-weight:600}
+.trust-row.trust-top{margin:16px 0 4px;gap:8px}
+.trust-row.trust-top .trust-item{background:none;border:0;padding:4px 2px;gap:8px;font-size:12.5px;color:#1a1a1a;line-height:1.3}
+.trust-row.trust-top .trust-item svg{width:50px;height:50px;color:#1a1a1a}
+.trust-row.trust-top .trust-item b{font-size:12.5px;font-weight:600;color:#1a1a1a}
+@media(max-width:430px){.trust-row.trust-top{flex-direction:row;gap:6px}.trust-row.trust-top .trust-item{flex-direction:column;text-align:center;padding:4px 0;font-size:12px}.trust-row.trust-top .trust-item b{font-size:12px}.trust-row.trust-top .trust-item svg{width:46px;height:46px}}
+@media(max-width:640px){.jj-timer{font-size:14px;padding:12px 10px}}
+
+/* v15: verzendverzekering onder de verzendmethode */
+.ins-block{margin-top:20px}
+.ins-head{font-size:16px;font-weight:700;color:var(--ink);margin:0 0 12px}
+.ins-card{display:flex;align-items:flex-start;gap:16px;padding:14px 14px 16px;border:1px solid var(--border-input);border-radius:10px;cursor:pointer;position:relative;background:#fff}
+.ins-card input{position:absolute;opacity:0;width:0;height:0}
+.ins-badge{flex:none;width:100px;height:100px;border-radius:8px;background:#4e7a2b;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:700;letter-spacing:.02em;line-height:1.2;text-align:center;padding:0 4px}
+.ins-badge svg{width:56px;height:56px}
+.ins-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:14.5px;line-height:1.45;color:#555}
+.ins-title{font-size:17px;font-weight:700;color:var(--ink);line-height:1.3;padding-right:36px;margin-bottom:2px}
+.ins-sub{color:#555}
+.ins-desc{color:#555}
+.ins-tick{position:absolute;top:14px;right:14px;width:28px;height:28px;border-radius:7px;background:#e4e4e4;display:flex;align-items:center;justify-content:center}
+.ins-tick svg{width:18px;height:18px}
+.ins-card.checked .ins-tick{background:#4e7a2b}
+@media(max-width:430px){.ins-card{gap:12px;padding:12px 12px 14px}.ins-badge{width:76px;height:76px;font-size:8.5px;gap:2px}.ins-badge svg{width:42px;height:42px}.ins-title{font-size:15.5px;padding-right:32px}.ins-text{font-size:13.5px;line-height:1.42}.ins-tick{top:12px;right:12px;width:26px;height:26px}}

@@ -155,7 +155,9 @@ function discountCents() {
   if (promo.percent_off) return Math.round(base * promo.percent_off / 100);
   return 0;
 }
-function totalCents() { return P.amount + shipCents() - discountCents(); }
+const INS_PRICE = 495; // verzendverzekering (4,95 €), standaard aangevinkt
+function insCents() { const c = document.getElementById('ins-check'); return c && c.checked ? INS_PRICE : 0; }
+function totalCents() { return P.amount + shipCents() + insCents() - discountCents(); }
 // Wat de membership daarna kost: vol bedrag, tenzij de kortingscode "forever" geldt
 function renewalCents() {
   const M = CONFIG.MEMBERSHIP_CENTS;
@@ -223,6 +225,8 @@ function updateAmounts() {
       el.classList.remove('t-muted');
     }
   });
+  $$('.js-ins-line').forEach(el => el.hidden = !insCents());
+  $$('.js-ins-amt').forEach(el => el.textContent = money(INS_PRICE));
   $$('.js-total').forEach(el => el.textContent = money(totalCents()));
   // Disclosure shows the RECURRING amount, not today's total — a one-off promo or
   // express shipping changes the first charge but not what rebills every 28 days.
@@ -1132,7 +1136,7 @@ function startTimer() {
       return;
     }
     const m = Math.floor(left / 60000), sec = Math.floor((left % 60000) / 1000);
-    clock.textContent = m + ':' + String(sec).padStart(2, '0');
+    clock.textContent = String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
     setTimeout(tick, 1000 - (Date.now() % 1000));
   };
   tick();
@@ -1176,6 +1180,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   initStripe();
   initPayPal();
   if (CONFIG.STRIPE_PAYPAL && stripe) { $('#pm-paypal').hidden = false; }
+
+  // verzendverzekering
+  const insCheck = $('#ins-check');
+  if (insCheck) insCheck.addEventListener('change', () => { $('#ins-card').classList.toggle('checked', insCheck.checked); updateAmounts(); });
 
   // shipping method radios
   $$('.ship-opt input').forEach(r => r.addEventListener('change', () => {
