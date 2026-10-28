@@ -465,8 +465,8 @@ h2 + .fld { margin-top: 0; }
 .pay-btn{background:#87b995}
 .pay-btn:hover{background:#76ab85}
 /* UrinaPatches (CONFIG.PAY_LABEL → body.pay-dark): donkerdere, opvallendere groene bestelknop */
-body.pay-dark .pay-btn{background:#1b8f4e;box-shadow:0 4px 14px rgba(27,143,78,.28)}
-body.pay-dark .pay-btn:hover{background:#167a42}
+body.pay-dark .pay-btn{background:#0d4f2c}
+body.pay-dark .pay-btn:hover{background:#093a20}
 
 /* v7: kleiner logo, sterren in blokjes (Trustpilot-stijl), icoontjes in de balk */
 .jj-logo{height:22px}
