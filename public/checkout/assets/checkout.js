@@ -72,10 +72,20 @@ const PRODUCT_CONFIG = {
     SUCCESS_PATH: '/checkout/grazie',
     MEMBERSHIP_NAME: 'Just Jenny Daily Comfort Membership',
     META_CONTENT_IDS: ['10685715448074'],
+    PAY_LABEL: 'Completa l’ordine', // eigen knoptekst + donkerdere groene knop (body.pay-dark, checkout.css)
   },
 };
 CONFIG.MEMBERSHIP_NAME = 'Just Jenny Health For Life Membership';
 Object.assign(CONFIG, PRODUCT_CONFIG[PRODUCT_KEY] || {});
+// Eigen knoptekst per product (vóór PAY_LABEL hieronder uit de DOM wordt gelezen): knop + voorwaardentekst
+if (CONFIG.PAY_LABEL) {
+  const bt = document.getElementById('pay-btn-text');
+  if (bt && bt.textContent.trim() !== CONFIG.PAY_LABEL) {
+    document.querySelectorAll('.sub-terms').forEach(el => { el.innerHTML = el.innerHTML.split('«' + bt.textContent.trim() + '»').join('«' + CONFIG.PAY_LABEL + '»'); });
+    bt.textContent = CONFIG.PAY_LABEL;
+  }
+  document.body.classList.add('pay-dark');
+}
 const PQ = PRODUCT_KEY === 'neurotone' ? '' : '&p=' + PRODUCT_KEY; // gaat mee naar de bedankpagina
 
 /* ---- Client error logging ---------------------------------------------------
