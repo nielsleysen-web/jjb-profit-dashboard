@@ -30,7 +30,8 @@ const CONFIG = {
 const _pq = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
 const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisense') ? 'lubrisense'
   : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium'
-  : (/emorroidi/i.test(location.pathname) || _pq === 'emorroidi') ? 'emorroidi' : 'neurotone';
+  : (/emorroidi/i.test(location.pathname) || _pq === 'emorroidi') ? 'emorroidi'
+  : (/urinapatches/i.test(location.pathname) || _pq === 'urinapatches') ? 'urinapatches' : 'neurotone';
 /* A/B-test 3D Secure: de aparte links checkout.getjustjenny.com/3ds, /lubrisense/3ds, /magnesium/3ds en /emorroidi/3ds
    (of ?ab=3ds) → debit- en prepaidkaarten krijgen bij de eerste betaling een verplichte 3DS-bevestiging.
    De gewone links werken exact zoals voorheen. */
@@ -64,6 +65,13 @@ const PRODUCT_CONFIG = {
     SUCCESS_PATH: '/checkout/grazie',
     MEMBERSHIP_NAME: 'Just Jenny Comfort Care Membership',
     META_CONTENT_IDS: ['10602127065354'],
+  },
+  // UrinaPatches: eigen membership (zelfde voorwaarden), zonder upsellpagina
+  urinapatches: {
+    PRODUCT_NAME: 'UrinaPatches',
+    SUCCESS_PATH: '/checkout/grazie',
+    MEMBERSHIP_NAME: 'Just Jenny Daily Comfort Membership',
+    META_CONTENT_IDS: ['10685715448074'],
   },
 };
 CONFIG.MEMBERSHIP_NAME = 'Just Jenny Health For Life Membership';
@@ -123,7 +131,13 @@ const PACKS_EMORROIDI = {
   3: { label: '3x Emorroidi Cerotti™', amount: 4995, compare: 18000, save: 13005, savePct: 72, img: IMG + MF + '3_53ea0f9e-d272-4b65-b25d-4679da9f597c.png?v=1787828802&width=240' },
   5: { label: '5x Emorroidi Cerotti™', amount: 5995, compare: 30000, save: 24005, savePct: 80, img: IMG + MF + '4_27df4bba-5842-4628-abc1-01dd1c406bd4.png?v=1787828802&width=240', gift: true },
 };
-const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PACKS_NEUROTONE;
+// UrinaPatches (Shopify-product 10685715448074): alleen 1/3/5, geen doorstreepprijs in Shopify
+const PACKS_URINAPATCHES = {
+  1: { label: '1x UrinaPatches™', amount: 2995, compare: 0, save: 0, savePct: 0, img: IMG + '11.webp?v=1793144295&width=240' },
+  3: { label: '3x UrinaPatches™', amount: 3995, compare: 0, save: 0, savePct: 0, img: IMG + '12.webp?v=1793144295&width=240' },
+  5: { label: '5x UrinaPatches™', amount: 4495, compare: 0, save: 0, savePct: 0, img: IMG + '13.webp?v=1793144295&width=240' },
+};
+const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
   free:    { cents: 0,   title: 'Standard (5-8 giorni lavorativi)' },
@@ -1377,6 +1391,7 @@ const COPY_GIFT = {
 if (PRODUCT_KEY === 'lubrisense') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName = '1x LubriSense'; }
 if (PRODUCT_KEY === 'magnesium') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName = '1x Magnesium Freeze'; }
 if (PRODUCT_KEY === 'emorroidi') { COPY_GIFT.value = 2995; COPY_GIFT.bonusName = '1x Emorroidi Cerotti'; }
+if (PRODUCT_KEY === 'urinapatches') { COPY_GIFT.value = 2995; COPY_GIFT.bonusName = '1x UrinaPatches'; }
 const GIFT = params.get('gift') === '1';
 const BONUS = params.get('bonus') === '1'; // mail 2: 1 flacone in omaggio (+ regalo segreto)
 const _sentEmails = new Set();
@@ -1497,7 +1512,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.title = 'Checkout — ' + CONFIG.PRODUCT_NAME + ' — Just Jenny';
       // LubriSense/Emorroidi: eigen voorwaarden; de NeuroTone-membershippagina past niet (opzeggen staat in de voorwaarden).
       // Magnesium Freeze heeft (voorlopig) de NeuroTone-membership → gewoon de NeuroTone-pagina's.
-      if (PRODUCT_KEY === 'lubrisense' || PRODUCT_KEY === 'emorroidi') {
+      if (PRODUCT_KEY === 'lubrisense' || PRODUCT_KEY === 'emorroidi' || PRODUCT_KEY === 'urinapatches') {
         $$('a[href^="/checkout/termini"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY; });
         $$('a[href^="/checkout/membership"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY + '#membership'; });
       }
