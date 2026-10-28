@@ -131,11 +131,11 @@ const PACKS_EMORROIDI = {
   3: { label: '3x Emorroidi Cerotti™', amount: 4995, compare: 18000, save: 13005, savePct: 72, img: IMG + MF + '3_53ea0f9e-d272-4b65-b25d-4679da9f597c.png?v=1787828802&width=240' },
   5: { label: '5x Emorroidi Cerotti™', amount: 5995, compare: 30000, save: 24005, savePct: 80, img: IMG + MF + '4_27df4bba-5842-4628-abc1-01dd1c406bd4.png?v=1787828802&width=240', gift: true },
 };
-// UrinaPatches (Shopify-product 10685715448074): alleen 1/3/5, geen doorstreepprijs in Shopify
+// UrinaPatches (Shopify-product 10685715448074): alleen 1/3/5; doorstreepprijs 60 € per stuk, zoals NeuroTone
 const PACKS_URINAPATCHES = {
-  1: { label: '1x UrinaPatches™', amount: 2995, compare: 0, save: 0, savePct: 0, img: IMG + '11.webp?v=1793144295&width=240' },
-  3: { label: '3x UrinaPatches™', amount: 3995, compare: 0, save: 0, savePct: 0, img: IMG + '12.webp?v=1793144295&width=240' },
-  5: { label: '5x UrinaPatches™', amount: 4495, compare: 0, save: 0, savePct: 0, img: IMG + '13.webp?v=1793144295&width=240' },
+  1: { label: '1x UrinaPatches™', amount: 2995, compare: 6000, save: 3005, savePct: 50, img: IMG + '11.webp?v=1793144295&width=240' },
+  3: { label: '3x UrinaPatches™', amount: 3995, compare: 18000, save: 14005, savePct: 78, img: IMG + '12.webp?v=1793144295&width=240' },
+  5: { label: '5x UrinaPatches™', amount: 4495, compare: 30000, save: 25505, savePct: 85, img: IMG + '13.webp?v=1793144295&width=240' },
 };
 const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
