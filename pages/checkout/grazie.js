@@ -37,8 +37,10 @@ const MF = "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/Comeotorinola
 const MAGNESIUM_IMG = { 1: MF + "4.png?v=1786453406&width=240", 2: MF + "7.png?v=1786453405&width=240", 3: MF + "6.png?v=1786453406&width=240", 5: MF + "5.png?v=1786453406&width=240" };
 // Emorroidi Cerotti™ (checkout.getjustjenny.com/emorroidi, eigen membership): foto's uit Shopify-product 10602127065354
 const EMORROIDI_IMG = { 1: MF + "1_faf2ffad-e1e4-41ac-9f1b-5a0f7e859dc5.png?v=1787828803&width=240", 2: MF + "2_7d9c8636-c5be-4c96-8530-106a94542664.png?v=1787828803&width=240", 3: MF + "3_53ea0f9e-d272-4b65-b25d-4679da9f597c.png?v=1787828802&width=240", 5: MF + "4_27df4bba-5842-4628-abc1-01dd1c406bd4.png?v=1787828802&width=240" };
-const IMGS = { neurotone: BUNDLE_IMG, lubrisense: LUBRI_IMG, magnesium: MAGNESIUM_IMG, emorroidi: EMORROIDI_IMG };
-const CHECKOUT_PATH = { neurotone: "/checkout?", lubrisense: "/checkout?p=lubrisense&", magnesium: "/checkout?p=magnesium&", emorroidi: "/checkout?p=emorroidi&" };
+// UrinaPatches (checkout.getjustjenny.com/urinapatches, eigen membership): foto's uit Shopify-product 10685715448074 (1/3/5; 2 = foto van 3)
+const URINA_IMG = { 1: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/11.webp?v=1793144295&width=240", 2: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/12.webp?v=1793144295&width=240", 3: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/12.webp?v=1793144295&width=240", 5: "https://cdn.shopify.com/s/files/1/0901/0606/9258/files/13.webp?v=1793144295&width=240" };
+const IMGS = { neurotone: BUNDLE_IMG, lubrisense: LUBRI_IMG, magnesium: MAGNESIUM_IMG, emorroidi: EMORROIDI_IMG, urinapatches: URINA_IMG };
+const CHECKOUT_PATH = { neurotone: "/checkout?", lubrisense: "/checkout?p=lubrisense&", magnesium: "/checkout?p=magnesium&", emorroidi: "/checkout?p=emorroidi&", urinapatches: "/checkout?p=urinapatches&" };
 
 const BRAND = { amex: "American Express", visa: "Visa", mastercard: "Mastercard", maestro: "Maestro", discover: "Discover", jcb: "JCB", unionpay: "UnionPay", diners: "Diners Club" };
 const WALLET = { apple_pay: "Apple Pay", google_pay: "Google Pay", link: "Link" };
