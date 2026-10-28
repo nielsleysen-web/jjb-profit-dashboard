@@ -619,3 +619,20 @@ h2 + .fld { margin-top: 0; }
 .mt-summary{margin-top:14px;padding:14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--summary-bg)}
 .mt-summary .discount-row,.mt-summary .discount-msg,.mt-summary .sum-trust{display:none}
 .mt-summary .totals{margin-top:14px}
+
+/* ---------- UrinaPatches: vertrouwensblok (garanties + Trustpilot-reviews) — template #trust-urinapatches ---------- */
+.trustbox{margin-top:22px;background:#fff;border:1px solid #e3e3e3;border-radius:12px;padding:16px 16px 14px}
+.trustbox .tr-row{display:flex;gap:12px;align-items:flex-start;margin-bottom:13px}.trustbox .tr-row:last-child{margin-bottom:0}
+.trustbox .tr-ic{flex:none;width:34px;height:34px;border-radius:50%;background:#e8f1ef;color:var(--accent);display:flex;align-items:center;justify-content:center}.trustbox .tr-ic svg{width:20px;height:20px}
+.trustbox .tr-row b{display:block;font-size:13.5px;color:#1a1a1a;line-height:1.3}.trustbox .tr-row small{display:block;font-size:12px;color:#666;line-height:1.4;margin-top:2px}
+.trustbox .tps{display:inline-flex;gap:2px}.trustbox .tps i{width:18px;height:18px;background:#00b67a;display:inline-flex;align-items:center;justify-content:center}.trustbox .tps i svg{width:13px;height:13px}
+.trustbox .tps.sm i{width:14px;height:14px}.trustbox .tps.sm i svg{width:10px;height:10px}
+.trustbox .tp-head{display:flex;align-items:center;justify-content:center;gap:9px;margin:16px 0 12px;padding-top:14px;border-top:1px solid #eee}.trustbox .tp-head b{font-size:15px}
+.trustbox .tpl{display:inline-flex;align-items:center;gap:3px;font-weight:700;font-size:13.5px;color:#191919}.trustbox .tpl i{color:#00b67a;font-style:normal;font-size:16px}
+.trustbox .rv-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.trustbox .rv{border:1px solid #e6e6e6;border-radius:8px;padding:11px 11px 10px;background:#fff}.trustbox .rv b{display:block;font-size:12.5px;margin:7px 0 4px;color:#1a1a1a}.trustbox .rv p{font-size:12px;color:#444;line-height:1.45;margin:0}
+.trustbox .rv-n{display:block;margin-top:8px;font-size:11px;color:#777;font-style:italic}.trustbox .rv-n em{font-style:normal;color:#00a36c;margin-left:4px}
+.trustbox .tp-foot{text-align:center;font-size:11.5px;color:#666;margin-top:10px}
+.trustbox.mob{margin-top:14px}.trustbox.mob .rv-grid{grid-template-columns:1fr}
+@media (min-width:1000px){.trustbox.mob{display:none}}
+.summary-mobile .trustbox{display:none}

@@ -218,6 +218,17 @@ function addBundleGift(slot) {
   prod.parentNode.insertBefore(row, prod.nextSibling);
 }
 
+/* UrinaPatches: vertrouwensblok uit <template id="trust-urinapatches"> (index.html) — rechterkolom i.p.v. .sum-trust,
+   op mobiel onder de bestelknop i.p.v. .trust-row. Andere producten: null (niets verandert). */
+function trustBlock(mobile) {
+  if (PRODUCT_KEY !== 'urinapatches') return null;
+  const t = $('#trust-urinapatches');
+  if (!t) return null;
+  const el = t.content.firstElementChild.cloneNode(true);
+  if (mobile) el.classList.add('mob');
+  return el;
+}
+
 /* ---------- Render order summary into both slots ---------- */
 function renderSummaries() {
   const tpl = $('#summary-template');
@@ -226,6 +237,9 @@ function renderSummaries() {
     slot.appendChild(tpl.content.cloneNode(true));
     slot.querySelectorAll('.prod-name').forEach(el => { el.textContent = CONFIG.PRODUCT_NAME; });
     if (P.gift) addBundleGift(slot);
+    // UrinaPatches: vertrouwensblok (garanties + Trustpilot-reviews) i.p.v. de vinkjes
+    const tb = trustBlock(); const st = slot.querySelector('.sum-trust');
+    if (tb && st) st.replaceWith(tb);
   });
   wireDiscountInputs();
   updateAmounts();
@@ -1237,6 +1251,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // verzendverzekering
   const insCheck = $('#ins-check');
   if (insCheck) insCheck.addEventListener('change', () => { $('#ins-card').classList.toggle('checked', insCheck.checked); updateAmounts(); });
+
+  // UrinaPatches: vertrouwensblok onder de bestelknop (mobiel) i.p.v. de kleine badges
+  const tbm = trustBlock(true); const trow = $('#pay-btn') && $('#pay-btn').parentNode.querySelector('.trust-row:not(.trust-top)');
+  if (tbm && trow) trow.replaceWith(tbm);
 
   // variant C: bundelkeuze op de checkout
   $$('.offer input').forEach(r => r.addEventListener('change', () => { if (r.checked) setPack(r.value); }));
