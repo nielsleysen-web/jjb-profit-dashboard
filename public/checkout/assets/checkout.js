@@ -243,11 +243,10 @@ function addBundleGift(slot) {
   prod.parentNode.insertBefore(row, prod.nextSibling);
 }
 
-/* UrinaPatches: vertrouwensblok uit <template id="trust-urinapatches"> (index.html) — rechterkolom i.p.v. .sum-trust,
-   op mobiel onder de bestelknop i.p.v. .trust-row. Andere producten: null (niets verandert). */
+/* Vertrouwensblok per product uit <template id="trust-<product>"> (index.html: urinapatches, pumpkinseed) — rechterkolom
+   i.p.v. .sum-trust, op mobiel onder de bestelknop i.p.v. .trust-row. Producten zonder template: null (niets verandert). */
 function trustBlock(mobile) {
-  if (PRODUCT_KEY !== 'urinapatches') return null;
-  const t = $('#trust-urinapatches');
+  const t = document.getElementById('trust-' + PRODUCT_KEY);
   if (!t) return null;
   const el = t.content.firstElementChild.cloneNode(true);
   if (mobile) el.classList.add('mob');
