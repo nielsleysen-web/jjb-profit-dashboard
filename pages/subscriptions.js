@@ -162,7 +162,7 @@ function DueToday({ rows }) {
 /* ---------- Next 14 days: renewals due per day, stacked per product ----------
    Slim capsule columns on a soft track, 2px white gaps between products, grow-in animation,
    dashed daily average, hover card. Colours validated for colour-blind separation (dataviz validator). */
-const PRODUCTS = [["neurotone", "NeuroTone", "#4f6df5"], ["magnesium", "Magnesium Freeze", "#1baf7a"], ["lubrisense", "LubriSense", "#e87ba4"], ["emorroidi", "Emorroidi Cerotti", "#d98a1f"], ["urinapatches", "UrinaPatches", "#0ea5b7"]];
+const PRODUCTS = [["neurotone", "NeuroTone", "#4f6df5"], ["magnesium", "Magnesium Freeze", "#1baf7a"], ["lubrisense", "LubriSense", "#e87ba4"], ["emorroidi", "Emorroidi Cerotti", "#d98a1f"], ["urinapatches", "UrinaPatches", "#0ea5b7"], ["pumpkinseed", "Pumpkin Seed Drops", "#d97706"]];
 const prodMeta = (k) => PRODUCTS.find((p) => p[0] === k) || [k, k, "#94a3b8"];
 const fmtDay = (d, o = { day: "numeric", month: "short" }) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { ...o, timeZone: "UTC" });
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
