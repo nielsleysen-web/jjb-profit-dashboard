@@ -42,9 +42,10 @@ export default function Termini() {
   // ?p=emorroidi → Comfort Care Membership (Emorroidi Cerotti): zelfde voorwaarden, nog geen ledenportaal → beheer via e-mail
   const [prod, setProd] = useState("neurotone");
   // ?p=urinapatches → Daily Comfort Membership (UrinaPatches): zelfde voorwaarden als Emorroidi, geen ledenportaal → beheer via e-mail
-  useEffect(() => { const q = (new URLSearchParams(window.location.search).get("p") || "").toLowerCase(); setProd(q === "lubrisense" || q === "emorroidi" || q === "urinapatches" ? q : "neurotone"); }, []);
-  const lubri = prod === "lubrisense", urina = prod === "urinapatches", emor = prod === "emorroidi" || urina; // emor = zonder portaal
-  const MNAME = lubri ? "Intimate Care Membership" : urina ? "Daily Comfort Membership" : emor ? "Comfort Care Membership" : "Health For Life Membership";
+  useEffect(() => { const q = (new URLSearchParams(window.location.search).get("p") || "").toLowerCase(); setProd(q === "lubrisense" || q === "emorroidi" || q === "urinapatches" || q === "pumpkinseed" ? q : "neurotone"); }, []);
+  // ?p=pumpkinseed → Daily Wellness Membership (Pumpkin Seed Drops): zoals UrinaPatches, geen ledenportaal
+  const lubri = prod === "lubrisense", urina = prod === "urinapatches", pumpkin = prod === "pumpkinseed", emor = prod === "emorroidi" || urina || pumpkin; // emor = zonder portaal
+  const MNAME = lubri ? "Intimate Care Membership" : urina ? "Daily Comfort Membership" : pumpkin ? "Daily Wellness Membership" : emor ? "Comfort Care Membership" : "Health For Life Membership";
   const PORTAL = lubri ? PORTAL_LUBRI : PORTAL_NT;
   return (
     <>
@@ -120,7 +121,7 @@ export default function Termini() {
           <p>La garanzia soddisfatti o rimborsati di 90 giorni si applica esclusivamente ai prodotti <b>non aperti</b>, con sigillo integro, restituiti entro 90 giorni dalla data dell'ordine. I prodotti consumabili che sono stati aperti non possono essere restituiti né rimborsati, per motivi di igiene e sicurezza. Per avviare una richiesta di rimborso, scrivi a <a href={`mailto:${EMAIL}`}>{EMAIL}</a> indicando il numero d'ordine: riceverai le istruzioni per la restituzione. Il rimborso viene elaborato sul metodo di pagamento originale dopo la ricezione e la verifica dei prodotti restituiti.</p>
 
           <h2 id="prodotti">Prodotti</h2>
-          <p>{lubri ? "LubriSense" : urina ? "UrinaPatches" : emor ? "Emorroidi Cerotti" : "NeuroTone Drops"} è un prodotto per il benessere e non è un medicinale né un dispositivo medico; non è destinato a diagnosticare, trattare, curare o prevenire alcuna malattia. In caso di disturbi persistenti, consulta il tuo medico.</p>
+          <p>{lubri ? "LubriSense" : urina ? "UrinaPatches" : pumpkin ? "Pumpkin Seed Drops" : emor ? "Emorroidi Cerotti" : "NeuroTone Drops"} è un prodotto per il benessere e non è un medicinale né un dispositivo medico; non è destinato a diagnosticare, trattare, curare o prevenire alcuna malattia. In caso di disturbi persistenti, consulta il tuo medico.</p>
           <p>Alcuni prodotti o servizi possono essere disponibili esclusivamente online tramite il sito. Tali prodotti o servizi possono avere quantità limitate e sono soggetti a restituzione o sostituzione esclusivamente in conformità alla nostra Garanzia soddisfatti o rimborsati di cui sopra. Abbiamo fatto il possibile per mostrare nel modo più accurato i colori e le immagini dei nostri prodotti; non possiamo garantire che la visualizzazione sul tuo schermo sia esatta. Ci riserviamo il diritto, senza esserne obbligati, di limitare la vendita dei nostri prodotti o Servizi a qualsiasi persona, area geografica o giurisdizione, caso per caso, e di limitare le quantità dei prodotti o servizi offerti. Tutte le descrizioni e i prezzi dei prodotti sono soggetti a modifica in qualsiasi momento senza preavviso, a nostra esclusiva discrezione. Ci riserviamo il diritto di interrompere la vendita di qualsiasi prodotto in qualsiasi momento. Qualsiasi offerta di prodotti o servizi presente su questo sito è nulla ove vietata.</p>
 
           <h2 id="sms">Comunicazioni via SMS</h2>
