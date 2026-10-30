@@ -11,7 +11,7 @@
 
 import Stripe from "stripe";
 import axios from "axios";
-import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem } from "../../../lib/checkout";
+import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem, bumpFor, bumpLineItem } from "../../../lib/checkout";
 import { runWithBrand } from "../../../lib/portal-brand";
 import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
@@ -102,6 +102,8 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   if (md.jj_checkout_variant === "3ds") tags.push(md.jj_3ds === "forced" ? "checkout-3ds-forced" : "checkout-3ds");
   // A/B-test checkout NeuroTone (variant A = huidige checkout, B = nieuwe): tag voor /api/ab-checkout
   if (["a", "b", "c"].includes(md.jj_checkout_ab)) tags.push(`checkout-ab-${md.jj_checkout_ab}`);
+  // A/B-test order bump (UrinaPatches, Spray Neutralizzante): tag voor /api/ab-bump
+  if (["a", "b"].includes(md.jj_bump_ab)) tags.push(`bump-ab-${md.jj_bump_ab}`);
   // Kortingscode in Stripe → zelfde korting op de Shopify-order, zodat de bedragen kloppen
   const discountCents = (invoice.total_discount_amounts || []).reduce((t, d) => t + (d.amount || 0), 0);
 
@@ -138,6 +140,9 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
 
   // Verzendverzekering (4,95 €, aangevinkt op de checkout) → eigen orderregel, zodat de betaling en de order kloppen
   if (md.insurance === "1") { order.lineItems.push(insuranceLineItem()); order.tags.push("shipping-insurance"); order.note += ` + ${INSURANCE.title} (${(INSURANCE.price / 100).toFixed(2).replace(".", ",")} €)`; }
+  // Order bump (Spray Neutralizzante 9,95 €, "Aggiungi" op de checkout) → eigen productregel op dezelfde order
+  const BUMP = bumpFor(product.key);
+  if (BUMP && md.bump === BUMP.key) { order.lineItems.push(bumpLineItem(BUMP)); order.tags.push(BUMP.tag); order.note += ` + ${BUMP.title} (${(BUMP.price / 100).toFixed(2).replace(".", ",")} €)`; }
   // Abandoned-checkout-mail 2: 1 flacone in omaggio
   // Bundel met gratis cadeau (e-book, €0) → zelfde regel als de oude Shopify-cartlink
   if (bundle.gift) { order.lineItems.push(giftLineItem()); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }

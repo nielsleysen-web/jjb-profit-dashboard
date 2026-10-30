@@ -13,7 +13,7 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor, INSURANCE } from "../../../lib/checkout";
+import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
@@ -58,6 +58,10 @@ export default async function handler(req, res) {
     const bundle = pickBundleFor(product, b.pack);
     const ship = SHIPPING[b.ship_method] || SHIPPING.insured;
     const insurance = b.insurance === true || b.insurance === "1" || b.insurance === 1; // verzendverzekering (4,95 €, eenmalig)
+    // Order bump (UrinaPatches: Spray Neutralizzante 9,95 €, A/B-test) — alleen voor producten met een bump
+    const BUMP = bumpFor(product.key);
+    const bump = !!BUMP && (b.bump === true || b.bump === "1" || b.bump === 1);
+    const bumpAb = BUMP && ["a", "b"].includes(b.bump_ab) ? b.bump_ab : "";
 
     const email = clean(b.email, 120).toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Inserisci un indirizzo email valido" });
@@ -96,6 +100,8 @@ export default async function handler(req, res) {
       amount_frontend: String(bundle.price),
       amount_shipping: String(ship.price),
       ...(insurance ? { insurance: "1", amount_insurance: String(INSURANCE.price) } : {}),
+      ...(bump ? { bump: BUMP.key, amount_bump: String(BUMP.price) } : {}),
+      ...(bumpAb ? { jj_bump_ab: bumpAb } : {}), // A/B-test order bump (a = zonder, b = met bump getoond)
       ...(["a", "b", "c"].includes(b.checkout_ab) ? { jj_checkout_ab: b.checkout_ab } : {}), // A/B-test checkout NeuroTone
       ...(clientIp ? { client_ip: clientIp } : {}),
       ...(clientUa ? { client_ua: clientUa } : {}),
@@ -146,6 +152,14 @@ export default async function handler(req, res) {
         product_data: { name: INSURANCE.title },
       });
       addInvoiceItems.push({ price: insPrice, quantity: 1 });
+    }
+    if (bump) {
+      const bumpPrice = await getOrCreatePrice(`jj_bump_${BUMP.key}_${BUMP.price}_${V}`, {
+        currency: CURRENCY,
+        unit_amount: BUMP.price,
+        product_data: { name: BUMP.title },
+      });
+      addInvoiceItems.push({ price: bumpPrice, quantity: 1 });
     }
 
     // --- klant (hergebruik op e-mail) ---
