@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Checkout — Just Jenny</title>
-<link rel="stylesheet" href="/checkout/assets/checkout.css?v=20">
+<link rel="stylesheet" href="/checkout/assets/checkout.css?v=21">
 <script src="https://js.stripe.com/v3/"></script>
 <!-- Meta Pixel wordt geladen door checkout.js zodra META_PIXEL_ID in Vercel staat (uit met META_TRACKING=off) -->
 <!-- WeTracked (externe Meta-tracking): zelfde snippet als op de funnelpagina's en de Shopify-store -->
@@ -348,6 +348,24 @@
 
 <!-- UrinaPatches: vertrouwensblok (garanties + Trustpilot-reviews). checkout.js zet dit in de rechterkolom (i.p.v. .sum-trust)
      en op mobiel onder de bestelknop (i.p.v. .trust-row). Andere producten tonen dit niet. -->
+<!-- Order bump UrinaPatches (A/B-test, checkout.js initBump/renderBump): Spray Neutralizzante 9,95 € boven het totaal.
+     Mobiel: vóór #mobile-total; desktop: in het overzicht vóór .totals. Variant B ziet dit, variant A niet. -->
+<template id="bump-template">
+  <div class="jj-bump">
+    <div class="bh">Scelto dal 93% dei nostri clienti</div>
+    <div class="bp-row">
+      <div class="bp-img"><img src="/checkout/assets/spray-neutralizzante.webp" alt="Spray Neutralizzante" width="40" height="60"></div>
+      <div class="bp-info">
+        <div class="bp-name">Spray Neutralizzante</div>
+        <div class="bp-price">9,95 €</div>
+        <div class="bp-sub">Neutralizza gli odori sgradevoli in 2 minuti.</div>
+      </div>
+      <button type="button" class="bp-add jj-bump-add" aria-pressed="false"><span class="bp-ic"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span><span class="bp-lbl">Aggiungi</span></button>
+    </div>
+    <ul class="bp-ben"><li><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="7" fill="#e3f1ea"/><path d="M4 7.2l2 2L10 5" fill="none" stroke="#0d4f2c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Neutralizza gli odori</li><li><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="7" fill="#e3f1ea"/><path d="M4 7.2l2 2L10 5" fill="none" stroke="#0d4f2c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Riequilibra il pH</li><li><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="7" fill="#e3f1ea"/><path d="M4 7.2l2 2L10 5" fill="none" stroke="#0d4f2c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Adatto alle pelli sensibili</li></ul>
+  </div>
+</template>
+
 <template id="trust-urinapatches">
   <div class="trustbox">
     <div class="tr-rows">
@@ -382,6 +400,6 @@
   </div>
 </template>
 
-<script src="/checkout/assets/checkout.js?v=39"></script>
+<script src="/checkout/assets/checkout.js?v=40"></script>
 </body>
 </html>
