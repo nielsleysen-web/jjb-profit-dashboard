@@ -67,10 +67,10 @@ const PRODUCT_CONFIG = {
     MEMBERSHIP_NAME: 'Just Jenny Comfort Care Membership',
     META_CONTENT_IDS: ['10602127065354'],
   },
-  // UrinaPatches: eigen membership (zelfde voorwaarden), zonder upsellpagina
+  // UrinaPatches: eigen membership (zelfde voorwaarden) + upsellpagina 1+1 gratis (€29,95)
   urinapatches: {
     PRODUCT_NAME: 'UrinaPatches',
-    SUCCESS_PATH: '/checkout/grazie',
+    SUCCESS_PATH: '/checkout/offerta', // post-purchase upsell 1+1 (€29,95); daarna /checkout/grazie
     MEMBERSHIP_NAME: 'Just Jenny Daily Comfort Membership',
     META_CONTENT_IDS: ['10685715448074'],
     PAY_LABEL: 'Completa l’ordine', // eigen knoptekst + donkerdere groene knop (body.pay-dark, checkout.css)
