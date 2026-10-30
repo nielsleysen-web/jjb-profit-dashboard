@@ -198,14 +198,21 @@ function shipCents() { return (SHIP[shipMethod] || SHIP.free).cents; }
 // including the one-time express-shipping item — mirror that here.
 function discountCents() {
   if (!promo) return 0;
-  const base = P.amount + shipCents() + insCents(); // Stripe past de code toe op de hele eerste factuur, ook op de verzekering
+  const base = P.amount + shipCents() + insCents() + bumpCents(); // Stripe past de code toe op de hele eerste factuur, ook op de verzekering/bump
   if (promo.amount_off) return Math.min(promo.amount_off, base);
   if (promo.percent_off) return Math.round(base * promo.percent_off / 100);
   return 0;
 }
 const INS_PRICE = 495; // verzendverzekering (4,95 €), standaard aangevinkt
 function insCents() { const c = document.getElementById('ins-check'); return c && c.checked ? INS_PRICE : 0; }
-function totalCents() { return P.amount + shipCents() + insCents() - discountCents(); }
+/* Order bump (UrinaPatches, A/B-test): "Spray Neutralizzante" 9,95 € met een Aggiungi-knop boven het totaal
+   (index.html #bump-template). Variant per bezoeker (cookie jj_bump: a = zonder, b = met), verdeling CONFIG.BUMP_SPLIT
+   (Vercel-env JJ_BUMP_AB). Gaat als bump + bump_ab mee naar Stripe/PayPal → eigen orderregel + tags bump-spray / bump-ab-*. */
+const BUMP = PRODUCT_KEY === 'urinapatches' ? { key: 'spray', title: 'Spray Neutralizzante', price: 995, img: '/checkout/assets/spray-neutralizzante.webp' } : null;
+let bumpVariant = ''; // 'a' | 'b' zodra de test loopt (initBump)
+let bumpOn = false;   // klant heeft op Aggiungi geklikt
+function bumpCents() { return BUMP && bumpOn ? BUMP.price : 0; }
+function totalCents() { return P.amount + shipCents() + insCents() + bumpCents() - discountCents(); }
 // Wat de membership daarna kost: vol bedrag, tenzij de kortingscode "forever" geldt
 function renewalCents() {
   const M = CONFIG.MEMBERSHIP_CENTS;
@@ -264,9 +271,69 @@ function renderSummaries() {
     // UrinaPatches: vertrouwensblok (garanties + Trustpilot-reviews) i.p.v. de vinkjes
     const tb = trustBlock(); const st = slot.querySelector('.sum-trust');
     if (tb && st) st.replaceWith(tb);
+    // Order bump (variant B): in het overzicht boven Subtotale/Totale (desktop; in de mobiele uitklap verborgen via CSS)
+    const tot = slot.querySelector('.totals'); const bp = renderBump();
+    if (bp && tot) tot.insertAdjacentElement('beforebegin', bp);
   });
   wireDiscountInputs();
   updateAmounts();
+}
+
+/* ---------- Order bump (UrinaPatches, A/B-test) ---------- */
+function initBump() {
+  if (!BUMP) return;
+  const split = Number(CONFIG.BUMP_SPLIT) || 0;
+  if (split <= 0) return; // test uit (JJ_BUMP_AB=off/0): geen bump, geen tag
+  let v = (document.cookie.match(/(?:^|;\s*)jj_bump=(a|b)(?:;|$)/) || [])[1] || '';
+  if (split >= 100) v = 'b';
+  if (!v) v = Math.random() * 100 < split ? 'b' : 'a';
+  try { document.cookie = 'jj_bump=' + v + '; Max-Age=' + 30 * 86400 + '; Path=/; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : ''); } catch (e) {}
+  bumpVariant = v;
+  // 1 weergave per variant per sessie (noemer voor /api/ab-bump)
+  try {
+    const k = 'jj_bump_view_' + v;
+    if (!sessionStorage.getItem(k)) {
+      sessionStorage.setItem(k, '1');
+      fetch('/api/checkout/ab-view', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ bump: v }) }).catch(() => {});
+    }
+  } catch (e) {}
+  if (v !== 'b') return;
+  // Mobiel: boven het totaal (in de mobiele footer, verborgen op desktop via CSS)
+  const mt = $('#mobile-total'); const bp = renderBump();
+  if (mt && bp) { bp.classList.add('jj-bump-m'); mt.insertAdjacentElement('beforebegin', bp); }
+}
+function renderBump() {
+  if (!BUMP || bumpVariant !== 'b') return null;
+  const tpl = $('#bump-template'); if (!tpl) return null;
+  const el = tpl.content.firstElementChild.cloneNode(true);
+  const btn = el.querySelector('.jj-bump-add');
+  btn.addEventListener('click', () => { bumpOn = !bumpOn; syncBumpButtons(); updateAmounts(); });
+  return el;
+}
+function syncBumpButtons() {
+  $$('.jj-bump-add').forEach(b => {
+    b.classList.toggle('on', bumpOn); b.setAttribute('aria-pressed', bumpOn ? 'true' : 'false');
+    b.querySelector('.bp-lbl').textContent = bumpOn ? 'Aggiunto' : 'Aggiungi';
+    b.querySelector('.bp-ic').innerHTML = bumpOn
+      ? '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5l2.6 2.6L10 3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      : '<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  });
+}
+// Extra regel "Spray Neutralizzante · 9,95 €" in elk overzicht zolang de bump aan staat
+function syncBumpRows() {
+  $$('.js-summary-slot').forEach(slot => {
+    const ex = slot.querySelector('.jj-bump-row');
+    if (!bumpOn) { if (ex) ex.remove(); return; }
+    if (ex) return;
+    const prod = slot.querySelector('.prod-row'); if (!prod) return;
+    const row = document.createElement('div');
+    row.className = 'prod-row jj-bump-row';
+    row.innerHTML = '<div class="prod-thumb"><img src="' + BUMP.img + '" alt="' + BUMP.title + '"><span class="qty-badge">1</span></div>'
+      + '<div class="prod-info"><div class="prod-name">' + BUMP.title + '</div><div class="prod-variant">Neutralizza gli odori in 2 minuti</div></div>'
+      + '<div class="prod-price"><span class="actual"><span>' + money(BUMP.price) + '</span></span></div>';
+    const after = slot.querySelector('.jj-gift-row') || prod;
+    after.insertAdjacentElement('afterend', row);
+  });
 }
 
 function updateAmounts() {
@@ -276,7 +343,8 @@ function updateAmounts() {
   $$('.js-compare').forEach(el => { el.textContent = hasCompare ? money(P.compare) : ''; el.hidden = !hasCompare; });
   $$('.js-price').forEach(el => el.textContent = money(P.amount));
   $$('.js-save').forEach(el => { el.textContent = hasCompare ? `Risparmi ${money(P.save)} (${P.savePct}%)` : ''; el.hidden = !hasCompare; });
-  $$('.js-subtotal').forEach(el => el.textContent = money(P.amount));
+  $$('.js-subtotal').forEach(el => el.textContent = money(P.amount + bumpCents()));
+  if (BUMP) { $$('.js-items').forEach(el => el.textContent = bumpOn ? '2 articoli' : '1 articolo'); syncBumpRows(); }
   $$('.js-shipping').forEach(el => {
     if (!addrComplete()) {
       el.textContent = 'Inserisci l’indirizzo';
@@ -820,6 +888,7 @@ function initPayPal() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             pack, product: PRODUCT_KEY, ship_method: shipMethod, insurance: insCents() > 0, checkout_ab: AB_VARIANT || undefined, track: attribution(),
+            bump: bumpCents() > 0, bump_ab: bumpVariant || undefined,
             email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh,
           }),
         });
@@ -875,7 +944,7 @@ function keyHash(s) {
 }
 function subCacheKey(customer) {
   return JSON.stringify([
-    pack, shipMethod, insCents(), promo ? promo.code : '',
+    pack, shipMethod, insCents(), bumpCents(), promo ? promo.code : '',
     customer.email || '', customer.name || '', customer.shipping || null,
     customer.card_funding || '', customer.checkout_variant || '', // ander kaarttype → ander 3DS-besluit → nieuw abonnement
   ]);
@@ -898,6 +967,7 @@ function createSubscription(customer) {
         product: PRODUCT_KEY,
         ship_method: shipMethod,
         insurance: insCents() > 0,
+        bump: bumpCents() > 0, bump_ab: bumpVariant || undefined,
         checkout_ab: AB_VARIANT || undefined,
         promo_code: promo ? promo.code : null,
         track: attribution(),
@@ -1114,7 +1184,7 @@ function saveOrderForThankYou(extra) {
   const shipping = extra.shipping || collectShipping();
   sessionStorage.setItem('checkout_order', JSON.stringify({
     pack, label: P.label,
-    amount: P.amount, discount: discountCents(), shipping_cents: shipCents(), insurance_cents: insCents(), total: totalCents(),
+    amount: P.amount, discount: discountCents(), shipping_cents: shipCents(), insurance_cents: insCents(), bump_cents: bumpCents(), total: totalCents(),
     email: extra.email || $('#email').value.trim(),
     name: extra.name || shipping.name,
     first_name: ($('#first-name').value || '').trim(),
@@ -1173,6 +1243,7 @@ async function loadConfig() {
     CONFIG.META_PIXEL_ID = c.pixelId || '';
     // PayPal-plannen = altijd met membership → niet voor een eenmalige aankoop (Magnesium Freeze)
     CONFIG.PAYPAL_CLIENT_ID = (CONFIG.NO_MEMBERSHIP || CONFIG.NO_PAYPAL_DIRECT) ? '' : (c.paypalClientId || '');
+    CONFIG.BUMP_SPLIT = Number(c.bumpSplit) || 0; // A/B-test order bump (UrinaPatches): % dat de bump ziet
   } catch (e) { logClient('config', e && e.message, 'boot'); }
   if (CONFIG.STRIPE_PK && typeof Stripe !== 'undefined') stripe = Stripe(CONFIG.STRIPE_PK, { locale: 'it' });
   if (CONFIG.META_PIXEL_ID) loadPixel(CONFIG.META_PIXEL_ID);
@@ -1266,6 +1337,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('#email').classList.remove('invalid');
     $('#email-msg').hidden = true;
   });
+  initBump(); // order bump UrinaPatches (variant per bezoeker; mobiel boven het totaal, desktop via renderSummaries)
   renderSummaries();
   renderShipDates();
   initStripe();
