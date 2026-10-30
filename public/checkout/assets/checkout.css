@@ -636,6 +636,7 @@ body.pay-dark .pay-btn:hover{background:#093a20}
 .trustbox .rv{border:1px solid #e6e6e6;border-radius:8px;padding:11px 11px 10px;background:#fff}.trustbox .rv b{display:block;font-size:12.5px;margin:7px 0 4px;color:#1a1a1a}.trustbox .rv p{font-size:12px;color:#444;line-height:1.45;margin:0}
 .trustbox .rv-n{display:block;margin-top:8px;font-size:11px;color:#777;font-style:italic}.trustbox .rv-n em{font-style:normal;color:#00a36c;margin-left:4px}
 .trustbox .tp-foot{text-align:center;font-size:11.5px;color:#666;margin-top:10px}
+.trustbox .rv-grid.rv-3{grid-template-columns:1fr 1fr 1fr;gap:8px}
 .trustbox.mob{margin-top:14px}.trustbox.mob .rv-grid{grid-template-columns:1fr}
 @media (min-width:1000px){.trustbox.mob{display:none}}
 .summary-mobile .trustbox{display:none}
