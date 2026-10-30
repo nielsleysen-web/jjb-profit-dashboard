@@ -15,5 +15,7 @@ export default function handler(req, res) {
     // META_TRACKING=off → geen Meta Pixel en geen CAPI vanuit de checkout (externe tracking, bv. WeTracked)
     pixelId: String(process.env.META_TRACKING || "").toLowerCase() === "off" ? "" : process.env.META_PIXEL_ID || "",
     paypalClientId: process.env.PAYPAL_CLIENT_SECRET ? process.env.PAYPAL_CLIENT_ID || "" : "",
+    // A/B-test order bump UrinaPatches (Spray Neutralizzante): % bezoekers dat de bump ziet (JJ_BUMP_AB; "off" = 0, leeg = 50)
+    bumpSplit: String(process.env.JJ_BUMP_AB || "50").toLowerCase() === "off" ? 0 : Math.max(0, Math.min(100, parseInt(process.env.JJ_BUMP_AB || "50", 10) || 0)),
   });
 }
