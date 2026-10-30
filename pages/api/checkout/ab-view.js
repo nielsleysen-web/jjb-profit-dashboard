@@ -8,7 +8,19 @@ const day = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Rom
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ ok: false });
-  const v = String((req.body || {}).v || "");
+  const body = req.body || {};
+  // A/B-test order bump (UrinaPatches): { bump: "a"|"b" } → abbump:views:* (zie /api/ab-bump)
+  const bv = String(body.bump || "");
+  if (["a", "b"].includes(bv) && storeConfigured()) {
+    try {
+      await redis(["INCR", `abbump:views:${bv}`]);
+      const k = `abbump:views:${day()}:${bv}`;
+      if ((await redis(["INCR", k])) === 1) await redis(["EXPIRE", k, String(120 * 86400)]);
+      await redis(["SET", "abbump:start", new Date().toISOString(), "NX"]);
+    } catch (e) { console.warn("ab-view bump:", e.message); }
+    return res.status(200).json({ ok: true });
+  }
+  const v = String(body.v || "");
   if (!["a", "b", "c"].includes(v) || !storeConfigured()) return res.status(200).json({ ok: false });
   try {
     await redis(["INCR", `abck:views:${v}`]);
