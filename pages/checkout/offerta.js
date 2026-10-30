@@ -117,7 +117,7 @@ const CONTENT = {
       seal: "/checkout/upsell/garanzia-90.webp",
       doctor: "/checkout/upsell/dott-petta.jpg",
     },
-    logo: true, progress: true, readMore: false,
+    logo: true, progress: true, readMore: false, sticky: true, // sticky: vaste knop onderaan zodra de 1e knop uit beeld is
     unit: "confezione", unit2: "la 2ª",
     waitSub: "Non premere il tasto \"Indietro\": altrimenti verrai addebitata due volte.",
     ctaLabel: "OTTIENI 1+1 GRATIS →",
@@ -162,7 +162,7 @@ const CONTENT = {
 };
 // Standaardteksten (NeuroTone/LubriSense); een product kan ze in CONTENT overschrijven
 const DEFAULTS = {
-  logo: false, progress: false, readMore: true,
+  logo: false, progress: false, readMore: true, sticky: false,
   unit: "flacone", unit2: "il 2°",
   waitSub: "Non premere il tasto \"Indietro\": potrebbe causare addebiti multipli sulla tua carta.",
   ctaLabel: "COMPLETA L'ACQUISTO →",
@@ -221,6 +221,11 @@ h1,h2,h3{font-family:var(--fh);margin:0;line-height:1.18}
 .guar p{font-size:16.5px;margin:0 0 14px}.guar p:last-child{margin:0}.seal{flex:none;width:170px;height:170px}
 .decl p{font-family:var(--fb);font-size:14px;text-align:center;margin:0;line-height:1.5}
 .decl a{color:#3b82f6;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.stk{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#fff;border-top:1px solid #eee;box-shadow:0 -4px 16px rgba(0,0,0,.08);padding:10px 16px calc(10px + env(safe-area-inset-bottom));transform:translateY(110%);transition:transform .25s ease}
+.stk.on{transform:none}.stk .in{max-width:600px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.stk .t{flex:1;min-width:0;font-family:var(--fh);font-weight:700;font-size:14px;line-height:1.2}.stk .t small{display:block;font-weight:400;color:#555;font-size:12px;margin-top:2px}
+.stk .cta{margin:0;flex:none;width:auto;padding:12px 16px;font-size:15px;white-space:nowrap}.stk .ppbox{margin:0;flex:none;width:180px;min-height:40px}
+body.stk-on .col{padding-bottom:96px}
 .done{text-align:center;padding:48px 22px}
 .done h1{font-size:28px;font-weight:900;margin-bottom:10px}.done .ok{width:80px;height:80px;border-radius:50%;background:var(--green);margin:0 auto 16px;display:flex;align-items:center;justify-content:center}
 .done p{font-size:19px}
@@ -255,6 +260,8 @@ export default function Offerta() {
   const [blocked, setBlocked] = useState(false); // na 2 geweigerde kaartpogingen: geen nieuwe poging meer, enkel doorgaan
   const fails = useRef(0);
   const ppRendered = useRef(false);
+  const [sticky, setSticky] = useState(false); // vaste knop onderaan: 1e knop uit beeld, 2e knop nog niet in beeld
+  const cta1 = useRef(null); const cta2 = useRef(null);
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -262,7 +269,8 @@ export default function Offerta() {
     setQ({ sub, paypal: !!p.get("pp"), search: window.location.search, failed: p.get("redirect_status") === "failed", skip: p.get("skip") === "1", product: CONTENT[String(p.get("p") || "").toLowerCase()] ? String(p.get("p")).toLowerCase() : "neurotone" });
   }, []);
   const C = { ...DEFAULTS, ...(CONTENT[q?.product] || CONTENT.neurotone) };
-  const themeCss = `:root{--page:${C.theme.page};--peach:${C.theme.peach};--peach2:${C.theme.peach2};--terra:${C.theme.terra}}` + (C.key === "lubrisense" ? ".deal h2{margin-bottom:4px}.deal img{width:66%;max-width:290px;margin:0 auto 8px}" : "");
+  const themeCss = `:root{--page:${C.theme.page};--peach:${C.theme.peach};--peach2:${C.theme.peach2};--terra:${C.theme.terra}}` + (C.key === "lubrisense" ? ".deal h2{margin-bottom:4px}.deal img{width:66%;max-width:290px;margin:0 auto 8px}" : "")
+    + (C.key === "urinapatches" ? ".col .letter .prod{width:56%;max-width:250px}.col .stock2 img:not(.badges){width:62%;max-width:270px}@media (min-width:640px){.col .letter .prod{width:250px}}" : "");
 
   const grazie = (extra) => {
     if (!q) return;
@@ -302,6 +310,25 @@ export default function Offerta() {
     const t = setTimeout(() => grazie(true), 2200);
     return () => clearTimeout(t);
   }, [done]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sticky knop (alleen producten met sticky: true): tonen zodra de 1e knop boven uit beeld is, verbergen zodra de 2e knop in beeld komt
+  useEffect(() => {
+    if (!C.sticky || done) { setSticky(false); return; }
+    let raf = 0;
+    const calc = () => {
+      raf = 0;
+      const a = cta1.current?.getBoundingClientRect(); const b = cta2.current?.getBoundingClientRect();
+      const h = window.innerHeight;
+      const passed = !!a && a.bottom < 0;
+      const secondVisible = !!b && b.top < h && b.bottom > 0;
+      setSticky(passed && !secondVisible);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(calc); };
+    window.addEventListener("scroll", onScroll, { passive: true }); window.addEventListener("resize", onScroll);
+    calc();
+    return () => { window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, [C.sticky, done]);
+  useEffect(() => { document.body.classList.toggle("stk-on", sticky); return () => document.body.classList.remove("stk-on"); }, [sticky]);
 
   // ---- Stripe: one-click ----
   async function buyStripe() {
@@ -353,7 +380,7 @@ export default function Offerta() {
         },
         onError: (e) => { if (String(e?.message) !== "already") setErr("PayPal non ha completato il pagamento. Riprova."); },
       };
-      ["pp-btn-1", "pp-btn-2"].forEach((id) => { const el = document.getElementById(id); if (el) window.paypal.Buttons(opts).render(el); });
+      ["pp-btn-1", "pp-btn-2", "pp-btn-3"].forEach((id) => { const el = document.getElementById(id); if (el) window.paypal.Buttons(opts).render(el); });
     }).catch(() => setErr("Impossibile caricare PayPal. Ricarica la pagina."));
   }, [q, cfg, info]);
 
@@ -424,7 +451,7 @@ export default function Offerta() {
               <p>Risparmio: {C.price} sul prezzo normale.</p>
               {C.readMore && <p>Leggi di più qui sotto.</p>}
               {err && <p className="err">{err}</p>}
-              {cta("pp-btn-1")}
+              <div ref={cta1}>{cta("pp-btn-1")}</div>
               {!q?.paypal && last4 && C.key === "neurotone" && <p style={{ fontSize: "12.5px", color: "#555", margin: "0 0 10px" }}>Addebito di {C.price} sulla stessa carta ····{last4}. Nessun dato da inserire.</p>}
               <Secure />
             </div>
@@ -451,7 +478,7 @@ export default function Offerta() {
             </div>
             <p>Approfitta ora di questa offerta esclusiva e irripetibile cliccando il pulsante verde qui sotto. È l'unica volta che vedrai questa offerta, ed è coperta dalla garanzia soddisfatti o rimborsati al 100% di 90 giorni. Quindi non hai nulla da perdere.</p>
             {err && <p className="err">{err}</p>}
-            {cta("pp-btn-2")}
+            <div ref={cta2}>{cta("pp-btn-2")}</div>
             <Secure />
             <img src={C.img.product} alt={`${C.nameLong} 1+1 gratis`} />
             <img className="badges" src={C.img.badges} alt="" />
@@ -470,6 +497,15 @@ export default function Offerta() {
           <div className="blk peach2 decl">
             <p><a onClick={() => grazie(false)}>{C.decline}</a></p>
           </div>
+
+          {C.sticky && (
+            <div className={"stk" + (sticky ? " on" : "")} aria-hidden={!sticky}>
+              <div className="in">
+                <div className="t">{C.nameLong} 1+1 GRATIS<small>2 {C.unit === "confezione" ? "confezioni" : "flaconi"} a soli {C.price}</small></div>
+                {q?.paypal && !preview ? <div className="ppbox" id="pp-btn-3" /> : blocked ? <button className="cta" onClick={() => grazie(false)}>CONTINUA →</button> : <button className="cta" onClick={buyStripe} disabled={busy || !ready}>{busy ? "Un attimo…" : C.ctaLabel}</button>}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>
