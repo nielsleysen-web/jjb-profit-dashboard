@@ -261,7 +261,8 @@ export default function Grazie() {
   const UPSELL = upsellFor(product.key);
   const hasUpsell = !!(data?.order?.upsell || q?.up);
   const insurance = Number(data?.insurance) || 0; // verzendverzekering (centen), 0 als niet gekozen
-  const total = (data?.amountPaid ?? bundle.price + ship.price + insurance) + (hasUpsell ? UPSELL.price : 0);
+  const bump = data?.bump && data.bump.price ? data.bump : null; // order bump (Spray Neutralizzante), zit al in amountPaid
+  const total = (data?.amountPaid ?? bundle.price + ship.price + insurance + (bump ? bump.price : 0)) + (hasUpsell ? UPSELL.price : 0);
   const date = fmtDate(data?.created || Math.floor(Date.now() / 1000));
   const addr = data?.address || {};
 
@@ -396,6 +397,7 @@ export default function Grazie() {
                 <div className="gz-line"><span>Subtotale</span><span>{fmtEur(bundle.price + (hasUpsell ? UPSELL.price : 0))}</span></div>
                 <div className="gz-line"><span>Spedizione</span><span>{ship.price ? fmtEur(ship.price) : "Gratuita"}</span></div>
                 {insurance > 0 && <div className="gz-line"><span>{INSURANCE.title}</span><span>{fmtEur(insurance)}</span></div>}
+                {bump && <div className="gz-line"><span>{bump.title}</span><span>{fmtEur(bump.price)}</span></div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "14px" }}>
                   <span style={{ fontSize: "18px", fontWeight: 700 }}>Totale</span>
                   <span><span style={{ fontSize: "12px", color: "#6b6b6b", marginRight: "6px" }}>EUR</span><b style={{ fontSize: "19px" }}>{fmtEur(total)}</b></span>
