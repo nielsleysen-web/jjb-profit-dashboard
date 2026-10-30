@@ -3,7 +3,7 @@
 
 import { paypalConfigured, pp, unpackCustom, findOrderForPaypal } from "../../../lib/paypal";
 import { sweepIfDue } from "../../../lib/upsell-queue";
-import { SHIPPING, UPSELL, getProduct, INSURANCE } from "../../../lib/checkout";
+import { SHIPPING, UPSELL, getProduct, INSURANCE, bumpFor } from "../../../lib/checkout";
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
@@ -36,7 +36,8 @@ export default async function handler(req, res) {
       bundlePrice: bundle.price,
       shipping: ship.code,
       insurance: meta.insurance ? INSURANCE.price : 0,
-      amountPaid: Math.round(parseFloat(sub.billing_info?.last_payment?.amount?.value || (bundle.price + ship.price + (meta.insurance ? INSURANCE.price : 0)) / 100) * 100),
+      bump: meta.bump && bumpFor(product.key) ? { title: bumpFor(product.key).title, price: bumpFor(product.key).price } : null,
+      amountPaid: Math.round(parseFloat(sub.billing_info?.last_payment?.amount?.value || (bundle.price + ship.price + (meta.insurance ? INSURANCE.price : 0) + (meta.bump && bumpFor(product.key) ? bumpFor(product.key).price : 0)) / 100) * 100),
       email: s.email_address || "",
       name: s.shipping_address?.name?.full_name || [s.name?.given_name, s.name?.surname].filter(Boolean).join(" "),
       phone: "",
