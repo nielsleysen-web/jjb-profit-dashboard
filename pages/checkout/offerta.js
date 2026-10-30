@@ -106,6 +106,66 @@ const CONTENT = {
       "La buona notizia è che, grazie alla quantità di LubriSense di Just Jenny che hai appena ordinato...",
     ],
   },
+  // UrinaPatches: 1+1 gratis (€29,95), urologa Dott.ssa Petta; eigen koptekst, knop en voortgangsbalk ("Conferma dell'ordine…")
+  urinapatches: {
+    key: "urinapatches",
+    theme: { page: "#f3efd8", peach: "#fde2cc", peach2: "#fdf3ea", terra: "#e0855e" },
+    img: {
+      product: "/checkout/upsell/urinapatches-1plus1.webp",
+      ingredients: "/checkout/upsell/urinapatches-ingredienti.webp",
+      badges: "/checkout/upsell/badges-it-gin-300.webp", // 90 giorni · 24/7 · Approved by 300+ gynaecologists
+      seal: "/checkout/upsell/garanzia-90.webp",
+      doctor: "/checkout/upsell/dott-petta.jpg",
+    },
+    logo: true, progress: true, readMore: false,
+    unit: "confezione", unit2: "la 2ª",
+    waitSub: "Non premere il tasto \"Indietro\": altrimenti verrai addebitata due volte.",
+    ctaLabel: "OTTIENI 1+1 GRATIS →",
+    greeting: "Ciao, sono di nuovo l'urologa Dott.ssa Petta.",
+    name: "UrinaPatches", nameLong: "UrinaPatches", nameAlt: "le UrinaPatches",
+    price: "29,95 €", perBottle: "14,98 €", listPrice: "60 €",
+    doctor: "Dott.ssa Petta",
+    deal: "Fai scorta di UrinaPatches adesso!",
+    lowest: "È il prezzo più basso in assoluto che vedrai mai per le UrinaPatches.",
+    stock2: "puoi fare scorta di UrinaPatches...",
+    stock2Red: ["Ordinando 1 confezione e ricevendone 1 extra GRATIS."],
+    doneLine: "2 confezioni extra di UrinaPatches (29,95 €) partiranno insieme al tuo ordine.",
+    guarantee1: "Se l'odore e la costante sensazione di bagnato nelle mutandine non spariscono, non paghi NULLA!",
+    guarantee2: "La tua decisione di investire nelle UrinaPatches è completamente senza rischi. E se cambi idea, ti basta chiamare o scrivere un'email all'assistenza clienti per ricevere il rimborso completo, senza domande.",
+    decline: "No grazie. Capisco che questa è la mia unica occasione per accedere a questa offerta speciale, e accetto di perderla. Se invece, come migliaia di persone prima di me, resterò colpita dai risultati che otterrò con le UrinaPatches, in futuro riordinerò semplicemente a 60 € a confezione, invece dei 14,98 € a confezione che mi vengono offerti oggi. Rinuncio per sempre a questa occasione.",
+    letter: [
+      "Molte persone mi scrivono preoccupate di non riuscire più a trovare le UrinaPatches in futuro...",
+      "Perché le UrinaPatches contengono ingredienti studiati clinicamente come l'Estratto di semi di zucca e il Frutto di Schisandra...",
+      "E ci riforniamo di questi ingredienti solo dalle fonti più pure, spesso raccolti in Cina.",
+      "Sono orgogliosa che il team di Just Jenny non abbia badato a spese per mettere insieme questa formula...",
+      "Compreso viaggiare in lungo e in largo per trovare le forme migliori di ogni ingrediente rigenerante contenuto nelle UrinaPatches.",
+      "Ma l'unico rovescio della medaglia nell'usare solo le forme più pure di OGNI ingrediente delle UrinaPatches...",
+      "è che ogni volta che c'è un conflitto internazionale, una guerra commerciale o anche solo una brutta tempesta...",
+      "Queste forniture non sono più accessibili...",
+      "E se a questo aggiungi...",
+      "Che i nostri clienti ordinano sempre più confezioni di UrinaPatches alla volta...",
+    ],
+    letter2: [
+      "È facile capire perché sono sempre preoccupata che questi cerotti possano andare esauriti per mesi interi...",
+      "Ricorda: per trattare in modo definitivo le perdite di urina indesiderate, è importante usarli ogni singolo giorno...",
+      "Anche quando ti accorgi che puoi uscire senza indossare un assorbente per l'incontinenza, e ti senti finalmente libera.",
+      "Dopo aver riconquistato completamente il controllo della vescica con le UrinaPatches...",
+      "L'ultima cosa che vorresti è smettere di usare le UrinaPatches e tornare a quegli ingombranti assorbenti per l'incontinenza, giusto?",
+      "Il problema è che questi cerotti non si trovano in nessun negozio",
+      "E l'ultima cosa che vorrei è che tu, proprio quando ti senti sicura di uscire senza assorbente...",
+      "E ricominci ad avere intimità con tuo marito...",
+      "...scopra che siamo esauriti.",
+      "Questa è la cattiva notizia.",
+      "La buona notizia è che, essendo una nuova cliente di Just Jenny...",
+    ],
+  },
+};
+// Standaardteksten (NeuroTone/LubriSense); een product kan ze in CONTENT overschrijven
+const DEFAULTS = {
+  logo: false, progress: false, readMore: true,
+  unit: "flacone", unit2: "il 2°",
+  waitSub: "Non premere il tasto \"Indietro\": potrebbe causare addebiti multipli sulla tua carta.",
+  ctaLabel: "COMPLETA L'ACQUISTO →",
 };
 
 const css = `
@@ -116,6 +176,19 @@ html,body{margin:0;background:var(--page);color:var(--fg);font-family:var(--fb);
 .blk{padding:26px 22px}
 .white{background:#fff}.peach{background:var(--peach)}.peach2{background:var(--peach2)}
 .hdr{background:#fff;padding:18px 22px 14px;border-bottom:3px solid var(--terra)}
+.jj-prog{background:#fff;padding:12px 16px 12px;border-bottom:1px solid #eee}.jj-prog .in{max-width:640px;margin:0 auto}
+.jj-prog .bar{position:relative;height:8px;border-radius:999px;background:#e9e4d6;overflow:hidden}
+.jj-prog .bar i{position:absolute;left:0;top:0;bottom:0;width:66%;border-radius:999px;background:linear-gradient(90deg,var(--terra),#d9743f)}
+.jj-prog .bar i:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.45) 50%,rgba(255,255,255,0) 100%);animation:jjsh 1.6s infinite}
+@keyframes jjsh{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.jj-prog .steps{display:flex;justify-content:space-between;margin-top:8px;align-items:flex-start;font:600 12px var(--fh);color:#9a9a9a}
+.jj-prog .st{flex:1;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;line-height:1.2}
+.jj-prog .st:first-child{text-align:left;align-items:flex-start}.jj-prog .st:last-child{text-align:right;align-items:flex-end}
+.jj-prog .dot{flex:none;box-sizing:border-box;width:22px;height:22px;border-radius:50%;border:2px solid #d8d2c2;background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;color:#9a9a9a}
+.jj-prog .jj-done .dot{background:var(--terra);border-color:var(--terra);color:#fff}.jj-prog .jj-done{color:#333}
+.jj-prog .jj-cur .dot{border-color:var(--terra);color:var(--terra);box-shadow:0 0 0 4px rgba(224,133,94,.18)}.jj-prog .jj-cur{color:var(--terra)}
+.jj-prog .jj-cur .dot i{width:8px;height:8px;border-radius:50%;background:var(--terra);animation:jjp 1.2s infinite}
+@keyframes jjp{0%,100%{transform:scale(.7);opacity:.6}50%{transform:scale(1);opacity:1}}
 .logo{display:block;height:26px;width:auto;margin:0 auto}
 h1,h2,h3{font-family:var(--fh);margin:0;line-height:1.18}
 .c{text-align:center}
@@ -188,7 +261,7 @@ export default function Offerta() {
     const sub = p.get("sub") || p.get("pp") || "";
     setQ({ sub, paypal: !!p.get("pp"), search: window.location.search, failed: p.get("redirect_status") === "failed", skip: p.get("skip") === "1", product: CONTENT[String(p.get("p") || "").toLowerCase()] ? String(p.get("p")).toLowerCase() : "neurotone" });
   }, []);
-  const C = CONTENT[q?.product] || CONTENT.neurotone;
+  const C = { ...DEFAULTS, ...(CONTENT[q?.product] || CONTENT.neurotone) };
   const themeCss = `:root{--page:${C.theme.page};--peach:${C.theme.peach};--peach2:${C.theme.peach2};--terra:${C.theme.terra}}` + (C.key === "lubrisense" ? ".deal h2{margin-bottom:4px}.deal img{width:66%;max-width:290px;margin:0 auto 8px}" : "");
 
   const grazie = (extra) => {
@@ -296,7 +369,7 @@ export default function Offerta() {
     ) : (
       blocked
         ? <button className="cta" onClick={() => grazie(false)}>CONTINUA →</button>
-        : <button className="cta" onClick={buyStripe} disabled={busy || !ready}>{busy ? "Un attimo…" : "COMPLETA L'ACQUISTO →"}</button>
+        : <button className="cta" onClick={buyStripe} disabled={busy || !ready}>{busy ? "Un attimo…" : C.ctaLabel}</button>
     );
 
   return (
@@ -320,26 +393,36 @@ export default function Offerta() {
         </div>
       ) : (
         <div className="col">
-          {C.key === "neurotone" && <div className="hdr"><img className="logo" src={LOGO} alt="Just Jenny" /></div>}
+          {(C.key === "neurotone" || C.logo) && <div className="hdr"><img className="logo" src={LOGO} alt="Just Jenny" /></div>}
+          {C.progress && (
+            <div className="jj-prog" aria-label="Avanzamento dell'ordine"><div className="in">
+              <div className="bar"><i /></div>
+              <div className="steps">
+                <div className="st jj-done"><div className="dot">✓</div>Ordine ricevuto</div>
+                <div className="st jj-cur"><div className="dot"><i /></div>Conferma dell’ordine…</div>
+                <div className="st"><div className="dot">3</div>Completato</div>
+              </div>
+            </div></div>
+          )}
 
           <div className="blk white wait c">
             <h1>Aspetta… il tuo ordine non è ancora completo!</h1>
-            <p>Non premere il tasto "Indietro": potrebbe causare addebiti multipli sulla tua carta.</p>
+            <p>{C.waitSub}</p>
           </div>
 
           <div className="pair">
             <div className="blk peach deal c">
               <h2>Un'offerta speciale solo per i nuovi clienti Just Jenny!</h2>
               <img src={C.img.product} alt={`${C.nameLong} 1+1 gratis`} />
-              <img className="badges" src={C.img.badges} alt={`Soddisfazione garantita 90 giorni · Assistenza clienti 24/7 · ${C.key === "lubrisense" ? "Approvato dai ginecologi" : "Approvato dai dermatologi"}`} />
+              <img className="badges" src={C.img.badges} alt={`Soddisfazione garantita 90 giorni · Assistenza clienti 24/7 · ${C.key === "urinapatches" ? "Approvato da 300+ ginecologi" : C.key === "lubrisense" ? "Approvato dai ginecologi" : "Approvato dai dermatologi"}`} />
             </div>
             <div className="blk peach2 stock c">
               <h2>{C.deal}</h2>
-              <p className="red">Compra 1 flacone, il 2° è GRATIS</p>
+              <p className="red">Compra 1 {C.unit}, {C.unit2} è GRATIS</p>
               <p>{C.lowest}</p>
               <p>Ti protegge dai futuri aumenti di prezzo e dagli esaurimenti di scorte…</p>
               <p>Risparmio: {C.price} sul prezzo normale.</p>
-              <p>Leggi di più qui sotto.</p>
+              {C.readMore && <p>Leggi di più qui sotto.</p>}
               {err && <p className="err">{err}</p>}
               {cta("pp-btn-1")}
               {!q?.paypal && last4 && C.key === "neurotone" && <p style={{ fontSize: "12.5px", color: "#555", margin: "0 0 10px" }}>Addebito di {C.price} sulla stessa carta ····{last4}. Nessun dato da inserire.</p>}
@@ -348,8 +431,8 @@ export default function Offerta() {
           </div>
 
           <div className="blk white letter">
-            <h3>Ciao, sono di nuovo la {C.doctor}.</h3>
-            <img className="avatar" src={C.img.doctor} alt={C.doctor} />
+            <h3>{C.greeting || `Ciao, sono di nuovo la ${C.doctor}.`}</h3>
+            {C.img.doctor && <img className="avatar" src={C.img.doctor} alt={C.doctor} />}
             <div>
               {C.letter.map((t, i) => <p key={i}>{t}</p>)}
               <img className="prod" src={C.img.ingredients} alt={C.nameLong} />
@@ -360,7 +443,7 @@ export default function Offerta() {
           <div className="blk peach2 stock2 c">
             <p className="small">Solo su questa pagina privata,</p>
             <h2>{C.stock2}</h2>
-            <p className="red">1 flacone al tuo ordine e ricevendone 1 GRATIS.<br />2 flaconi a soli {C.price}.</p>
+            <p className="red">{C.stock2Red ? C.stock2Red.map((t, i) => <span key={i}>{i > 0 && <br />}{t}</span>) : <>1 flacone al tuo ordine e ricevendone 1 GRATIS.<br />2 flaconi a soli {C.price}.</>}</p>
             <p>Risparmi così {C.price} sul prezzo di listino originale.</p>
             <div className="free">
               <svg width="52" height="36" viewBox="0 0 52 36" fill="#222" aria-hidden="true"><rect x="0" y="6" width="30" height="20" rx="2" /><path d="M30 12h11l9 8v6H30z" /><circle cx="10" cy="29" r="5" /><circle cx="10" cy="29" r="2" fill="#fff" /><circle cx="40" cy="29" r="5" /><circle cx="40" cy="29" r="2" fill="#fff" /><text x="4" y="21" fontSize="11" fontWeight="900" fill="#fff" fontFamily="Roboto,Arial">FREE</text></svg>
