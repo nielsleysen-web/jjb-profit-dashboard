@@ -1,0 +1,7 @@
+Upload in GitHub (nielsleysen-web/jjb-profit-dashboard, branch main), per map "Add file → Upload files":
+
+1. map lib/                → stripe-dunning.js
+2. map pages/api/stripe/   → dunning.js + webhook.js  (samen in één commit)
+3. map pages/api/          → subscriptions.js
+
+Bestaande bestanden met dezelfde naam worden overschreven. Vercel deployt daarna automatisch (±2 min).

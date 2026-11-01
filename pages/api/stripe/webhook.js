@@ -5,7 +5,7 @@
 // Stripe — daar wordt niets verzonden.
 //
 // Stripe → Developers → Webhooks → endpoint: https://<dashboard>/api/stripe/webhook
-// Events: invoice.paid  (verplicht) · invoice.payment_failed (kortingsladder bij saldotekort + Klaviyo) · customer.subscription.deleted (opzegging → Klaviyo)
+// Events: invoice.paid  (verplicht) · invoice.payment_failed (payment recovery: 13 dagelijkse pogingen + Klaviyo) · customer.subscription.deleted (opzegging → Klaviyo)
 // Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 // Shopify-scope: write_orders (naast de bestaande read-scopes)
 
@@ -291,8 +291,7 @@ export default async function handler(req, res) {
     if (event.type === "invoice.payment_failed") {
       // Mislukte rebill: het portaal deactiveert het lid (status live uit Stripe) → Klaviyo-event voor de herinneringsmail
       const inv = event.data.object;
-      // Saldotekort → kortingsladder (10/20/30%, lib/stripe-dunning.js); andere declines blijven bij Stripe's Smart Retries,
-      // behalve kansloze declines (3DS vereist, fout kaartnummer, pick-up card, kaartlimiet): meteen gevoid + opgezegd
+      // Elke mislukte rebill (ongeacht de reden) → payment recovery: 13 dagelijkse pogingen met kortingsladder (lib/stripe-dunning.js)
       let dunning = null;
       if (inv.billing_reason === "subscription_cycle") dunning = await startDunning(inv).catch((e) => ({ started: false, reason: e.message }));
       // Meteen opgezegd → geen "betaling mislukt"-mail (de opzegflow volgt via customer.subscription.deleted)

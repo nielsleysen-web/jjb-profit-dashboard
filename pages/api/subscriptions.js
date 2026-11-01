@@ -231,7 +231,7 @@ async function stripeData() {
   return { members, rebills, failed, pending, dunning, failHist, retries, attempts, abStarts };
 }
 
-/* ---------------- kortingsladder (insufficient funds): schema per mislukte rebill ----------------
+/* ---------------- payment recovery (elke mislukte rebill): 13 dagelijkse pogingen, schema per factuur ----------------
    Poging k valt op <dag van mislukken> + LADDER[k].day (cron /api/stripe/dunning, dagelijks ±10:10 Italiaanse tijd).
    Een gemiste dag schuift naar de volgende run; de eerstvolgende poging staat exact in jj_dunning_next. */
 const addDaysStr = (d, n) => { const x = new Date(`${d}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };

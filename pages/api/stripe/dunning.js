@@ -1,13 +1,15 @@
-// pages/api/stripe/dunning.js — Vercel-cron (dagelijks, zie vercel.json): kortingsladder bij mislukte rebills
-// door saldotekort (−20% → €24,95 → €19,95, daarna opzeggen). Logica in lib/stripe-dunning.js.
+// pages/api/stripe/dunning.js — Vercel-cron (dagelijks, zie vercel.json): payment recovery bij mislukte rebills,
+// ongeacht de reden: 13 pogingen, elke dag één (3× vol → 3× −10% → 4× −30% → 2× −50% → €9,95), daarna opzeggen.
+// Logica in lib/stripe-dunning.js. De cron schrijft eerst elke open mislukte rebill die nog niet in de ladder zit
+// automatisch in (ook oude, van vóór deze versie), zodat niets blijft liggen.
 // Beveiligd met CRON_SECRET (Authorization: Bearer …) of een ingelogde dashboard-admin/finance.
 //
 // Handmatig (ingelogd in het dashboard, gewoon in de browser):
 //   /api/stripe/dunning?dry=1             → wie is vandaag aan de beurt, wie wacht nog; doet niets
 //   /api/stripe/dunning?run=1             → voert de pogingen van vandaag uit
-//   /api/stripe/dunning?enroll=1&dry=1    → bestaande mislukte rebills (insufficient_funds) die nog niet in de ladder zitten: lijst
-//   /api/stripe/dunning?enroll=1          → die alsnog in de ladder zetten (−20% = vandaag), nog geen afschrijving
-//   /api/stripe/dunning?enroll=1&run=1    → in de ladder zetten ÉN meteen de −20%-poging doen
+//   /api/stripe/dunning?enroll=1&dry=1    → bestaande mislukte rebills (elke reden) die nog niet in de ladder zitten: lijst
+//   /api/stripe/dunning?enroll=1          → die alsnog in de ladder zetten (poging 1 = vandaag), nog geen afschrijving
+//   /api/stripe/dunning?enroll=1&run=1    → in de ladder zetten ÉN meteen poging 1 doen
 //   /api/stripe/dunning?run=1&force=1     → negeert de wachtdagen (alleen om te testen)
 //   /api/stripe/dunning?noretry=1&dry=1   → open mislukte rebills met een kansloze decline (3DS/fout nummer/pick-up/limiet) nog in Stripe's retry-rij: lijst
 //   /api/stripe/dunning?noretry=1         → die meteen voiden + opzeggen (zoals de webhook vanaf nu doet)
@@ -50,9 +52,13 @@ export default async function handler(req, res) {
       else out.status = await runDunning({ dry: true });
       return res.status(200).json(out);
     }
+    // Cron: eerst alle open mislukte rebills die nog niet in de ladder zitten (oude, of gemiste webhook) alsnog inschrijven
+    // (poging 1 = vandaag), daarna de pogingen van vandaag doen.
+    const enroll = dry ? null : await enrollOpenFailures({}).catch((e) => ({ ok: false, error: e.message }));
+    if (enroll?.enrolled?.length) console.log("dunning enroll:", JSON.stringify(enroll.enrolled));
     const out = await runDunning({ dry, force: q.force === "1" });
     if (out.attempted?.length) console.log("dunning:", JSON.stringify(out.attempted));
-    return res.status(200).json(out);
+    return res.status(200).json({ ...out, enroll });
   } catch (e) {
     console.error("dunning:", e.message);
     return res.status(500).json({ ok: false, error: e.message });
