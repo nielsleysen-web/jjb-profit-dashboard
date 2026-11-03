@@ -286,6 +286,8 @@ function renderSummaries() {
     // UrinaPatches: vertrouwensblok (garanties + Trustpilot-reviews) i.p.v. de vinkjes
     const tb = trustBlock(); const st = slot.querySelector('.sum-trust');
     if (tb && st) st.replaceWith(tb);
+    // Cannella di Ceylon: nog geen Trustpilot-reviews → die regel weglaten (garantie + verzending blijven)
+    if (PRODUCT_KEY === 'ceylon' && st) st.querySelectorAll('li').forEach(li => { if (/Trustpilot/i.test(li.textContent)) li.remove(); });
     // Order bump (variant B): in het overzicht boven Subtotale/Totale (desktop; in de mobiele uitklap verborgen via CSS)
     const tot = slot.querySelector('.totals'); const bp = renderBump();
     if (bp && tot) tot.insertAdjacentElement('beforebegin', bp);
