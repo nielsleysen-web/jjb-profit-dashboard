@@ -42,10 +42,10 @@ export default function Termini() {
   // ?p=emorroidi → Comfort Care Membership (Emorroidi Cerotti): zelfde voorwaarden, nog geen ledenportaal → beheer via e-mail
   const [prod, setProd] = useState("neurotone");
   // ?p=urinapatches → Daily Comfort Membership (UrinaPatches): zelfde voorwaarden als Emorroidi, geen ledenportaal → beheer via e-mail
-  useEffect(() => { const q = (new URLSearchParams(window.location.search).get("p") || "").toLowerCase(); setProd(q === "lubrisense" || q === "emorroidi" || q === "urinapatches" || q === "pumpkinseed" ? q : "neurotone"); }, []);
+  useEffect(() => { const q = (new URLSearchParams(window.location.search).get("p") || "").toLowerCase(); setProd(q === "lubrisense" || q === "emorroidi" || q === "urinapatches" || q === "pumpkinseed" || q === "ceylon" ? q : "neurotone"); }, []);
   // ?p=pumpkinseed → Daily Wellness Membership (Pumpkin Seed Drops): zoals UrinaPatches, geen ledenportaal
-  const lubri = prod === "lubrisense", urina = prod === "urinapatches", pumpkin = prod === "pumpkinseed", emor = prod === "emorroidi" || urina || pumpkin; // emor = zonder portaal
-  const MNAME = lubri ? "Intimate Care Membership" : urina ? "Daily Comfort Membership" : pumpkin ? "Daily Wellness Membership" : emor ? "Comfort Care Membership" : "Health For Life Membership";
+  const lubri = prod === "lubrisense", urina = prod === "urinapatches", pumpkin = prod === "pumpkinseed", ceylon = prod === "ceylon", emor = prod === "emorroidi" || urina || pumpkin || ceylon; // emor = zonder portaal
+  const MNAME = lubri ? "Intimate Care Membership" : urina ? "Daily Comfort Membership" : pumpkin ? "Daily Wellness Membership" : ceylon ? "Metabolic Balance Membership" : emor ? "Comfort Care Membership" : "Health For Life Membership";
   const PORTAL = lubri ? PORTAL_LUBRI : PORTAL_NT;
   return (
     <>

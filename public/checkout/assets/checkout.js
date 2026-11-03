@@ -32,7 +32,8 @@ const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisens
   : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium'
   : (/emorroidi/i.test(location.pathname) || _pq === 'emorroidi') ? 'emorroidi'
   : (/urinapatches/i.test(location.pathname) || _pq === 'urinapatches') ? 'urinapatches'
-  : (/pumpkinseed/i.test(location.pathname) || _pq === 'pumpkinseed') ? 'pumpkinseed' : 'neurotone';
+  : (/pumpkinseed/i.test(location.pathname) || _pq === 'pumpkinseed') ? 'pumpkinseed'
+  : (/ceylon/i.test(location.pathname) || _pq === 'ceylon') ? 'ceylon' : 'neurotone';
 /* A/B-test 3D Secure: de aparte links checkout.getjustjenny.com/3ds, /lubrisense/3ds, /magnesium/3ds en /emorroidi/3ds
    (of ?ab=3ds) → debit- en prepaidkaarten krijgen bij de eerste betaling een verplichte 3DS-bevestiging.
    De gewone links werken exact zoals voorheen. */
@@ -81,6 +82,14 @@ const PRODUCT_CONFIG = {
     SUCCESS_PATH: '/checkout/grazie',
     MEMBERSHIP_NAME: 'Just Jenny Daily Wellness Membership',
     META_CONTENT_IDS: ['10689121911050'],
+    PAY_LABEL: 'Completa l’ordine',
+  },
+  // Cannella di Ceylon: eigen membership (zelfde voorwaarden), zonder upsellpagina; knop zoals UrinaPatches
+  ceylon: {
+    PRODUCT_NAME: 'Cannella di Ceylon',
+    SUCCESS_PATH: '/checkout/grazie',
+    MEMBERSHIP_NAME: 'Just Jenny Metabolic Balance Membership',
+    META_CONTENT_IDS: ['10700016156938'],
     PAY_LABEL: 'Completa l’ordine',
   },
 };
@@ -162,7 +171,13 @@ const PACKS_PUMPKINSEED = {
   3: { label: '3x Pumpkin Seed Drops™', amount: 3995, compare: 18000, save: 14005, savePct: 78, img: IMG + '1793282377-13.webp?v=1793283030&width=240' },
   5: { label: '5x Pumpkin Seed Drops™', amount: 4495, compare: 30000, save: 25505, savePct: 85, img: IMG + '1793282378-14.webp?v=1793283030&width=240' },
 };
-const PACKS = PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
+// Cannella di Ceylon (Shopify-product 10700016156938): 1/3/5, prijzen en doorstreepprijzen van de landingspagina
+const PACKS_CEYLON = {
+  1: { label: '1x Cannella di Ceylon', amount: 2999, compare: 5999, save: 3000, savePct: 50, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-1_1e421163-a187-40e5-85f0-5a3c9a9e2428.jpg?v=1793742250&width=240' },
+  3: { label: '3x Cannella di Ceylon', amount: 5999, compare: 17997, save: 11998, savePct: 67, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-3_c3c92249-ad57-4050-b0cd-6ec494b68fdc.jpg?v=1793742250&width=240' },
+  5: { label: '5x Cannella di Ceylon', amount: 8999, compare: 29995, save: 20996, savePct: 70, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-5_6c56d46e-234c-4c2a-9791-87fc558fb4d8.jpg?v=1793742250&width=240' },
+};
+const PACKS = PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
   free:    { cents: 0,   title: 'Standard (5-8 giorni lavorativi)' },
@@ -1507,6 +1522,7 @@ if (PRODUCT_KEY === 'magnesium') { COPY_GIFT.value = 3495; COPY_GIFT.bonusName =
 if (PRODUCT_KEY === 'emorroidi') { COPY_GIFT.value = 2995; COPY_GIFT.bonusName = '1x Emorroidi Cerotti'; }
 if (PRODUCT_KEY === 'urinapatches') { COPY_GIFT.value = 2995; COPY_GIFT.bonusName = '1x UrinaPatches'; }
 if (PRODUCT_KEY === 'pumpkinseed') { COPY_GIFT.value = 2995; COPY_GIFT.bonusName = '1x Pumpkin Seed Drops'; }
+if (PRODUCT_KEY === 'ceylon') { COPY_GIFT.value = 2999; COPY_GIFT.bonusName = '1x Cannella di Ceylon'; }
 const GIFT = params.get('gift') === '1';
 const BONUS = params.get('bonus') === '1'; // mail 2: 1 flacone in omaggio (+ regalo segreto)
 const _sentEmails = new Set();
@@ -1627,7 +1643,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.title = 'Checkout — ' + CONFIG.PRODUCT_NAME + ' — Just Jenny';
       // LubriSense/Emorroidi: eigen voorwaarden; de NeuroTone-membershippagina past niet (opzeggen staat in de voorwaarden).
       // Magnesium Freeze heeft (voorlopig) de NeuroTone-membership → gewoon de NeuroTone-pagina's.
-      if (PRODUCT_KEY === 'lubrisense' || PRODUCT_KEY === 'emorroidi' || PRODUCT_KEY === 'urinapatches' || PRODUCT_KEY === 'pumpkinseed') {
+      if (PRODUCT_KEY === 'lubrisense' || PRODUCT_KEY === 'emorroidi' || PRODUCT_KEY === 'urinapatches' || PRODUCT_KEY === 'pumpkinseed' || PRODUCT_KEY === 'ceylon') {
         $$('a[href^="/checkout/termini"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY; });
         $$('a[href^="/checkout/membership"]').forEach(a => { a.href = '/checkout/termini?p=' + PRODUCT_KEY + '#membership'; });
       }
