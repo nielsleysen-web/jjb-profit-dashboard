@@ -1649,6 +1649,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       // LubriSense: eigen klantfoto's (vrouwen) in de header; ontbreekt een foto, dan blijft de letter staan
       if (PRODUCT_KEY === 'lubrisense') $$('.jh-av img').forEach((img, i) => { img.src = '/checkout/assets/avatar-lub' + (i + 1) + '.jpg?v=1'; });
+      // Cannella di Ceylon: geen '40.000+ clienti'-pil in de header (alleen logo + voordelen)
+      if (PRODUCT_KEY === 'ceylon') $$('.jh-pill').forEach(el => el.remove());
     }
   } catch (e) { logClient('product_init', e && e.message, 'product'); }
 });
