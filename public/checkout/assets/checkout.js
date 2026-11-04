@@ -364,7 +364,7 @@ function syncBumpRows() {
 }
 
 function updateAmounts() {
-  $$('.prod-thumb img, .mobile-total img').forEach(el => { el.src = P.img; el.alt = CONFIG.PRODUCT_NAME; });
+  $$('.prod-row:not(.jj-bgift) .prod-thumb img, .mobile-total img').forEach(el => { el.src = P.img; el.alt = CONFIG.PRODUCT_NAME; });
   $$('.js-pack-label').forEach(el => el.textContent = P.label);
   const hasCompare = P.compare > P.amount;
   $$('.js-compare').forEach(el => { el.textContent = hasCompare ? money(P.compare) : ''; el.hidden = !hasCompare; });
