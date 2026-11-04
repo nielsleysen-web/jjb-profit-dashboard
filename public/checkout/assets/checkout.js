@@ -259,6 +259,14 @@ function addBundleGift(slot) {
   }
   const prod = slot.querySelector('.prod-row');
   if (!prod || slot.querySelector('.jj-bgift')) return;
+  if (PRODUCT_KEY === 'ceylon') {
+    // Cannella di Ceylon: e-book als gewone productregel (cover, doorstreepte waarde, GRATIS)
+    const r = document.createElement('div'); r.className = 'prod-row jj-bgift jj-bgift-row';
+    r.innerHTML = '<div class="prod-thumb"><img src="/checkout/assets/ebook-ceylon.png?v=1" alt="E-book" style="object-fit:contain;background:#fff"><span class="qty-badge">1</span></div>'
+      + '<div class="prod-info"><div class="prod-name">E-book: Cannella di Ceylon</div><div class="prod-variant">Ottieni i migliori risultati con l’e-book</div><div class="prod-save">Gratis con il tuo acquisto</div></div>'
+      + '<div class="prod-price"><span class="compare">19,90 €</span><span class="actual"><span style="color:#2d6b45;font-weight:700">GRATIS</span></span></div>';
+    prod.parentNode.insertBefore(r, prod.nextSibling); return;
+  }
   const row = document.createElement('div');
   row.className = 'jj-bgift';
   row.innerHTML = '<span class="jj-bgift-ic">' + GIFT_ICON + '</span>'
