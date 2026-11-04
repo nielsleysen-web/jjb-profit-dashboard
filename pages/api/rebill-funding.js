@@ -29,6 +29,7 @@ export default async function handler(req, res) {
   const since = Math.floor(Date.now() / 1000) - days * 86400;
   try {
     const byFunding = { credit: empty(), debit: empty(), prepaid: empty(), other: empty(), unknown: empty() };
+    const byBrand = {}; // "credit/visa" → zelfde cijfers per kaartmerk × kaarttype
     const months = {};
     let n = 0;
     for await (const inv of stripe.invoices.list({ created: { gte: since }, limit: 100, expand: ["data.charge", "data.payment_intent.payment_method", "data.subscription.default_payment_method"] })) {
@@ -57,9 +58,14 @@ export default async function handler(req, res) {
       if (inv.status === "paid") g.revenue = r2(g.revenue + paidAmount(inv));
       const brand = card?.brand || type || "?";
       g.brands[brand] = (g.brands[brand] || 0) + 1;
+      const gb = (byBrand[`${key}/${brand}`] ||= empty());
+      gb.invoices++; gb[outcome]++; gb.fullValue = r2(gb.fullValue + (inv.amount_due || 0) / 100);
+      if (inv.status === "paid") gb.revenue = r2(gb.revenue + paidAmount(inv));
+      if (card?.country) gb.brands[card.country] = (gb.brands[card.country] || 0) + 1; // bij merk: land van de kaart
       if (outcome !== "firstTry") {
         const code = md.jj_dunning_code || pi?.last_payment_error?.decline_code || pi?.last_payment_error?.code || ch?.failure_code || "?";
         g.declines[code] = (g.declines[code] || 0) + 1;
+        gb.declines[code] = (gb.declines[code] || 0) + 1;
       }
       const m = new Date(inv.created * 1000).toISOString().slice(0, 7);
       const row = (months[m] ||= { month: m });
@@ -74,10 +80,11 @@ export default async function handler(req, res) {
       revenueRate: g.fullValue ? r3(g.revenue / g.fullValue) : null,
     });
     const out = {}; for (const k of Object.keys(byFunding)) out[k] = finish(byFunding[k]);
+    const brands = {}; for (const k of Object.keys(byBrand).sort()) brands[k] = finish(byBrand[k]);
     const tot = empty();
     for (const g of Object.values(byFunding)) { for (const k of ["invoices", "firstTry", "recovered", "open", "lost"]) tot[k] += g[k]; tot.revenue = r2(tot.revenue + g.revenue); tot.fullValue = r2(tot.fullValue + g.fullValue); }
     delete tot.brands; delete tot.declines;
-    return res.status(200).json({ success: true, days, since: new Date(since * 1000).toISOString().slice(0, 10), scanned: n, byFunding: out, total: finish({ ...tot, brands: {}, declines: {} }), months: Object.values(months).sort((a, b) => a.month.localeCompare(b.month)) });
+    return res.status(200).json({ success: true, days, since: new Date(since * 1000).toISOString().slice(0, 10), scanned: n, byFunding: out, byBrand: brands, total: finish({ ...tot, brands: {}, declines: {} }), months: Object.values(months).sort((a, b) => a.month.localeCompare(b.month)) });
   } catch (e) {
     console.error("rebill-funding:", e.message);
     return res.status(500).json({ success: false, error: e.message });
