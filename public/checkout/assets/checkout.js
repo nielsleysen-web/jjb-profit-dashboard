@@ -173,9 +173,9 @@ const PACKS_PUMPKINSEED = {
 };
 // Cannella di Ceylon (Shopify-product 10700016156938): 1/3/5, prijzen en doorstreepprijzen van de landingspagina
 const PACKS_CEYLON = {
-  1: { label: '1x Cannella di Ceylon', amount: 2999, compare: 5999, save: 3000, savePct: 50, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-1_1e421163-a187-40e5-85f0-5a3c9a9e2428.jpg?v=1793742250&width=240' },
-  3: { label: '3x Cannella di Ceylon', amount: 5999, compare: 17997, save: 11998, savePct: 67, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-3_c3c92249-ad57-4050-b0cd-6ec494b68fdc.jpg?v=1793742250&width=240' },
-  5: { label: '5x Cannella di Ceylon', amount: 8999, compare: 29995, save: 20996, savePct: 70, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-5_6c56d46e-234c-4c2a-9791-87fc558fb4d8.jpg?v=1793742250&width=240' },
+  1: { label: '1x Cannella di Ceylon', amount: 2999, compare: 5999, save: 3000, savePct: 50, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-1_1e421163-a187-40e5-85f0-5a3c9a9e2428.jpg?v=1793742250&width=240', gift: true },
+  3: { label: '3x Cannella di Ceylon', amount: 5999, compare: 17997, save: 11998, savePct: 67, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-3_c3c92249-ad57-4050-b0cd-6ec494b68fdc.jpg?v=1793742250&width=240', gift: true },
+  5: { label: '5x Cannella di Ceylon', amount: 8999, compare: 29995, save: 20996, savePct: 70, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-5_6c56d46e-234c-4c2a-9791-87fc558fb4d8.jpg?v=1793742250&width=240', gift: true },
 };
 const PACKS = PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
@@ -244,6 +244,8 @@ function successUrl(subId) {
 /* ---------- Gratis cadeau bij de bundel (LubriSense 5x): een e-book op het platform (niet vermeld), €0 ----------
    Zelfde als de oude Shopify-cartlink (product "Regalo gratuito"); de €0-regel komt mee op de Shopify-order. */
 const BUNDLE_GIFT_COPY = { name: 'Regalo a sorpresa', sub: 'Incluso nel tuo ordine', free: 'GRATIS' };
+// Cannella di Ceylon: het gratis e-book (landingspagina: "E-book esclusivo gratuito con ogni ordine"), verstuurd per e-mail
+if (PRODUCT_KEY === 'ceylon') Object.assign(BUNDLE_GIFT_COPY, { name: 'E-book: Cannella di Ceylon – Una guida pratica', sub: 'Incluso nel tuo ordine · inviato via e-mail', free: 'GRATIS' });
 const GIFT_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 11h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 7.5h18V11H3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 7.5V21" stroke="currentColor" stroke-width="1.5"/><path d="M12 7.5C10.8 4.6 7.2 4 7.2 6.1c0 1.2 1.6 1.4 4.8 1.4zM12 7.5c1.2-2.9 4.8-3.5 4.8-1.4 0 1.2-1.6 1.4-4.8 1.4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>';
 function addBundleGift(slot) {
   if (!document.getElementById('jj-bgift-style')) {
