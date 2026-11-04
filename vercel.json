@@ -30,7 +30,7 @@
     },
     {
       "path": "/api/stripe/dunning",
-      "schedule": "10 8 * * *"
+      "schedule": "5 9 * * *"
     }
   ]
 }
