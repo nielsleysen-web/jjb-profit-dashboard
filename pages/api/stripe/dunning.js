@@ -1,5 +1,5 @@
 // pages/api/stripe/dunning.js — Vercel-cron (dagelijks, zie vercel.json): payment recovery bij mislukte rebills,
-// ongeacht de reden: 13 pogingen, elke dag één (3× vol → 3× −10% → 4× −30% → 2× −50% → €9,95), daarna opzeggen.
+// ongeacht de reden: 8 pogingen (2× vol → 2× −10% → 2× −30% → 1× −50% → €9,95; prepaid/debit op geld-dagen), daarna opzeggen.
 // Logica in lib/stripe-dunning.js. De cron schrijft eerst elke open mislukte rebill die nog niet in de ladder zit
 // automatisch in (ook oude, van vóór deze versie), zodat niets blijft liggen.
 // Beveiligd met CRON_SECRET (Authorization: Bearer …) of een ingelogde dashboard-admin/finance.
