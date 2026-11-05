@@ -11,7 +11,7 @@
 
 import Stripe from "stripe";
 import axios from "axios";
-import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem, bumpFor, bumpLineItem } from "../../../lib/checkout";
+import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem, bumpFor, bumpLineItem, getMarket, zipValidFor } from "../../../lib/checkout";
 import { runWithBrand } from "../../../lib/portal-brand";
 import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
@@ -92,11 +92,14 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   customAttributes.push({ key: "stripe_invoice", value: invoice.id });
 
   // Onbruikbaar adres → tag, zodat je die orders in Shopify kunt filteren vóór verzending
-  const addrOk = !!(addr.line1 && addr.city && /^\d{5}$/.test(String(addr.postal_code || "")));
+  const market = getMarket(md.market);
+  const addrCountry = market.countries.includes(String(addr.country || "").toUpperCase()) ? String(addr.country).toUpperCase() : market.countries[0];
+  const addrOk = !!(addr.line1 && addr.city && zipValidFor(market, addr.postal_code, addrCountry));
   // Eenmalig product (Magnesium Freeze, geen membership) → NIET als membership-front-end taggen (dashboards/portaal-backfill)
   const tags = ["stripe", product.membership ? "subscription-frontend" : "onetime-frontend", invTag(invoice.id)];
   if (!addrOk) tags.push("missing-address");
   if (product.tag) tags.push(product.tag);
+  if (market.tag) tags.push(market.tag);
   if (bundle.gift) tags.push(BUNDLE_GIFT.tag);
   // A/B-test 3DS: aankopen via de aparte 3DS-checkoutlinks herkenbaar in Shopify
   if (md.jj_checkout_variant === "3ds") tags.push(md.jj_3ds === "forced" ? "checkout-3ds-forced" : "checkout-3ds");
@@ -128,7 +131,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
       city: addr.city || "",
       zip: addr.postal_code || "",
       provinceCode: addr.state || undefined,
-      countryCode: "IT",
+      countryCode: addrCountry,
       phone: itPhone(customer?.shipping?.phone || customer?.phone),
     },
     transactions: [{ kind: "SALE", status: "SUCCESS", gateway: "stripe", amountSet: { shopMoney: { amount: amountPaid.toFixed(2), currencyCode: "EUR" } } }],

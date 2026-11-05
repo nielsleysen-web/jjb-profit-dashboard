@@ -13,7 +13,7 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor } from "../../../lib/checkout";
+import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
@@ -67,17 +67,26 @@ export default async function handler(req, res) {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Inserisci un indirizzo email valido" });
     const s = b.shipping || {};
     const name = clean(b.name || s.name, 120);
-    const phone = clean(b.phone || s.phone, 30);
+    let phone = clean(b.phone || s.phone, 30);
+    // Markt: it (standaard) of nl (NL/BE: iDEAL + Bancontact + kaart, SEPA-machtiging voor de rebills)
+    const market = getMarket(b.market);
+    const country = market.countries.includes(String(s.country || "").toUpperCase()) ? String(s.country).toUpperCase() : market.countries[0];
     const address = {
       line1: clean(s.line1, 120),
       line2: clean(s.line2, 120) || undefined,
       city: clean(s.city, 80),
-      state: clean(s.state, 40),
-      postal_code: clean(s.postal_code, 12),
-      country: "IT",
+      state: clean(s.state, 40) || undefined,
+      postal_code: clean(s.postal_code, 12).toUpperCase(),
+      country,
     };
-    if (!address.line1 || !address.city || !/^\d{5}$/.test(address.postal_code)) {
-      return res.status(400).json({ error: "Controlla l’indirizzo di spedizione" });
+    // NL/BE: nationaal nummer (06…/04…) → internationaal, anders maakt itPhone() er een Italiaans nummer van
+    if (market.key === "nl" && phone) {
+      const d = phone.replace(/[^\d+]/g, "");
+      if (/^0[1-9]\d{7,9}$/.test(d)) phone = (country === "BE" ? "+32" : "+31") + d.slice(1);
+      else if (d.startsWith("00")) phone = "+" + d.slice(2);
+    }
+    if (!address.line1 || !address.city || !zipValidFor(market, address.postal_code, country)) {
+      return res.status(400).json({ error: market.key === "nl" ? "Controleer je bezorgadres" : "Controlla l’indirizzo di spedizione" });
     }
     // Telefoonnummer meteen naar Klaviyo (ook als de betaling hierna niet doorgaat); blokkeert de checkout nooit
     const klPhone = saveCheckoutPhone({ email, phone, name }).catch((e) => console.error("klaviyo phone:", e.message));
@@ -169,7 +178,7 @@ export default async function handler(req, res) {
       phone: phone || undefined,
       address,
       shipping: { name: name || email, phone: phone || undefined, address },
-      preferred_locales: ["it"],
+      preferred_locales: [market.locale],
       metadata,
     };
     const existing = await stripe.customers.list({ email, limit: 1 });
@@ -188,8 +197,9 @@ export default async function handler(req, res) {
     }
 
     // --- abonnement: proefperiode + eenmalige regels op de eerste factuur ---
-    const methods = ["card", "link"];
-    if (process.env.STRIPE_PAYPAL === "1") methods.push("paypal");
+    const methods = [...market.paymentMethods];
+    if (market.paypal && process.env.STRIPE_PAYPAL === "1") methods.push("paypal");
+    if (market.key !== "it") metadata.market = market.key;
     const variant = b.checkout_variant === "3ds" ? "3ds" : null;
     const tds = await threeDsDecision(variant, b.pm_id);
     if (variant) metadata.jj_checkout_variant = variant; // A/B: ontbreekt = gewone checkout
