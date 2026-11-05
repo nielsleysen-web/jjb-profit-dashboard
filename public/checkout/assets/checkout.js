@@ -780,29 +780,39 @@ function initStripe() {
   if (IS_NL) CONFIG.STRIPE_PAYPAL = false; // /api/checkout-config zet dit aan; NL/BE doet PayPal rechtstreeks, niet via Stripe
 
   if (IS_NL) {
-    // NL/BE: Stripe's Payment Element met iDEAL (bovenaan), Bancontact en kaart. Met setupFutureUsage off_session
-    // toont Stripe bij iDEAL/Bancontact zelf de SEPA-machtigingstekst; de rebills lopen daarna als sepa_debit.
+    // NL/BE: Stripe's Payment Element met iDEAL (bovenaan) en kaart. Met setupFutureUsage off_session toont Stripe
+    // bij iDEAL zelf de SEPA-machtigingstekst; de rebills lopen daarna als sepa_debit. Zolang SEPA Direct Debit op het
+    // Stripe-account niet actief is, weigert Stripe iDEAL+off_session (loaderror) → dan opnieuw met alleen kaart,
+    // zodat kaart (en PayPal in de rij eronder) gewoon blijven werken. Bancontact erbij zodra SEPA actief is.
     // Naam/e-mail/adres komen uit ons formulier (fields: never) en gaan mee bij confirmPayment.
-    elementsPay = stripe.elements({
-      mode: 'subscription', amount: totalCents(), currency: 'eur', setupFutureUsage: 'off_session',
-      paymentMethodTypes: ['card', 'ideal'], appearance, locale: 'nl', // Bancontact erbij zodra SEPA Direct Debit actief is (PayPal: eigen rij eronder)
-    });
-    const paymentElement = elementsPay.create('payment', {
-      layout: { type: 'accordion', defaultCollapsed: false, radios: true, spacedAccordionItems: true },
-      paymentMethodOrder: ['ideal', 'card'],
-      fields: { billingDetails: { name: 'never', email: 'never', phone: 'never', address: 'never' } },
-      wallets: { applePay: 'never', googlePay: 'never' }, // staan al bovenaan (express checkout)
-    });
-    paymentElement.mount('#payment-element');
-    paymentElement.on('change', (e) => { payComplete = !!e.complete; });
-    paymentElement.on('focus', () => setPayPalSelected(false));
-    paymentElement.on('ready', () => { const ph = $('#payment-element-loading'); if (ph) ph.remove(); });
-    paymentElement.on('loaderror', (e) => {
-      // bv. iDEAL/Bancontact/SEPA nog niet geactiveerd in het Stripe-dashboard: niet stil blijven staan
-      logClient('pe_loaderror', e && e.error && e.error.message, 'payment_element');
-      const ph = $('#payment-element-loading'); if (ph) ph.textContent = T.payUnavailable;
-      showError(T.payLoadFail); $('#pay-btn').disabled = true;
-    });
+    const mountPay = (types) => {
+      elementsPay = stripe.elements({
+        mode: 'subscription', amount: totalCents(), currency: 'eur', setupFutureUsage: 'off_session',
+        paymentMethodTypes: types, appearance, locale: 'nl',
+      });
+      const paymentElement = elementsPay.create('payment', {
+        layout: { type: 'accordion', defaultCollapsed: false, radios: true, spacedAccordionItems: true },
+        paymentMethodOrder: ['ideal', 'card'],
+        fields: { billingDetails: { name: 'never', email: 'never', phone: 'never', address: 'never' } },
+        wallets: { applePay: 'never', googlePay: 'never' }, // staan al bovenaan (express checkout)
+      });
+      paymentElement.mount('#payment-element');
+      paymentElement.on('change', (e) => { payComplete = !!e.complete; });
+      paymentElement.on('focus', () => setPayPalSelected(false));
+      paymentElement.on('ready', () => { const ph = $('#payment-element-loading'); if (ph) ph.remove(); });
+      paymentElement.on('loaderror', (e) => {
+        logClient('pe_loaderror', (e && e.error && e.error.message) + ' [' + types.join(',') + ']', 'payment_element');
+        if (types.includes('ideal')) {
+          // iDEAL-recurring vereist SEPA Direct Debit op het account: terugvallen op alleen kaart
+          try { paymentElement.destroy(); } catch (err) {}
+          const note = $('.pe-note'); if (note) note.hidden = true;
+          return mountPay(['card']);
+        }
+        const ph = $('#payment-element-loading'); if (ph) ph.textContent = T.payUnavailable;
+        showError(T.payLoadFail); $('#pay-btn').disabled = true;
+      });
+    };
+    mountPay(['card', 'ideal']);
     $('#pm-cc').hidden = true;
     return initExpress();
   }
