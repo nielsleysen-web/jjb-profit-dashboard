@@ -38,6 +38,25 @@ const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisens
    (of ?ab=3ds) → debit- en prepaidkaarten krijgen bij de eerste betaling een verplichte 3DS-bevestiging.
    De gewone links werken exact zoals voorheen. */
 const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(location.search).get('ab') === '3ds';
+// Markt: 'nl' (NL/BE: /nl/<product> of nl.html — iDEAL + Bancontact + kaart via het Payment Element, SEPA-rebills) of 'it'
+const MARKET = (/(^|\/)nl(\/|\.html|$)/i.test(location.pathname) || new URLSearchParams(location.search).get('m') === 'nl') ? 'nl' : 'it';
+const IS_NL = MARKET === 'nl';
+// Teksten die checkout.js zelf schrijft (de vaste teksten staan in index.html / nl.html)
+const T = IS_NL ? {
+  shipFree: 'Standaard (3-5 werkdagen)', shipInsured: 'Express (1-2 werkdagen)', free: 'GRATIS', enterAddress: 'Vul je adres in',
+  save: 'Je bespaart', items1: '1 artikel', items2: '2 artikelen', discount: 'Korting', apply: 'Toepassen',
+  discountOk: 'Korting toegepast.', discountBad: 'Vul een geldige kortingscode in.', discountErr: 'Code kon niet gecontroleerd worden, probeer opnieuw.',
+  generic: 'Er ging iets mis, probeer het opnieuw.', billing: 'Vul je factuuradres volledig in.', payIncomplete: 'Vul je betaalgegevens in.',
+  payUnavailable: 'Betalen is zo beschikbaar.', payLoadFail: 'Betaling kon niet geladen worden. Herlaad de pagina of probeer een andere browser.',
+  zip: 'Postcode', dateLocale: 'nl-NL', moneyLocale: 'nl-NL',
+} : {
+  shipFree: 'Standard (5-8 giorni lavorativi)', shipInsured: 'Express (3-5 giorni lavorativi)', free: 'GRATIS', enterAddress: 'Inserisci l’indirizzo',
+  save: 'Risparmi', items1: '1 articolo', items2: '2 articoli', discount: 'Sconto', apply: 'Applica',
+  discountOk: 'Sconto applicato.', discountBad: 'Inserisci un codice sconto valido.', discountErr: 'Impossibile verificare il codice, riprova.',
+  generic: 'Qualcosa è andato storto, riprova.', billing: 'Completa l’indirizzo di fatturazione.', payIncomplete: 'Completa i dati della carta.',
+  payUnavailable: 'Il pagamento sarà disponibile a breve.', payLoadFail: 'Impossibile caricare il pagamento. Ricarica la pagina o prova con un altro browser.',
+  zip: 'CAP', dateLocale: 'it-IT', moneyLocale: 'it-IT',
+};
 /* A/B-test checkout (NeuroTone): middleware.js verdeelt checkout.getjustjenny.com/ over variant A (index.html) en
    B (b.html, <body data-ab="b">) en zet cookie jj_ab. De variant gaat mee naar Stripe/PayPal → Shopify-tag
    checkout-ab-a / checkout-ab-b; paginaweergaven via /api/checkout/ab-view. Leeg = niet in de test. */
@@ -95,6 +114,11 @@ const PRODUCT_CONFIG = {
 };
 CONFIG.MEMBERSHIP_NAME = 'Just Jenny Health For Life Membership';
 Object.assign(CONFIG, PRODUCT_CONFIG[PRODUCT_KEY] || {});
+if (IS_NL) {
+  CONFIG.SUCCESS_PATH = '/checkout/grazie'; CONFIG.STRIPE_PAYPAL = false; CONFIG.PAYPAL_CLIENT_ID = '';
+  if (CONFIG.PAY_LABEL) CONFIG.PAY_LABEL = 'Bestelling afronden'; // NL-versie van "Completa l’ordine"
+  const pg = document.querySelector('.pm-group'); if (pg) pg.hidden = true; // kaart-/PayPal-markup: het Payment Element neemt het over
+}
 // Eigen knoptekst per product (vóór PAY_LABEL hieronder uit de DOM wordt gelezen): knop + voorwaardentekst
 if (CONFIG.PAY_LABEL) {
   const bt = document.getElementById('pay-btn-text');
@@ -180,11 +204,11 @@ const PACKS_CEYLON = {
 const PACKS = PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
-  free:    { cents: 0,   title: 'Standard (5-8 giorni lavorativi)' },
-  insured: { cents: 395, title: 'Express (3-5 giorni lavorativi)' },
+  free:    { cents: 0,   title: T.shipFree },
+  insured: { cents: 395, title: T.shipInsured },
 };
 const PROVINCES = { AG:'Agrigento',AL:'Alessandria',AN:'Ancona',AO:'Aosta',AR:'Arezzo',AP:'Ascoli Piceno',AT:'Asti',AV:'Avellino',BA:'Bari',BT:'Barletta-Andria-Trani',BL:'Belluno',BN:'Benevento',BG:'Bergamo',BI:'Biella',BO:'Bologna',BZ:'Bolzano',BS:'Brescia',BR:'Brindisi',CA:'Cagliari',CL:'Caltanissetta',CB:'Campobasso',CE:'Caserta',CT:'Catania',CZ:'Catanzaro',CH:'Chieti',CO:'Como',CS:'Cosenza',CR:'Cremona',KR:'Crotone',CN:'Cuneo',EN:'Enna',FM:'Fermo',FE:'Ferrara',FI:'Firenze',FG:'Foggia',FC:'Forlì-Cesena',FR:'Frosinone',GE:'Genova',GO:'Gorizia',GR:'Grosseto',IM:'Imperia',IS:'Isernia',SP:'La Spezia',AQ:"L'Aquila",LT:'Latina',LE:'Lecce',LC:'Lecco',LI:'Livorno',LO:'Lodi',LU:'Lucca',MC:'Macerata',MN:'Mantova',MS:'Massa-Carrara',MT:'Matera',ME:'Messina',MI:'Milano',MO:'Modena',MB:'Monza e Brianza',NA:'Napoli',NO:'Novara',NU:'Nuoro',OR:'Oristano',PD:'Padova',PA:'Palermo',PR:'Parma',PV:'Pavia',PG:'Perugia',PU:'Pesaro e Urbino',PE:'Pescara',PC:'Piacenza',PI:'Pisa',PT:'Pistoia',PN:'Pordenone',PZ:'Potenza',PO:'Prato',RG:'Ragusa',RA:'Ravenna',RC:'Reggio Calabria',RE:'Reggio Emilia',RI:'Rieti',RN:'Rimini',RM:'Roma',RO:'Rovigo',SA:'Salerno',SS:'Sassari',SV:'Savona',SI:'Siena',SR:'Siracusa',SO:'Sondrio',SU:'Sud Sardegna',TA:'Taranto',TE:'Teramo',TR:'Terni',TO:'Torino',TP:'Trapani',TN:'Trento',TV:'Treviso',TS:'Trieste',UD:'Udine',VA:'Varese',VE:'Venezia',VB:'Verbano-Cusio-Ossola',VC:'Vercelli',VR:'Verona',VV:'Vibo Valentia',VI:'Vicenza',VT:'Viterbo' };
-const COUNTRIES = { IT: 'Italia' };
+const COUNTRIES = IS_NL ? { NL: 'Nederland', BE: 'België' } : { IT: 'Italia' };
 const ALLOWED_COUNTRIES = Object.keys(COUNTRIES);
 // Tracking-parameters van jjb-track.js (salespagina → checkout-link) → Stripe-metadata → Shopify-order
 const TRACK_KEYS = ['ad_id','adset_id','campaign_id','fbclid','fbc','fbp','vid','utm_source','utm_campaign','utm_content','first_touch','host','path','pgs'];
@@ -206,7 +230,8 @@ let promo = null; // { code, percent_off, amount_off, duration }
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
-const money = (c) => (c / 100).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+const money = (c) => IS_NL ? '€ ' + (c / 100).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  : (c / 100).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
 function shipCents() { return (SHIP[shipMethod] || SHIP.free).cents; }
 // Stripe applies subscription-level discounts to the WHOLE first invoice,
@@ -369,15 +394,15 @@ function updateAmounts() {
   const hasCompare = P.compare > P.amount;
   $$('.js-compare').forEach(el => { el.textContent = hasCompare ? money(P.compare) : ''; el.hidden = !hasCompare; });
   $$('.js-price').forEach(el => el.textContent = money(P.amount));
-  $$('.js-save').forEach(el => { el.textContent = hasCompare ? `Risparmi ${money(P.save)} (${P.savePct}%)` : ''; el.hidden = !hasCompare; });
+  $$('.js-save').forEach(el => { el.textContent = hasCompare ? `${T.save} ${money(P.save)} (${P.savePct}%)` : ''; el.hidden = !hasCompare; });
   $$('.js-subtotal').forEach(el => el.textContent = money(P.amount + bumpCents()));
-  if (BUMP) { $$('.js-items').forEach(el => el.textContent = bumpOn ? '2 articoli' : '1 articolo'); syncBumpRows(); }
+  if (BUMP) { $$('.js-items').forEach(el => el.textContent = bumpOn ? T.items2 : T.items1); syncBumpRows(); }
   $$('.js-shipping').forEach(el => {
     if (!addrComplete()) {
-      el.textContent = 'Inserisci l’indirizzo';
+      el.textContent = T.enterAddress;
       el.classList.add('t-muted');
     } else {
-      el.textContent = shipCents() ? money(shipCents()) : 'GRATIS';
+      el.textContent = shipCents() ? money(shipCents()) : T.free;
       el.classList.remove('t-muted');
     }
   });
@@ -395,10 +420,11 @@ function updateAmounts() {
   $$('.js-cycle-per-year').forEach(el => el.textContent = Math.floor(365 / CONFIG.CYCLE_DAYS));
   $$('.js-discount-line').forEach(el => el.hidden = !promo);
   if (promo) {
-    $$('.js-discount-label').forEach(el => el.textContent = `Sconto (${promo.code})`);
+    $$('.js-discount-label').forEach(el => el.textContent = `${T.discount} (${promo.code})`);
     $$('.js-discount-amt').forEach(el => el.textContent = '-' + money(discountCents()));
   }
   if (elementsExpress) elementsExpress.update({ amount: totalCents() });
+  if (elementsPay) elementsPay.update({ amount: totalCents() });
   updatePayPalGate();
 }
 
@@ -442,19 +468,19 @@ function wireDiscountInputs() {
         const data = await r.json();
         if (data.valid) {
           promo = { code: data.code, percent_off: data.percent_off, amount_off: data.amount_off, duration: data.duration };
-          msg.textContent = 'Sconto applicato.';
+          msg.textContent = T.discountOk;
           msg.className = 'discount-msg ok';
         } else {
           promo = null;
-          msg.textContent = 'Inserisci un codice sconto valido.';
+          msg.textContent = T.discountBad;
           msg.className = 'discount-msg err';
         }
       } catch {
-        msg.textContent = 'Impossibile verificare il codice, riprova.';
+        msg.textContent = T.discountErr;
         msg.className = 'discount-msg err';
       }
       msg.hidden = false;
-      btn.disabled = false; btn.textContent = 'Applica';
+      btn.disabled = false; btn.textContent = T.apply;
       updateAmounts();
     });
   });
@@ -464,7 +490,7 @@ function wireDiscountInputs() {
 function fillCountries(sel) {
   sel.innerHTML = Object.entries(COUNTRIES)
     .map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
-  sel.value = 'IT';
+  sel.value = ALLOWED_COUNTRIES[0];
 }
 function regionUsesSelect(country) { return country === 'IT'; }
 
@@ -485,6 +511,8 @@ function zipLooksValid(zip, country) {
   const z = String(zip || '').trim();
   if (!z) return false;
   if (country === 'IT') return /^\d{5}$/.test(z);
+  if (country === 'NL') return /^\d{4}\s?[A-Za-z]{2}$/.test(z);
+  if (country === 'BE') return /^\d{4}$/.test(z);
   return true;
 }
 
@@ -499,7 +527,7 @@ function updateRegionFields() {
   const country = $('#country').value;
   const useSelect = regionUsesSelect(country);
   $('#state-select-wrap').hidden = !useSelect;
-  $('#state-text-wrap').hidden = useSelect;
+  $('#state-text-wrap').hidden = useSelect || IS_NL; // NL/BE: geen provincie
   if (useSelect) {
     const list = PROVINCES;
     // No pre-selected default: a silent WA/ON default was being submitted verbatim
@@ -514,7 +542,7 @@ function updateRegionFields() {
     $('#state-free-label').textContent = REGION_REQUIRED.has(country)
       ? 'State/Province' : 'State/Province (optional)';
   }
-  $('#zip-label').textContent = 'CAP';
+  $('#zip-label').textContent = T.zip;
 }
 function stateCodeFromName(country, name) {
   if (!name) return '';
@@ -646,7 +674,7 @@ function addBusinessDays(from, n) {
   return d;
 }
 function renderShipDates() {
-  const fmt = (d) => d.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
+  const fmt = (d) => d.toLocaleDateString(T.dateLocale, { weekday: 'short', day: 'numeric', month: 'short' }).replace(/\./g, '');
   $$('.ship-date').forEach(el => {
     const [min, max] = el.dataset.shipDate.split(',').map(Number);
     el.textContent = fmt(addBusinessDays(new Date(), min)) + ' – ' + fmt(addBusinessDays(new Date(), max));
@@ -660,6 +688,8 @@ function renderShipDates() {
 if (typeof Stripe === 'undefined') logClient('fatal', 'Stripe.js failed to load');
 let stripe = null; // aangemaakt in boot() zodra de publishable key uit /api/checkout-config binnen is
 let elementsExpress = null;
+let elementsPay = null; // NL/BE: Payment Element (iDEAL / Bancontact / kaart) i.p.v. de losse kaartvelden
+let payComplete = false;
 let cardNumber = null;
 let cardState = { number: false, expiry: false, cvc: false };
 let payPalSelected = false;
@@ -730,8 +760,7 @@ function initStripe() {
   if (!stripe) {
     // Preview zonder Stripe-sleutel: toon hoe de snelle knoppen eruitzien (niet klikbaar)
     if (!CONFIG.STRIPE_PK) { $('#express-section').hidden = false; $('#ece-preview').hidden = !!CONFIG.PAYPAL_CLIENT_ID; $('#pm-paypal').hidden = false; }
-    showError(CONFIG.STRIPE_PK ? 'Impossibile caricare il pagamento. Ricarica la pagina o prova con un altro browser.'
-      : 'Il pagamento sarà disponibile a breve.');
+    showError(CONFIG.STRIPE_PK ? T.payLoadFail : T.payUnavailable);
     $('#pay-btn').disabled = true;
     return;
   }
@@ -744,9 +773,33 @@ function initStripe() {
     setupFutureUsage: 'off_session',
     paymentMethodTypes: CONFIG.STRIPE_PAYPAL ? ['card', 'link', 'paypal'] : ['card', 'link'],
     appearance,
-    locale: 'it',
+    locale: MARKET,
   });
 
+  if (IS_NL) {
+    // NL/BE: Stripe's Payment Element met iDEAL (bovenaan), Bancontact en kaart. Met setupFutureUsage off_session
+    // toont Stripe bij iDEAL/Bancontact zelf de SEPA-machtigingstekst; de rebills lopen daarna als sepa_debit.
+    // Naam/e-mail/adres komen uit ons formulier (fields: never) en gaan mee bij confirmPayment.
+    elementsPay = stripe.elements({
+      mode: 'subscription', amount: totalCents(), currency: 'eur', setupFutureUsage: 'off_session',
+      paymentMethodTypes: ['card', 'ideal', 'bancontact'], appearance, locale: 'nl',
+    });
+    const paymentElement = elementsPay.create('payment', {
+      layout: { type: 'accordion', defaultCollapsed: false, radios: true, spacedAccordionItems: true },
+      paymentMethodOrder: ['ideal', 'bancontact', 'card'],
+      fields: { billingDetails: { name: 'never', email: 'never', phone: 'never', address: 'never' } },
+      wallets: { applePay: 'never', googlePay: 'never' }, // staan al bovenaan (express checkout)
+    });
+    paymentElement.mount('#payment-element');
+    paymentElement.on('change', (e) => { payComplete = !!e.complete; });
+    paymentElement.on('ready', () => { const ph = $('#payment-element-loading'); if (ph) ph.remove(); });
+    $('.pm-group').hidden = true;
+    return initExpress();
+  }
+  initCardElements();
+  initExpress();
+}
+function initCardElements() {
   // Split card elements inside our own Shopify-style markup
   const elementsCard = stripe.elements({ locale: 'it' });
   cardNumber = elementsCard.create('cardNumber', { style: cardStyle, placeholder: 'Numero della carta', showIcon: false });
@@ -765,8 +818,8 @@ function initStripe() {
     });
     el.on('blur', () => { if (el._wrap) el._wrap.classList.remove('focus'); });
   });
-
-
+}
+function initExpress() {
   // Snelle knoppen bovenaan: PayPal + Google Pay (+ Apple Pay op iPhone/Safari), naast elkaar
   const expressCheckout = elementsExpress.create('expressCheckout', {
     buttonHeight: 48,
@@ -817,13 +870,13 @@ function initStripe() {
       line1: ship.address.line1, line2: ship.address.line2 || '',
       city: ship.address.city, state: ship.address.state,
       postal_code: ship.address.postal_code,
-      country: ship.address.country || 'IT',
+      country: ship.address.country || ALLOWED_COUNTRIES[0],
       country_name: COUNTRIES[ship.address.country] || ship.address.country || 'Italia',
     } : null;
     try {
       const { error: submitError } = await elementsExpress.submit();
       if (submitError) { showError(submitError.message); return; }
-      const { clientSecret, amount, subscriptionId } = await createSubscription({ email, name, phone, shipping: flatShipping });
+      const { clientSecret, amount, subscriptionId } = await createSubscription({ email, name, phone, shipping: flatShipping, ...(IS_NL ? { market: 'nl' } : {}) });
       if (amount && amount !== totalCents()) elementsExpress.update({ amount });
       saveOrderForThankYou({ email, name, shipping: flatShipping, wallet: true });
       const { error } = await stripe.confirmPayment({
@@ -1117,11 +1170,15 @@ function validateForm() {
       el.classList.toggle('invalid', bad);
       if (bad && billOk) { el.focus(); billOk = false; }
     });
-    if (!billOk) { showError('Completa l’indirizzo di fatturazione.'); return false; }
+    if (!billOk) { showError(T.billing); return false; }
+  }
+  if (IS_NL) {
+    if (!payComplete) { showError(T.payIncomplete); return false; }
+    return true;
   }
 
   if (!cardState.number || !cardState.expiry || !cardState.cvc) {
-    showError('Completa i dati della carta.');
+    showError(T.payIncomplete);
     if (cardNumber) cardNumber.focus();
     return false;
   }
@@ -1460,7 +1517,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         address: {
           line1: billing.line1, line2: billing.line2 || undefined,
           city: billing.city, state: billing.state,
-          postal_code: billing.postal_code, country: billing.country || 'IT',
+          postal_code: billing.postal_code, country: billing.country || ALLOWED_COUNTRIES[0],
         },
       };
       // Alleen op de 3DS-testlinks: eerst de PaymentMethod aanmaken → de server ziet het kaarttype
@@ -1473,8 +1530,24 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       const subCustomer = { email, name: shipping.name, phone, shipping, ...(cardPm ? { pm_id: cardPm.id, card_funding: (cardPm.card && cardPm.card.funding) || 'unknown' } : {}) };
       if (TDS_VARIANT) subCustomer.checkout_variant = '3ds';
+      if (IS_NL) subCustomer.market = 'nl';
+      // NL/BE: Payment Element valideren vóór we het abonnement aanmaken (verplicht in deferred mode)
+      if (IS_NL) { const r = await elementsPay.submit(); if (r && r.error) { showPayError(r.error, 'pe_submit'); return; } }
       const sub = await createSubscription(subCustomer);
       saveOrderForThankYou({ email });
+
+      // NL/BE: iDEAL / Bancontact (redirect naar de bank, terug op de bedankpagina) of kaart (blijft op de pagina)
+      if (IS_NL) {
+        const { error, paymentIntent } = await stripe.confirmPayment({
+          elements: elementsPay, clientSecret: sub.clientSecret,
+          confirmParams: { return_url: successUrl(sub.subscriptionId), payment_method_data: { billing_details: billingDetails } },
+          redirect: 'if_required',
+        });
+        if (error) { showPayError(error, 'pe_confirm'); return; }
+        try { sessionStorage.setItem('checkout_purchase_fired', sub.subscriptionId); } catch (e) {}
+        location.href = successUrl(sub.subscriptionId);
+        return;
+      }
 
       // PayPal via Stripe → redirect naar PayPal en terug naar de bedankpagina
       if (payPalSelected) {
@@ -1506,7 +1579,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try { sessionStorage.setItem('checkout_purchase_fired', subId); } catch (e) {}
       location.href = successUrl(subId);
     } catch (err) {
-      showError(err.message || 'Qualcosa è andato storto, riprova.');
+      showError(err.message || T.generic);
       logClient('pay_exception', err && err.message, 'card_submit');
     }
   });

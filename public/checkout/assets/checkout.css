@@ -662,3 +662,9 @@ body.pay-dark .pay-btn:hover{background:#093a20}
 .summary-mobile .jj-bump{display:none}
 .prod-row.jj-bump-row .prod-thumb img{object-fit:contain;background:#fbf1f4}
 @media (max-width:420px){.jj-bump .bp-ben{gap:0 4px}.jj-bump .bp-ben li{font-size:10px;gap:3px;letter-spacing:-.15px}.jj-bump .bp-ben svg{width:11px;height:11px}.jj-bump .bp-add{padding:9px 10px;font-size:12.5px;min-width:96px}.jj-bump .bp-name{font-size:13.5px}.jj-bump .bp-sub{font-size:11.5px}}
+
+/* NL/BE (nl.html): Stripe Payment Element (iDEAL / Bancontact / kaart) i.p.v. de eigen kaartvelden */
+#payment-element { margin-top: 4px; min-height: 56px; }
+.pe-loading { padding: 16px 14px; border: 1px solid var(--border-input); border-radius: var(--radius); color: #707070; font-size: 14px; }
+.pe-note { margin: 10px 0 0; padding: 10px 12px; background: #f3f6f4; border-radius: 10px; font-size: 12.5px; line-height: 1.45; color: #2c4a44; }
+.pm-group[hidden] { display: none; }
