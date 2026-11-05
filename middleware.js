@@ -8,6 +8,7 @@
 //   checkout.getjustjenny.com/urinapatches → /checkout/index.html  (UrinaPatches; ook /checkout?p=urinapatches)
 //   checkout.getjustjenny.com/pumpkinseed → /checkout/index.html  (Pumpkin Seed Drops; ook /checkout?p=pumpkinseed)
 //   checkout.getjustjenny.com/ceylon → /checkout/index.html  (Cannella di Ceylon; ook /checkout?p=ceylon)
+//   checkout.getjustjenny.com/nl/<product> → /checkout/nl.html  (NL/BE: iDEAL + Bancontact + kaart, SEPA-rebills; ook /checkout/nl?p=…)
 //   checkout.getjustjenny.com/3ds, /lubrisense/3ds, /magnesium/3ds, /emorroidi/3ds → idem, A/B-test 3D Secure voor debit/prepaid
 // Het ledenportaal: members.getjustjenny.com/<pad> en intimate.getjustjenny.com/<pad> → /portal/<pad> (pages/portal/*).
 //   API-routes (/api/portal/*) en Next-assets blijven op hun eigen pad.
@@ -64,6 +65,12 @@ export function middleware(req) {
   // Magnesium Freeze (zonder membership): checkout.getjustjenny.com/magnesium → zelfde pagina
   // A/B-test 3DS: /3ds, /lubrisense/3ds, /magnesium/3ds en /emorroidi/3ds → zelfde checkoutpagina (checkout.js leest "/3ds" uit het pad)
   const lubri = onCheckoutHost && /^\/(?:(lubrisense|magnesium|emorroidi|urinapatches|pumpkinseed|ceylon)(?:\/3ds)?|3ds)\/?$/.test(url.pathname);
+  // NL/BE: checkout.getjustjenny.com/nl/<product> (of /checkout/nl?p=…) → nl.html (iDEAL + Bancontact + kaart; checkout.js leest markt + product uit het pad)
+  if (/^\/(?:checkout\/)?nl(?:\/(lubrisense|magnesium|emorroidi|urinapatches|pumpkinseed|ceylon|neurotone))?\/?$/.test(url.pathname)) {
+    const to = url.clone();
+    to.pathname = "/checkout/nl.html";
+    return NextResponse.rewrite(to);
+  }
   // A/B-test checkout NeuroTone: checkout.getjustjenny.com/ → variant A (index.html) of B (b.html), vast per bezoeker (cookie)
   const pq = (url.searchParams.get("p") || "").toLowerCase();
   const neuroRoot = ((onCheckoutHost && url.pathname === "/") || url.pathname === "/checkout" || url.pathname === "/checkout/")
