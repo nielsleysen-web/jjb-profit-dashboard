@@ -3,7 +3,7 @@
 // (bundel × verzending) en geven het abonnements-ID terug; de klant keurt het goed in PayPal.
 
 import { paypalConfigured, planFor, pp, packCustom, saveCheckoutContext } from "../../../lib/paypal";
-import { getProduct, TRACK_KEYS } from "../../../lib/checkout";
+import { getProduct, TRACK_KEYS, getMarket, zipValidFor } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const clean = (s, max = 120) => String(s || "").trim().slice(0, max);
@@ -20,14 +20,17 @@ export default async function handler(req, res) {
     const bump = b.bump === true || b.bump === "1" || b.bump === 1; // order bump (Spray Neutralizzante 9,95 €, in de setup fee)
     const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product, insurance, bump);
     const s = b.shipping || {};
-    const full = !!(s.line1 && s.city && /^\d{5}$/.test(String(s.postal_code || "")) && (s.name || b.name));
+    // Markt: it (standaard) of nl (NL/BE) — bepaalt postcodecheck, landcode en PayPal-taal
+    const market = getMarket(b.market);
+    const country = market.countries.includes(String(s.country || "").toUpperCase()) ? String(s.country).toUpperCase() : market.countries[0];
+    const full = !!(s.line1 && s.city && zipValidFor(market, s.postal_code, country) && (s.name || b.name));
 
     const body = {
       plan_id: plan.id,
       custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}, plan.product.key, plan.insurance, b.checkout_ab, plan.bump, b.bump_ab),
       application_context: {
         brand_name: "Just Jenny",
-        locale: "it-IT",
+        locale: market.key === "nl" ? "nl-NL" : "it-IT",
         shipping_preference: full ? "SET_PROVIDED_ADDRESS" : "GET_FROM_FILE",
         user_action: "SUBSCRIBE_NOW",
       },
@@ -43,7 +46,7 @@ export default async function handler(req, res) {
         address: {
           address_line_1: clean(s.line1), address_line_2: clean(s.line2) || undefined,
           admin_area_2: clean(s.city, 80), admin_area_1: clean(s.state, 40) || undefined,
-          postal_code: clean(s.postal_code, 12), country_code: "IT",
+          postal_code: clean(s.postal_code, 12).toUpperCase(), country_code: country,
         },
       };
     }
