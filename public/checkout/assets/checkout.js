@@ -115,9 +115,10 @@ const PRODUCT_CONFIG = {
 CONFIG.MEMBERSHIP_NAME = 'Just Jenny Health For Life Membership';
 Object.assign(CONFIG, PRODUCT_CONFIG[PRODUCT_KEY] || {});
 if (IS_NL) {
-  CONFIG.SUCCESS_PATH = '/checkout/grazie'; CONFIG.STRIPE_PAYPAL = false; CONFIG.PAYPAL_CLIENT_ID = '';
+  CONFIG.SUCCESS_PATH = '/checkout/grazie'; CONFIG.STRIPE_PAYPAL = false; // PayPal wél, maar rechtstreeks (gele knop), niet via Stripe
   if (CONFIG.PAY_LABEL) CONFIG.PAY_LABEL = 'Bestelling afronden'; // NL-versie van "Completa l’ordine"
-  const pg = document.querySelector('.pm-group'); if (pg) pg.hidden = true; // kaart-/PayPal-markup: het Payment Element neemt het over
+  // Kaartmarkup verbergen: het Payment Element (iDEAL + kaart) neemt het over; de PayPal-rij blijft eronder staan
+  const cc = document.getElementById('pm-cc'); if (cc) cc.hidden = true;
 }
 // Eigen knoptekst per product (vóór PAY_LABEL hieronder uit de DOM wordt gelezen): knop + voorwaardentekst
 if (CONFIG.PAY_LABEL) {
@@ -719,6 +720,7 @@ function setPayPalSelected(on) {
   $('#pm-cc-toggle').setAttribute('aria-pressed', String(!on));
   $('#pm-paypal-body').hidden = !on;
   $('#pm-cc-body').hidden = on;
+  if (IS_NL) { const pe = $('#payment-element'); if (pe) pe.hidden = on; const note = $('.pe-note'); if (note) note.hidden = on; }
   // PayPal: de gele PayPal-knop in de rij vervangt de gewone bestelknop
   $('#pay-btn').hidden = on && !!CONFIG.PAYPAL_CLIENT_ID;
   if (!CONFIG.PAYPAL_CLIENT_ID) $('#pay-btn-text').textContent = on ? 'Paga con PayPal' : PAY_LABEL;
@@ -775,7 +777,7 @@ function initStripe() {
     appearance,
     locale: MARKET,
   });
-  if (IS_NL) { CONFIG.STRIPE_PAYPAL = false; CONFIG.PAYPAL_CLIENT_ID = ''; } // /api/checkout-config zet die aan; NL/BE heeft geen PayPal
+  if (IS_NL) CONFIG.STRIPE_PAYPAL = false; // /api/checkout-config zet dit aan; NL/BE doet PayPal rechtstreeks, niet via Stripe
 
   if (IS_NL) {
     // NL/BE: Stripe's Payment Element met iDEAL (bovenaan), Bancontact en kaart. Met setupFutureUsage off_session
@@ -783,16 +785,17 @@ function initStripe() {
     // Naam/e-mail/adres komen uit ons formulier (fields: never) en gaan mee bij confirmPayment.
     elementsPay = stripe.elements({
       mode: 'subscription', amount: totalCents(), currency: 'eur', setupFutureUsage: 'off_session',
-      paymentMethodTypes: ['card', 'ideal', 'bancontact'], appearance, locale: 'nl',
+      paymentMethodTypes: ['card', 'ideal'], appearance, locale: 'nl', // Bancontact erbij zodra SEPA Direct Debit actief is (PayPal: eigen rij eronder)
     });
     const paymentElement = elementsPay.create('payment', {
       layout: { type: 'accordion', defaultCollapsed: false, radios: true, spacedAccordionItems: true },
-      paymentMethodOrder: ['ideal', 'bancontact', 'card'],
+      paymentMethodOrder: ['ideal', 'card'],
       fields: { billingDetails: { name: 'never', email: 'never', phone: 'never', address: 'never' } },
       wallets: { applePay: 'never', googlePay: 'never' }, // staan al bovenaan (express checkout)
     });
     paymentElement.mount('#payment-element');
     paymentElement.on('change', (e) => { payComplete = !!e.complete; });
+    paymentElement.on('focus', () => setPayPalSelected(false));
     paymentElement.on('ready', () => { const ph = $('#payment-element-loading'); if (ph) ph.remove(); });
     paymentElement.on('loaderror', (e) => {
       // bv. iDEAL/Bancontact/SEPA nog niet geactiveerd in het Stripe-dashboard: niet stil blijven staan
@@ -800,7 +803,7 @@ function initStripe() {
       const ph = $('#payment-element-loading'); if (ph) ph.textContent = T.payUnavailable;
       showError(T.payLoadFail); $('#pay-btn').disabled = true;
     });
-    $('.pm-group').hidden = true;
+    $('#pm-cc').hidden = true;
     return initExpress();
   }
   initCardElements();
@@ -976,7 +979,7 @@ function initPayPal() {
           body: JSON.stringify({
             pack, product: PRODUCT_KEY, ship_method: shipMethod, insurance: insCents() > 0, checkout_ab: AB_VARIANT || undefined, track: attribution(),
             bump: bumpCents() > 0, bump_ab: bumpVariant || undefined,
-            email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh,
+            email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh, ...(IS_NL ? { market: 'nl' } : {}),
           }),
         });
         const d = await r.json();
