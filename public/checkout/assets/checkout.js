@@ -771,10 +771,11 @@ function initStripe() {
     amount: totalCents(),
     currency: 'eur',
     setupFutureUsage: 'off_session',
-    paymentMethodTypes: CONFIG.STRIPE_PAYPAL ? ['card', 'link', 'paypal'] : ['card', 'link'],
+    paymentMethodTypes: CONFIG.STRIPE_PAYPAL && !IS_NL ? ['card', 'link', 'paypal'] : ['card', 'link'],
     appearance,
     locale: MARKET,
   });
+  if (IS_NL) { CONFIG.STRIPE_PAYPAL = false; CONFIG.PAYPAL_CLIENT_ID = ''; } // /api/checkout-config zet die aan; NL/BE heeft geen PayPal
 
   if (IS_NL) {
     // NL/BE: Stripe's Payment Element met iDEAL (bovenaan), Bancontact en kaart. Met setupFutureUsage off_session
@@ -793,6 +794,12 @@ function initStripe() {
     paymentElement.mount('#payment-element');
     paymentElement.on('change', (e) => { payComplete = !!e.complete; });
     paymentElement.on('ready', () => { const ph = $('#payment-element-loading'); if (ph) ph.remove(); });
+    paymentElement.on('loaderror', (e) => {
+      // bv. iDEAL/Bancontact/SEPA nog niet geactiveerd in het Stripe-dashboard: niet stil blijven staan
+      logClient('pe_loaderror', e && e.error && e.error.message, 'payment_element');
+      const ph = $('#payment-element-loading'); if (ph) ph.textContent = T.payUnavailable;
+      showError(T.payLoadFail); $('#pay-btn').disabled = true;
+    });
     $('.pm-group').hidden = true;
     return initExpress();
   }
@@ -825,7 +832,7 @@ function initExpress() {
     buttonHeight: 48,
     layout: { maxColumns: 3, maxRows: 1, overflow: 'auto' },
     buttonTheme: { paypal: 'gold', googlePay: 'black', applePay: 'black' },
-    paymentMethods: { paypal: 'auto', googlePay: 'always', applePay: 'always', link: 'never', amazonPay: 'never', klarna: 'never' },
+    paymentMethods: { paypal: IS_NL ? 'never' : 'auto', googlePay: 'always', applePay: 'always', link: 'never', amazonPay: 'never', klarna: 'never' },
   });
   expressCheckout.mount('#express-checkout-element');
   expressCheckout.on('ready', (e) => {
