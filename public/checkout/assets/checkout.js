@@ -887,9 +887,9 @@ function initExpress() {
   // Snelle knoppen bovenaan: PayPal + Google Pay (+ Apple Pay op iPhone/Safari), naast elkaar
   const expressCheckout = elementsExpress.create('expressCheckout', {
     buttonHeight: 48,
-    layout: IS_US ? { maxColumns: 2, maxRows: 1, overflow: 'never' } : { maxColumns: 3, maxRows: 1, overflow: 'auto' }, // US: Apple Pay + Google Pay naast PayPal (3 naast elkaar)
+    layout: IS_US ? { maxColumns: 2, maxRows: 1, overflow: 'auto' } : { maxColumns: 3, maxRows: 1, overflow: 'auto' }, // US: Apple Pay + Google Pay naast de PayPal-knop (3 naast elkaar)
     buttonTheme: { paypal: 'gold', googlePay: 'black', applePay: 'black' },
-    paymentMethods: { paypal: IS_NL ? 'never' : 'auto', googlePay: 'always', applePay: 'always', link: 'never', amazonPay: 'never', klarna: 'never' },
+    paymentMethods: { paypal: IS_NL || IS_US ? 'never' : 'auto', googlePay: 'always', applePay: 'always', link: 'never', amazonPay: 'never', klarna: 'never' },
   });
   expressCheckout.mount('#express-checkout-element');
   expressCheckout.on('ready', (e) => {
