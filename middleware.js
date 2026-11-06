@@ -8,6 +8,8 @@
 //   checkout.getjustjenny.com/urinapatches → /checkout/index.html  (UrinaPatches; ook /checkout?p=urinapatches)
 //   checkout.getjustjenny.com/pumpkinseed → /checkout/index.html  (Pumpkin Seed Drops; ook /checkout?p=pumpkinseed)
 //   checkout.getjustjenny.com/ceylon → /checkout/index.html  (Cannella di Ceylon; ook /checkout?p=ceylon)
+//   checkout.getjustjenny.com/en/pumpkinoil → /checkout/en.html  (Engels, USD — Pumpkin Seed Oil Softgels; ook /pumpkinoil en /checkout/en?p=pumpkinoil)
+//   checkout.getjustjenny.com/thanks, /terms → /checkout/thanks, /checkout/terms (Engelse bedank- en voorwaardenpagina)
 //   checkout.getjustjenny.com/nl/<product> → /checkout/nl.html  (NL/BE: iDEAL + Bancontact + kaart, SEPA-rebills; ook /checkout/nl?p=…)
 //   checkout.getjustjenny.com/3ds, /lubrisense/3ds, /magnesium/3ds, /emorroidi/3ds → idem, A/B-test 3D Secure voor debit/prepaid
 // Het ledenportaal: members.getjustjenny.com/<pad> en intimate.getjustjenny.com/<pad> → /portal/<pad> (pages/portal/*).
@@ -65,6 +67,18 @@ export function middleware(req) {
   // Magnesium Freeze (zonder membership): checkout.getjustjenny.com/magnesium → zelfde pagina
   // A/B-test 3DS: /3ds, /lubrisense/3ds, /magnesium/3ds en /emorroidi/3ds → zelfde checkoutpagina (checkout.js leest "/3ds" uit het pad)
   const lubri = onCheckoutHost && /^\/(?:(lubrisense|magnesium|emorroidi|urinapatches|pumpkinseed|ceylon)(?:\/3ds)?|3ds)\/?$/.test(url.pathname);
+  // Engels/USD: checkout.getjustjenny.com/en/pumpkinoil (of /pumpkinoil, /checkout/en) → en.html; checkout.js leest product + markt uit het pad
+  if (/^\/(?:checkout\/)?en(?:\/pumpkinoil)?\/?$/.test(url.pathname) || (onCheckoutHost && /^\/pumpkinoil\/?$/.test(url.pathname))) {
+    const to = url.clone();
+    to.pathname = "/checkout/en.html";
+    if (!/pumpkinoil/.test(url.pathname) && !to.searchParams.get("p")) to.searchParams.set("p", "pumpkinoil");
+    return NextResponse.rewrite(to);
+  }
+  if (onCheckoutHost && (url.pathname === "/thanks" || url.pathname === "/terms")) {
+    const to = url.clone();
+    to.pathname = "/checkout" + url.pathname;
+    return NextResponse.rewrite(to);
+  }
   // NL/BE: checkout.getjustjenny.com/nl/<product> (of /checkout/nl?p=…) → nl.html (iDEAL + Bancontact + kaart; checkout.js leest markt + product uit het pad)
   if (/^\/(?:checkout\/)?nl(?:\/(lubrisense|magnesium|emorroidi|urinapatches|pumpkinseed|ceylon|neurotone))?\/?$/.test(url.pathname)) {
     const to = url.clone();

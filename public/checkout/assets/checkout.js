@@ -28,7 +28,8 @@ const CONFIG = {
    checkout.getjustjenny.com/lubrisense  (of /checkout?p=lubrisense) → LubriSense met een eigen membership.
    Bedragen moeten gelijk zijn aan PRODUCTS in lib/checkout.js. */
 const _pq = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
-const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisense') ? 'lubrisense'
+const PRODUCT_KEY = (/pumpkinoil/i.test(location.pathname) || _pq === 'pumpkinoil' || /(^|\/)en(\/|\.html|$)/i.test(location.pathname)) ? 'pumpkinoil' // /en/… = Engelse USD-checkout
+  : (/lubrisense/i.test(location.pathname) || _pq === 'lubrisense') ? 'lubrisense'
   : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium'
   : (/emorroidi/i.test(location.pathname) || _pq === 'emorroidi') ? 'emorroidi'
   : (/urinapatches/i.test(location.pathname) || _pq === 'urinapatches') ? 'urinapatches'
@@ -39,10 +40,22 @@ const PRODUCT_KEY = (/lubrisense/i.test(location.pathname) || _pq === 'lubrisens
    De gewone links werken exact zoals voorheen. */
 const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(location.search).get('ab') === '3ds';
 // Markt: 'nl' (NL/BE: /nl/<product> of nl.html — iDEAL + Bancontact + kaart via het Payment Element, SEPA-rebills) of 'it'
-const MARKET = (/(^|\/)nl(\/|\.html|$)/i.test(location.pathname) || new URLSearchParams(location.search).get('m') === 'nl') ? 'nl' : 'it';
+// 'us': Engelstalige USD-checkout (en.html, checkout.getjustjenny.com/en/pumpkinoil) — US/CA/UK/AU/NZ (Shopify-markt "Big 5")
+const MARKET = (PRODUCT_KEY === 'pumpkinoil' || /(^|\/)en(\/|\.html|$)/i.test(location.pathname)) ? 'us'
+  : (/(^|\/)nl(\/|\.html|$)/i.test(location.pathname) || new URLSearchParams(location.search).get('m') === 'nl') ? 'nl' : 'it';
 const IS_NL = MARKET === 'nl';
-// Teksten die checkout.js zelf schrijft (de vaste teksten staan in index.html / nl.html)
-const T = IS_NL ? {
+const IS_US = MARKET === 'us';
+const CUR = IS_US ? 'usd' : 'eur';
+const L = (it, en) => (IS_US ? en : it); // Italiaanse tekst, of Engels op de USD-checkout
+// Teksten die checkout.js zelf schrijft (de vaste teksten staan in index.html / nl.html / en.html)
+const T = IS_US ? {
+  shipFree: 'Standard (5-8 business days)', shipInsured: 'Express (3-5 business days)', free: 'FREE', enterAddress: 'Enter shipping address',
+  save: 'You save', items1: '1 item', items2: '2 items', discount: 'Discount', apply: 'Apply',
+  discountOk: 'Discount applied.', discountBad: 'Enter a valid discount code.', discountErr: 'Could not check the code, please try again.',
+  generic: 'Something went wrong, please try again.', billing: 'Please complete your billing address.', payIncomplete: 'Please complete your card details.',
+  payUnavailable: 'Payment will be available shortly.', payLoadFail: 'Payment could not be loaded. Reload the page or try another browser.',
+  zip: 'ZIP code', dateLocale: 'en-US', moneyLocale: 'en-US',
+} : IS_NL ? {
   shipFree: 'Standaard (3-5 werkdagen)', shipInsured: 'Express (1-2 werkdagen)', free: 'GRATIS', enterAddress: 'Vul je adres in',
   save: 'Je bespaart', items1: '1 artikel', items2: '2 artikelen', discount: 'Korting', apply: 'Toepassen',
   discountOk: 'Korting toegepast.', discountBad: 'Vul een geldige kortingscode in.', discountErr: 'Code kon niet gecontroleerd worden, probeer opnieuw.',
@@ -102,6 +115,15 @@ const PRODUCT_CONFIG = {
     MEMBERSHIP_NAME: 'Just Jenny Daily Wellness Membership',
     META_CONTENT_IDS: ['10689121911050'],
     PAY_LABEL: 'Completa l’ordine',
+  },
+  // Pumpkin Seed Oil Softgels (Engels, USD): 14 dagen proef, daarna $49.95 / 28 dagen; geen upsellpagina
+  pumpkinoil: {
+    PRODUCT_NAME: 'Pumpkin Seed Oil Softgels',
+    SUCCESS_PATH: '/checkout/thanks',
+    MEMBERSHIP_NAME: 'Just Jenny Daily Vitality Membership',
+    META_CONTENT_IDS: ['10704578609418'],
+    TRIAL_DAYS: 14, CYCLE_DAYS: 28, MEMBERSHIP_CENTS: 4995,
+    PAY_LABEL: 'Complete order',
   },
   // Cannella di Ceylon: eigen membership (zelfde voorwaarden), zonder upsellpagina; knop zoals UrinaPatches
   ceylon: {
@@ -202,14 +224,26 @@ const PACKS_CEYLON = {
   3: { label: '3x Cannella di Ceylon', amount: 5495, compare: 17997, save: 12502, savePct: 69, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-3_c3c92249-ad57-4050-b0cd-6ec494b68fdc.jpg?v=1793742250&width=240', gift: true },
   5: { label: '5x Cannella di Ceylon', amount: 7995, compare: 29995, save: 22000, savePct: 73, img: 'https://cdn.shopify.com/s/files/1/0901/0606/9258/files/pouch-5_6c56d46e-234c-4c2a-9791-87fc558fb4d8.jpg?v=1793742250&width=240', gift: true },
 };
-const PACKS = PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
+// Pumpkin Seed Oil Softgels (Shopify-product 10704578609418, USD): 1/3/5, prijzen = salespagina
+const PSO = 'https://cannella.getjustjenny.com/';
+const PACKS_PUMPKINOIL = {
+  1: { label: '1x Pumpkin Seed Oil Softgels', amount: 2995, compare: 5995, save: 3000, savePct: 50, img: PSO + 'assets/opt/gallery-main-1.webp?v=pso1' },
+  3: { label: '3x Pumpkin Seed Oil Softgels', amount: 5995, compare: 11995, save: 6000, savePct: 50, img: PSO + 'assets/opt/gallery-main-1.webp?v=pso1' },
+  5: { label: '5x Pumpkin Seed Oil Softgels', amount: 8995, compare: 17995, save: 9000, savePct: 50, img: PSO + 'assets/opt/gallery-main-1.webp?v=pso1' },
+};
+const PACKS = PRODUCT_KEY === 'pumpkinoil' ? PACKS_PUMPKINOIL : PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
   free:    { cents: 0,   title: T.shipFree },
   insured: { cents: 395, title: T.shipInsured },
 };
 const PROVINCES = { AG:'Agrigento',AL:'Alessandria',AN:'Ancona',AO:'Aosta',AR:'Arezzo',AP:'Ascoli Piceno',AT:'Asti',AV:'Avellino',BA:'Bari',BT:'Barletta-Andria-Trani',BL:'Belluno',BN:'Benevento',BG:'Bergamo',BI:'Biella',BO:'Bologna',BZ:'Bolzano',BS:'Brescia',BR:'Brindisi',CA:'Cagliari',CL:'Caltanissetta',CB:'Campobasso',CE:'Caserta',CT:'Catania',CZ:'Catanzaro',CH:'Chieti',CO:'Como',CS:'Cosenza',CR:'Cremona',KR:'Crotone',CN:'Cuneo',EN:'Enna',FM:'Fermo',FE:'Ferrara',FI:'Firenze',FG:'Foggia',FC:'Forlì-Cesena',FR:'Frosinone',GE:'Genova',GO:'Gorizia',GR:'Grosseto',IM:'Imperia',IS:'Isernia',SP:'La Spezia',AQ:"L'Aquila",LT:'Latina',LE:'Lecce',LC:'Lecco',LI:'Livorno',LO:'Lodi',LU:'Lucca',MC:'Macerata',MN:'Mantova',MS:'Massa-Carrara',MT:'Matera',ME:'Messina',MI:'Milano',MO:'Modena',MB:'Monza e Brianza',NA:'Napoli',NO:'Novara',NU:'Nuoro',OR:'Oristano',PD:'Padova',PA:'Palermo',PR:'Parma',PV:'Pavia',PG:'Perugia',PU:'Pesaro e Urbino',PE:'Pescara',PC:'Piacenza',PI:'Pisa',PT:'Pistoia',PN:'Pordenone',PZ:'Potenza',PO:'Prato',RG:'Ragusa',RA:'Ravenna',RC:'Reggio Calabria',RE:'Reggio Emilia',RI:'Rieti',RN:'Rimini',RM:'Roma',RO:'Rovigo',SA:'Salerno',SS:'Sassari',SV:'Savona',SI:'Siena',SR:'Siracusa',SO:'Sondrio',SU:'Sud Sardegna',TA:'Taranto',TE:'Teramo',TR:'Terni',TO:'Torino',TP:'Trapani',TN:'Trento',TV:'Treviso',TS:'Trieste',UD:'Udine',VA:'Varese',VE:'Venezia',VB:'Verbano-Cusio-Ossola',VC:'Vercelli',VR:'Verona',VV:'Vibo Valentia',VI:'Vicenza',VT:'Viterbo' };
-const COUNTRIES = IS_NL ? { NL: 'Nederland', BE: 'België' } : { IT: 'Italia' };
+const COUNTRIES = IS_US ? { US: 'United States', CA: 'Canada', GB: 'United Kingdom', AU: 'Australia', NZ: 'New Zealand' }
+  : IS_NL ? { NL: 'Nederland', BE: 'België' } : { IT: 'Italia' };
+const US_STATES = { AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DE:'Delaware',DC:'District of Columbia',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',PR:'Puerto Rico',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming' };
+const CA_PROVINCES = { AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon' };
+const AU_STATES = { ACT:'Australian Capital Territory',NSW:'New South Wales',NT:'Northern Territory',QLD:'Queensland',SA:'South Australia',TAS:'Tasmania',VIC:'Victoria',WA:'Western Australia' };
+const REGION_LISTS = { IT: PROVINCES, US: US_STATES, CA: CA_PROVINCES, AU: AU_STATES };
 const ALLOWED_COUNTRIES = Object.keys(COUNTRIES);
 // Tracking-parameters van jjb-track.js (salespagina → checkout-link) → Stripe-metadata → Shopify-order
 const TRACK_KEYS = ['ad_id','adset_id','campaign_id','fbclid','fbc','fbp','vid','utm_source','utm_campaign','utm_content','first_touch','host','path','pgs'];
@@ -231,7 +265,7 @@ let promo = null; // { code, percent_off, amount_off, duration }
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
-const money = (c) => IS_NL ? '€ ' + (c / 100).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const money = (c) => IS_US ? (c < 0 ? '-' : '') + '$' + (Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : IS_NL ? '€ ' + (c / 100).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   : (c / 100).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
 function shipCents() { return (SHIP[shipMethod] || SHIP.free).cents; }
@@ -493,13 +527,13 @@ function fillCountries(sel) {
     .map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
   sel.value = ALLOWED_COUNTRIES[0];
 }
-function regionUsesSelect(country) { return country === 'IT'; }
+function regionUsesSelect(country) { return !!REGION_LISTS[country]; }
 
 /* Countries whose carriers reject a label with no state/province. US and CA pick
    from a dropdown; AU types into #state-free, which used to go unvalidated — the
    old gate only required a region when a <select> was on screen, so every
    non-US/CA order could be submitted with an empty state. */
-const REGION_REQUIRED = new Set(['IT']);
+const REGION_REQUIRED = new Set(['IT', 'US', 'CA', 'AU']);
 function regionValue(country) {
   return regionUsesSelect(country) ? $('#state').value : $('#state-free').value.trim();
 }
@@ -514,6 +548,10 @@ function zipLooksValid(zip, country) {
   if (country === 'IT') return /^\d{5}$/.test(z);
   if (country === 'NL') return /^\d{4}\s?[A-Za-z]{2}$/.test(z);
   if (country === 'BE') return /^\d{4}$/.test(z);
+  if (country === 'US') return /^\d{5}(-?\d{4})?$/.test(z);
+  if (country === 'CA') return /^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(z);
+  if (country === 'GB') return /^[A-Za-z]{1,2}\d[A-Za-z\d]?\s?\d[A-Za-z]{2}$/.test(z);
+  if (country === 'AU' || country === 'NZ') return /^\d{4}$/.test(z);
   return true;
 }
 
@@ -522,6 +560,9 @@ function zipLooksValid(zip, country) {
    and handing the label software the same ambiguity we just set out to remove. */
 function normalizeZip(zip, country) {
   const z = String(zip || '').trim();
+  if (country === 'US') { const d = z.replace(/[^\d]/g, ''); return d.length === 9 ? d.slice(0, 5) + '-' + d.slice(5) : d; }
+  if (country === 'CA') { const c = z.replace(/[\s-]+/g, '').toUpperCase(); return c.length === 6 ? c.slice(0, 3) + ' ' + c.slice(3) : c; }
+  if (country === 'GB') { const c = z.replace(/\s+/g, '').toUpperCase(); return c.length > 3 ? c.slice(0, -3) + ' ' + c.slice(-3) : c; }
   return z.replace(/\s+/g, '');
 }
 function updateRegionFields() {
@@ -530,24 +571,25 @@ function updateRegionFields() {
   $('#state-select-wrap').hidden = !useSelect;
   $('#state-text-wrap').hidden = useSelect || IS_NL; // NL/BE: geen provincie
   if (useSelect) {
-    const list = PROVINCES;
+    const list = REGION_LISTS[country] || PROVINCES;
     // No pre-selected default: a silent WA/ON default was being submitted verbatim
     // by anyone who typed their address by hand — wrong-state shipments on PAID
     // orders. Empty placeholder + required validation instead.
-    $('#state').innerHTML = '<option value="" disabled selected>Seleziona…</option>' +
+    $('#state').innerHTML = '<option value="" disabled selected>' + L('Seleziona…', 'Select…') + '</option>' +
       Object.entries(list).map(([code, name]) => `<option value="${code}">${name}</option>`).join('');
-    $('#state-label').textContent = 'Provincia';
+    $('#state-label').textContent = IS_US ? (country === 'CA' ? 'Province' : 'State') : 'Provincia';
   } else {
     // AU now requires a region, so the free-text field must stop advertising
     // itself as optional for the countries that gate on it.
     $('#state-free-label').textContent = REGION_REQUIRED.has(country)
       ? 'State/Province' : 'State/Province (optional)';
   }
-  $('#zip-label').textContent = T.zip;
+  $('#zip-label').textContent = IS_US ? (country === 'US' ? 'ZIP code' : 'Postal code') : T.zip;
+  if (IS_US) { const zi = $('#zip'); zi.setAttribute('inputmode', country === 'US' || country === 'AU' || country === 'NZ' ? 'numeric' : 'text'); }
 }
 function stateCodeFromName(country, name) {
   if (!name) return '';
-  const list = country === 'IT' ? PROVINCES : null;
+  const list = REGION_LISTS[country] || null;
   if (!list) return name;
   if (list[name.toUpperCase()]) return name.toUpperCase();
   // Photon geeft "Como" of "Provincia di Como" / "Città metropolitana di Milano" / "Roma Capitale"
@@ -585,7 +627,8 @@ function provinceFromCap(zip) {
 // Provincie invullen, tenzij de klant er zelf al een koos
 function autoSetProvince(code) {
   const sel = $('#state');
-  if (!code || !sel || !PROVINCES[code]) return;
+  const rl = REGION_LISTS[($('#country') || {}).value] || PROVINCES;
+  if (!code || !sel || !rl[code]) return;
   if (sel.value && sel.dataset.auto !== '1') return;
   sel.value = code;
   sel.dataset.auto = '1';
@@ -612,7 +655,8 @@ function initAddressAutocomplete() {
       try {
         const country = $('#country').value;
         // lang=default → plaatsnamen in het Italiaans ("Roma", niet "Rome")
-        const r = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=8&lat=42.5&lon=12.5&lang=default');
+        const bias = IS_US ? ({ US: '&lat=39.8&lon=-98.6', CA: '&lat=56.1&lon=-106.3', GB: '&lat=54&lon=-2', AU: '&lat=-25.3&lon=133.8', NZ: '&lat=-41&lon=174' }[country] || '') + '&lang=en' : '&lat=42.5&lon=12.5&lang=default';
+        const r = await fetch('https://photon.komoot.io/api/?q=' + encodeURIComponent(q) + '&limit=8' + bias);
         const data = await r.json();
         const seen = new Set();
         const items = (data.features || [])
@@ -624,7 +668,7 @@ function initAddressAutocomplete() {
             return {
               line1,
               city: pr.city || pr.district || pr.county || '',
-              state: pr.county || pr.state || '',
+              state: IS_US ? (pr.state || '') : (pr.county || pr.state || ''),
               zip: pr.postcode || '',
               label2: [pr.postcode || '', pr.city || pr.district || '', pr.county || ''].filter(Boolean).join(' '),
             };
@@ -646,7 +690,7 @@ function initAddressAutocomplete() {
             if (it.zip) $('#zip').value = it.zip.split(';')[0];
             if (regionUsesSelect(country2)) {
               // Suggestie kiezen = nieuw adres → provincie altijd opnieuw bepalen
-              const code = stateCodeFromName(country2, it.state) || stateCodeFromName(country2, it.city) || provinceFromCap($('#zip').value);
+              const code = stateCodeFromName(country2, it.state) || (IS_US ? '' : stateCodeFromName(country2, it.city) || provinceFromCap($('#zip').value));
               if (code) { $('#state').dataset.auto = '1'; autoSetProvince(code); }
             } else if (it.state) {
               $('#state-free').value = it.state;
@@ -723,7 +767,7 @@ function setPayPalSelected(on) {
   if (IS_NL) { const pe = $('#payment-element'); if (pe) pe.hidden = on; const note = $('.pe-note'); if (note) note.hidden = on; }
   // PayPal: de gele PayPal-knop in de rij vervangt de gewone bestelknop
   $('#pay-btn').hidden = on && !!CONFIG.PAYPAL_CLIENT_ID;
-  if (!CONFIG.PAYPAL_CLIENT_ID) $('#pay-btn-text').textContent = on ? 'Paga con PayPal' : PAY_LABEL;
+  if (!CONFIG.PAYPAL_CLIENT_ID) $('#pay-btn-text').textContent = on ? L('Paga con PayPal', 'Pay with PayPal') : PAY_LABEL;
 }
 
 const IS_MOBILE = matchMedia('(max-width: 999px)').matches;
@@ -771,11 +815,11 @@ function initStripe() {
   elementsExpress = stripe.elements({
     mode: 'subscription',
     amount: totalCents(),
-    currency: 'eur',
+    currency: CUR,
     setupFutureUsage: 'off_session',
     paymentMethodTypes: CONFIG.STRIPE_PAYPAL && !IS_NL ? ['card', 'link', 'paypal'] : ['card', 'link'],
     appearance,
-    locale: MARKET,
+    locale: IS_US ? 'en' : MARKET,
   });
   if (IS_NL) CONFIG.STRIPE_PAYPAL = false; // /api/checkout-config zet dit aan; NL/BE doet PayPal rechtstreeks, niet via Stripe
 
@@ -821,8 +865,8 @@ function initStripe() {
 }
 function initCardElements() {
   // Split card elements inside our own Shopify-style markup
-  const elementsCard = stripe.elements({ locale: 'it' });
-  cardNumber = elementsCard.create('cardNumber', { style: cardStyle, placeholder: 'Numero della carta', showIcon: false });
+  const elementsCard = stripe.elements({ locale: IS_US ? 'en' : 'it' });
+  cardNumber = elementsCard.create('cardNumber', { style: cardStyle, placeholder: L('Numero della carta', 'Card number'), showIcon: false });
   const cardExpiry = elementsCard.create('cardExpiry', { style: cardStyle, placeholder: 'Scadenza (MM/AA)' });
   const cardCvc = elementsCard.create('cardCvc', { style: cardStyle, placeholder: 'Codice CVV' });
   $$('.cc-ph').forEach(el => el.remove()); // eigen placeholders weg; Stripe toont zijn eigen tekst
@@ -896,7 +940,7 @@ function initExpress() {
     try {
       const { error: submitError } = await elementsExpress.submit();
       if (submitError) { showError(submitError.message); return; }
-      const { clientSecret, amount, subscriptionId } = await createSubscription({ email, name, phone, shipping: flatShipping, ...(IS_NL ? { market: 'nl' } : {}) });
+      const { clientSecret, amount, subscriptionId } = await createSubscription({ email, name, phone, shipping: flatShipping, ...(IS_NL ? { market: 'nl' } : IS_US ? { market: 'us' } : {}) });
       if (amount && amount !== totalCents()) elementsExpress.update({ amount });
       saveOrderForThankYou({ email, name, shipping: flatShipping, wallet: true });
       const { error } = await stripe.confirmPayment({
@@ -905,7 +949,7 @@ function initExpress() {
       });
       if (error) { showPayError(error, 'wallet_confirm'); }
     } catch (err) {
-      showError(err.message || 'Qualcosa è andato storto, riprova.');
+      showError(err.message || T.generic);
       logClient('pay_exception', err && err.message, 'wallet');
     }
   });
@@ -965,7 +1009,7 @@ function initPayPal() {
   if (!CONFIG.PAYPAL_CLIENT_ID) return;
   const s = document.createElement('script');
   s.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(CONFIG.PAYPAL_CLIENT_ID)
-        + '&vault=true&intent=subscription&currency=EUR&locale=it_IT&disable-funding=credit,card';
+        + '&vault=true&intent=subscription&currency=' + CUR.toUpperCase() + '&locale=' + (IS_US ? 'en_US' : 'it_IT') + '&disable-funding=credit,card';
   s.onload = () => {
     if (!window.paypal) return;
     const makeConfig = (inline) => ({
@@ -974,9 +1018,9 @@ function initPayPal() {
       // Onderaan (in het formulier): eerst naam + adres invullen, zodat het juiste adres naar Shopify gaat.
       // Bovenaan (snelle knop): mag zonder formulier — dan nemen we het adres uit PayPal.
       onClick: (data, actions) => {
-        if (promo) { showError('I codici sconto sono disponibili con il pagamento con carta.'); return actions.reject(); }
+        if (promo) { showError(L('I codici sconto sono disponibili con il pagamento con carta.', 'Discount codes are available when paying by card.')); return actions.reject(); }
         if (!inline || paypalSubscriber()) return actions.resolve();
-        showError('Inserisci nome e indirizzo di spedizione prima di pagare con PayPal.');
+        showError(L('Inserisci nome e indirizzo di spedizione prima di pagare con PayPal.', 'Please enter your name and shipping address before paying with PayPal.'));
         highlightShippingGaps();
         const first = $('#first-name');
         (first.value.trim() ? $('#address') : first).scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -989,11 +1033,11 @@ function initPayPal() {
           body: JSON.stringify({
             pack, product: PRODUCT_KEY, ship_method: shipMethod, insurance: insCents() > 0, checkout_ab: AB_VARIANT || undefined, track: attribution(),
             bump: bumpCents() > 0, bump_ab: bumpVariant || undefined,
-            email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh, ...(IS_NL ? { market: 'nl' } : {}),
+            email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh, ...(IS_NL ? { market: 'nl' } : IS_US ? { market: 'us' } : {}),
           }),
         });
         const d = await r.json();
-        if (!r.ok || !d.id) { showError(d.error || 'PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.'); throw new Error('paypal create'); }
+        if (!r.ok || !d.id) { showError(d.error || L('PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.', 'PayPal could not start your order: please try again or pay by card.')); throw new Error('paypal create'); }
         return d.id;
       },
       onApprove: async (data) => {
@@ -1008,7 +1052,7 @@ function initPayPal() {
         try { sessionStorage.setItem('checkout_purchase_fired', id); } catch (e) {}
         location.href = new URL(CONFIG.SUCCESS_PATH + '?pp=' + encodeURIComponent(id) + '&b=' + pack + PQ + (BONUS ? '&skip=1' : ''), location.origin).href;
       },
-      onError: (err) => { showError('PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.'); logClient('paypal_error', err && err.message, 'paypal'); },
+      onError: (err) => { showError(L('PayPal non è riuscito ad avviare l’ordine: riprova oppure paga con carta.', 'PayPal could not start your order: please try again or pay by card.')); logClient('paypal_error', err && err.message, 'paypal'); },
     });
     // Snelle knop bovenaan
     window.paypal.Buttons(makeConfig(false)).render('#paypal-button-container').then(() => {
@@ -1078,7 +1122,7 @@ function createSubscription(customer) {
       }),
     });
     const data = await res.json();
-    if (!res.ok || !data.clientSecret) throw new Error(data.error || 'Impossibile avviare l’ordine. Riprova.');
+    if (!res.ok || !data.clientSecret) throw new Error(data.error || L('Impossibile avviare l’ordine. Riprova.', 'Could not start your order. Please try again.'));
     return data;
   })();
   subCache = { key, promise };
@@ -1096,16 +1140,16 @@ function payErrorHint(error) {
   const code = (error && error.code) || '';
   const dc = (error && error.decline_code) || '';
   if (code === 'payment_intent_authentication_failure' || dc === 'authentication_required') {
-    return ' La verifica della tua banca non è stata completata: riprova oppure paga con PayPal.';
+    return L(' La verifica della tua banca non è stata completata: riprova oppure paga con PayPal.', ' Your bank’s verification was not completed: please try again or pay with PayPal.');
   }
   if (dc === 'card_not_supported' || dc === 'transaction_not_allowed') {
-    return ' Questa carta non consente pagamenti ricorrenti: usa un’altra carta oppure paga con PayPal.';
+    return L(' Questa carta non consente pagamenti ricorrenti: usa un’altra carta oppure paga con PayPal.', ' This card does not allow recurring payments: please use another card or pay with PayPal.');
   }
   return '';
 }
 function showPayError(error, src) {
   const hint = payErrorHint(error);
-  showError((error.message || 'Non è stato possibile completare il pagamento.') + hint);
+  showError((error.message || L('Non è stato possibile completare il pagamento.', 'The payment could not be completed.')) + hint);
   logClient('pay_error', [error.code || '', error.decline_code || '', error.message || ''].join('|'), src);
   if (!hint) return;
   const row = $('#pm-paypal');
@@ -1222,7 +1266,7 @@ const PAY_LABEL = ((document.getElementById('pay-btn-text') || {}).textContent |
 function setBusy(busy) {
   $('#pay-btn').disabled = busy;
   $('#pay-spinner').hidden = !busy;
-  $('#pay-btn-text').textContent = busy ? 'Elaborazione…' : (payPalSelected ? 'Paga con PayPal' : PAY_LABEL);
+  $('#pay-btn-text').textContent = busy ? L('Elaborazione…', 'Processing…') : (payPalSelected ? L('Paga con PayPal', 'Pay with PayPal') : PAY_LABEL);
 }
 /* ---------- Tracking (Meta pixel + server CAPI + attribution) ---------- */
 const CAPI_URL = '/api/capi';
@@ -1349,7 +1393,7 @@ async function loadConfig() {
     CONFIG.PAYPAL_CLIENT_ID = (CONFIG.NO_MEMBERSHIP || CONFIG.NO_PAYPAL_DIRECT) ? '' : (c.paypalClientId || '');
     CONFIG.BUMP_SPLIT = Number(c.bumpSplit) || 0; // A/B-test order bump (UrinaPatches): % dat de bump ziet
   } catch (e) { logClient('config', e && e.message, 'boot'); }
-  if (CONFIG.STRIPE_PK && typeof Stripe !== 'undefined') stripe = Stripe(CONFIG.STRIPE_PK, { locale: 'it' });
+  if (CONFIG.STRIPE_PK && typeof Stripe !== 'undefined') stripe = Stripe(CONFIG.STRIPE_PK, { locale: IS_US ? 'en' : 'it' });
   if (CONFIG.META_PIXEL_ID) loadPixel(CONFIG.META_PIXEL_ID);
 }
 function loadPixel(id) {
@@ -1373,7 +1417,7 @@ function startTimer() {
   const tick = () => {
     const left = Math.max(0, end - Date.now());
     if (left <= 0) {
-      $('#jj-timer-text').innerHTML = 'Il tuo ordine è ancora riservato: <b>completa l’acquisto ora</b>';
+      $('#jj-timer-text').innerHTML = L('Il tuo ordine è ancora riservato: <b>completa l’acquisto ora</b>', 'Your order is still reserved: <b>complete your purchase now</b>');
       box.classList.add('done');
       return;
     }
@@ -1499,11 +1543,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Meta pixel — InitiateCheckout (browser + server CAPI, deduped by eventID)
   if (window.fbq) fbq('track', 'InitiateCheckout', {
-    value: totalCents() / 100, currency: 'EUR',
+    value: totalCents() / 100, currency: CUR.toUpperCase(),
     content_name: CONFIG.PRODUCT_NAME + ' ' + P.label,
     content_ids: CONTENT_IDS, content_type: 'product', num_items: 1,
   }, { eventID: IC_EVENT_ID });
-  if (CONFIG.META_PIXEL_ID) sendCapi({ event_name: 'InitiateCheckout', event_id: IC_EVENT_ID, value: totalCents() / 100, currency: 'EUR' });
+  if (CONFIG.META_PIXEL_ID) sendCapi({ event_name: 'InitiateCheckout', event_id: IC_EVENT_ID, value: totalCents() / 100, currency: CUR.toUpperCase() });
 
   $('#checkout-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1516,14 +1560,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // page-load InitiateCheckout). Shared AP_EVENT_ID dedupes browser + server.
     const _capiId = capiIdentity();
     if (window.fbq) fbq('track', 'AddPaymentInfo', {
-      value: totalCents() / 100, currency: 'EUR',
+      value: totalCents() / 100, currency: CUR.toUpperCase(),
       content_ids: CONTENT_IDS, content_type: 'product',
     }, { eventID: AP_EVENT_ID });
-    if (CONFIG.META_PIXEL_ID) sendCapi({ event_name: 'AddPaymentInfo', event_id: AP_EVENT_ID, value: totalCents() / 100, currency: 'EUR', ..._capiId });
+    if (CONFIG.META_PIXEL_ID) sendCapi({ event_name: 'AddPaymentInfo', event_id: AP_EVENT_ID, value: totalCents() / 100, currency: CUR.toUpperCase(), ..._capiId });
     // Re-send InitiateCheckout with the SAME IC_EVENT_ID now that we have the
     // email/address — Meta merges the richer match keys onto the earlier event,
     // lifting IC match quality without creating a new conversion.
-    if (CONFIG.META_PIXEL_ID) sendCapi({ event_name: 'InitiateCheckout', event_id: IC_EVENT_ID, value: totalCents() / 100, currency: 'EUR', ..._capiId });
+    if (CONFIG.META_PIXEL_ID) sendCapi({ event_name: 'InitiateCheckout', event_id: IC_EVENT_ID, value: totalCents() / 100, currency: CUR.toUpperCase(), ..._capiId });
     try {
       const shipping = collectShipping();
       const billing = collectBilling(shipping);
@@ -1551,6 +1595,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const subCustomer = { email, name: shipping.name, phone, shipping, ...(cardPm ? { pm_id: cardPm.id, card_funding: (cardPm.card && cardPm.card.funding) || 'unknown' } : {}) };
       if (TDS_VARIANT) subCustomer.checkout_variant = '3ds';
       if (IS_NL) subCustomer.market = 'nl';
+      if (IS_US) subCustomer.market = 'us';
       // NL/BE: Payment Element valideren vóór we het abonnement aanmaken (verplicht in deferred mode)
       if (IS_NL) { const r = await elementsPay.submit(); if (r && r.error) { showPayError(r.error, 'pe_submit'); return; } }
       const sub = await createSubscription(subCustomer);

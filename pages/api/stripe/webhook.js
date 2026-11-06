@@ -11,7 +11,7 @@
 
 import Stripe from "stripe";
 import axios from "axios";
-import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem, bumpFor, bumpLineItem, getMarket, zipValidFor } from "../../../lib/checkout";
+import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem, bumpFor, bumpLineItem, getMarket, zipValidFor, currencyOf, moneyBag, shippingFor, insuranceFor } from "../../../lib/checkout";
 import { runWithBrand } from "../../../lib/portal-brand";
 import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
@@ -76,7 +76,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   const product = getProduct(md.product_key); // NeuroTone of LubriSense
   const bundle = product.bundles[qty] || product.bundles[3];
   const shipCode = md.shipping || "insured";
-  const ship = SHIPPING[shipCode] || SHIPPING.insured;
+  const ship = shippingFor(currencyOf(product))[shipCode] || SHIPPING.insured;
   const addr = customer?.shipping?.address || customer?.address || {};
   const fullName = customer?.shipping?.name || customer?.name || "";
   const [firstName, ...rest] = fullName.split(" ");
@@ -92,7 +92,10 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   customAttributes.push({ key: "stripe_invoice", value: invoice.id });
 
   // Onbruikbaar adres → tag, zodat je die orders in Shopify kunt filteren vóór verzending
-  const market = getMarket(md.market);
+  const market = getMarket(product.market || md.market);
+  // Valuta van het product (USD voor Pumpkin Seed Oil Softgels): Shopify-order in presentmentCurrency, omgerekend naar EUR
+  const CUR = currencyOf(product), CURU = CUR.toUpperCase();
+  const mb = (cents) => moneyBag(cents, CUR);
   const addrCountry = market.countries.includes(String(addr.country || "").toUpperCase()) ? String(addr.country).toUpperCase() : market.countries[0];
   const addrOk = !!(addr.line1 && addr.city && zipValidFor(market, addr.postal_code, addrCountry));
   // Eenmalig product (Magnesium Freeze, geen membership) → NIET als membership-front-end taggen (dashboards/portaal-backfill)
@@ -114,15 +117,16 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
     email: customer?.email || invoice.customer_email || undefined,
     phone: itPhone(customer?.shipping?.phone || customer?.phone),
     currency: "EUR",
+    ...(CUR !== "eur" ? { presentmentCurrency: CURU } : {}),
     financialStatus: "PAID",
     sourceName: "stripe-checkout",
     tags,
     note: product.membership
-      ? `Stripe checkout — ${bundle.label} + ${product.membership.name} (${product.membership.trialDays} giorni prova). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`
+      ? `Stripe checkout — ${bundle.label} + ${product.membership.name} (${product.membership.trialDays} ${CUR === "eur" ? "giorni prova" : "day trial, " + CURU}). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`
       : `Stripe checkout — ${bundle.label} (acquisto singolo, nessuna membership). Invoice ${invoice.id}`,
     customAttributes,
-    lineItems: [{ variantId: bundle.variantId, quantity: 1, priceSet: { shopMoney: { amount: (bundle.price / 100).toFixed(2), currencyCode: "EUR" } } }],
-    shippingLines: [{ title: ship.title, code: ship.code, priceSet: { shopMoney: { amount: (ship.price / 100).toFixed(2), currencyCode: "EUR" } } }],
+    lineItems: [{ variantId: bundle.variantId, quantity: 1, priceSet: mb(bundle.price) }],
+    shippingLines: [{ title: ship.title, code: ship.code, priceSet: mb(ship.price) }],
     shippingAddress: {
       firstName: firstName || "-",
       lastName,
@@ -134,21 +138,21 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
       countryCode: addrCountry,
       phone: itPhone(customer?.shipping?.phone || customer?.phone),
     },
-    transactions: [{ kind: "SALE", status: "SUCCESS", gateway: "stripe", amountSet: { shopMoney: { amount: amountPaid.toFixed(2), currencyCode: "EUR" } } }],
+    transactions: [{ kind: "SALE", status: "SUCCESS", gateway: "stripe", amountSet: mb(Math.round(amountPaid * 100)) }],
   };
   order.billingAddress = order.shippingAddress;
   if (discountCents > 0) {
-    order.discountCode = { itemFixedDiscountCode: { code: md.promo_code || "STRIPE", amountSet: { shopMoney: { amount: (discountCents / 100).toFixed(2), currencyCode: "EUR" } } } };
+    order.discountCode = { itemFixedDiscountCode: { code: md.promo_code || "STRIPE", amountSet: mb(discountCents) } };
   }
 
   // Verzendverzekering (4,95 €, aangevinkt op de checkout) → eigen orderregel, zodat de betaling en de order kloppen
-  if (md.insurance === "1") { order.lineItems.push(insuranceLineItem()); order.tags.push("shipping-insurance"); order.note += ` + ${INSURANCE.title} (${(INSURANCE.price / 100).toFixed(2).replace(".", ",")} €)`; }
+  if (md.insurance === "1") { order.lineItems.push(insuranceLineItem(CUR)); order.tags.push("shipping-insurance"); order.note += ` + ${insuranceFor(CUR).title} (${(INSURANCE.price / 100).toFixed(2)} ${CURU})`; }
   // Order bump (Spray Neutralizzante 9,95 €, "Aggiungi" op de checkout) → eigen productregel op dezelfde order
   const BUMP = bumpFor(product.key);
-  if (BUMP && md.bump === BUMP.key) { order.lineItems.push(bumpLineItem(BUMP)); order.tags.push(BUMP.tag); order.note += ` + ${BUMP.title} (${(BUMP.price / 100).toFixed(2).replace(".", ",")} €)`; }
+  if (BUMP && md.bump === BUMP.key) { order.lineItems.push(bumpLineItem(BUMP, CUR)); order.tags.push(BUMP.tag); order.note += ` + ${BUMP.title} (${(BUMP.price / 100).toFixed(2).replace(".", ",")} €)`; }
   // Abandoned-checkout-mail 2: 1 flacone in omaggio
   // Bundel met gratis cadeau (e-book, €0) → zelfde regel als de oude Shopify-cartlink
-  if (bundle.gift) { order.lineItems.push(giftLineItem()); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
+  if (bundle.gift) { order.lineItems.push(giftLineItem(CUR)); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
   const bonus = product.abandoned ? await hasCheckoutBonus(order.email) : false;
   if (bonus) { order.lineItems.push(bonusLineItem(product.key)); order.tags.push("abandon-bonus"); order.note += ` + 1x ${product.title} in omaggio (abandoned checkout)`; }
 
@@ -240,7 +244,7 @@ export default async function handler(req, res) {
         const [fn, ...ln] = String(customer?.shipping?.name || customer?.name || "").split(" ");
         // Meta CAPI: Purchase (server-side, gededupliceerd met de pixel op de bedankpagina via event_id)
         await sendPurchase({
-          orderName: order.name, createdAt: inv.created * 1000, value: (inv.amount_paid || 0) / 100, currency: "EUR", provider: "stripe",
+          orderName: order.name, createdAt: inv.created * 1000, value: (inv.amount_paid || 0) / 100, currency: String(inv.currency || "eur").toUpperCase(), provider: "stripe",
           email: customer?.email || inv.customer_email, phone: customer?.shipping?.phone || customer?.phone,
           firstName: fn, lastName: ln.join(" "), city: addr.city, zip: addr.postal_code, state: addr.state, country: addr.country || "IT",
           clientIp: md.client_ip, userAgent: md.client_ua, fbc: md.jjb_fbc, fbp: md.jjb_fbp, vid: md.jjb_vid,
@@ -254,7 +258,7 @@ export default async function handler(req, res) {
           phone: itPhone(customer?.shipping?.phone || customer?.phone),
           address: { address1: addr.line1, city: addr.city, zip: addr.postal_code, province: addr.state, country: addr.country || "IT" },
           provider: "stripe", subscriptionId: subscription?.id || subId, stripeCustomerId: custId, qty,
-          bundleLabel: (product.bundles[qty] || product.bundles[3]).label, shippingTitle: (SHIPPING[md.shipping] || SHIPPING.insured).title,
+          bundleLabel: (product.bundles[qty] || product.bundles[3]).label, shippingTitle: (shippingFor(currencyOf(product))[md.shipping] || SHIPPING.insured).title,
           insurance: md.insurance === "1" ? INSURANCE.price / 100 : 0,
           amountPaid: (inv.amount_paid || 0) / 100, trialEnds: subscription?.trial_end ? subscription.trial_end * 1000 : null,
           orderName: order.name, membershipPrice: product.membership.price / 100, intervalDays: product.membership.intervalDays,

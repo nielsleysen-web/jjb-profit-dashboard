@@ -13,11 +13,10 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { SHIPPING, TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor } from "../../../lib/checkout";
+import { TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor, currencyOf, shippingFor, insuranceFor } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
-const CURRENCY = "eur";
 const V = "v1"; // verhoog bij een prijswijziging
 
 const clean = (s, max = 200) => String(s || "").trim().slice(0, max);
@@ -56,20 +55,25 @@ export default async function handler(req, res) {
     const product = getProduct(b.product);
     const MEMBERSHIP = product.membership, PRODUCT_TITLE = product.title;
     const bundle = pickBundleFor(product, b.pack);
-    const ship = SHIPPING[b.ship_method] || SHIPPING.insured;
+    // Valuta per product (standaard EUR; Pumpkin Seed Oil Softgels = USD). Niet-EUR-prijzen krijgen een eigen lookup key (_usd).
+    const CURRENCY = currencyOf(product);
+    const CS = CURRENCY === "eur" ? "" : `_${CURRENCY}`;
+    const SHIP = shippingFor(CURRENCY), INS = insuranceFor(CURRENCY);
+    const ship = SHIP[b.ship_method] || SHIP.insured;
     const insurance = b.insurance === true || b.insurance === "1" || b.insurance === 1; // verzendverzekering (4,95 €, eenmalig)
     // Order bump (UrinaPatches: Spray Neutralizzante 9,95 €, A/B-test) — alleen voor producten met een bump
     const BUMP = bumpFor(product.key);
     const bump = !!BUMP && (b.bump === true || b.bump === "1" || b.bump === 1);
     const bumpAb = BUMP && ["a", "b"].includes(b.bump_ab) ? b.bump_ab : "";
 
+    // Markt: it (standaard), nl (NL/BE: iDEAL + Bancontact + kaart, SEPA-machtiging) of us (Engels, USD; vast per product)
+    const market = getMarket(product.market || b.market);
+    const EN = market.key === "us";
     const email = clean(b.email, 120).toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Inserisci un indirizzo email valido" });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: EN ? "Please enter a valid email address" : "Inserisci un indirizzo email valido" });
     const s = b.shipping || {};
     const name = clean(b.name || s.name, 120);
     let phone = clean(b.phone || s.phone, 30);
-    // Markt: it (standaard) of nl (NL/BE: iDEAL + Bancontact + kaart, SEPA-machtiging voor de rebills)
-    const market = getMarket(b.market);
     const country = market.countries.includes(String(s.country || "").toUpperCase()) ? String(s.country).toUpperCase() : market.countries[0];
     const address = {
       line1: clean(s.line1, 120),
@@ -85,8 +89,16 @@ export default async function handler(req, res) {
       if (/^0[1-9]\d{7,9}$/.test(d)) phone = (country === "BE" ? "+32" : "+31") + d.slice(1);
       else if (d.startsWith("00")) phone = "+" + d.slice(2);
     }
+    // US/CA/GB/AU/NZ: nationaal nummer → internationaal (+1 / +44 / +61 / +64)
+    if (EN && phone) {
+      const d = phone.replace(/[^\d+]/g, "");
+      if (d.startsWith("+")) phone = d;
+      else if (d.startsWith("00")) phone = "+" + d.slice(2);
+      else if ((country === "US" || country === "CA") && /^1?\d{10}$/.test(d)) phone = "+1" + d.slice(-10);
+      else if (/^0\d{8,10}$/.test(d)) phone = ({ GB: "+44", AU: "+61", NZ: "+64" }[country] || "") + d.slice(1);
+    }
     if (!address.line1 || !address.city || !zipValidFor(market, address.postal_code, country)) {
-      return res.status(400).json({ error: market.key === "nl" ? "Controleer je bezorgadres" : "Controlla l’indirizzo di spedizione" });
+      return res.status(400).json({ error: EN ? "Please check your shipping address" : market.key === "nl" ? "Controleer je bezorgadres" : "Controlla l’indirizzo di spedizione" });
     }
     // Telefoonnummer meteen naar Klaviyo (ook als de betaling hierna niet doorgaat); blokkeert de checkout nooit
     const klPhone = saveCheckoutPhone({ email, phone, name }).catch((e) => console.error("klaviyo phone:", e.message));
@@ -109,6 +121,7 @@ export default async function handler(req, res) {
       amount_frontend: String(bundle.price),
       amount_shipping: String(ship.price),
       ...(insurance ? { insurance: "1", amount_insurance: String(INSURANCE.price) } : {}),
+      ...(CURRENCY !== "eur" ? { currency: CURRENCY } : {}),
       ...(bump ? { bump: BUMP.key, amount_bump: String(BUMP.price) } : {}),
       ...(bumpAb ? { jj_bump_ab: bumpAb } : {}), // A/B-test order bump (a = zonder, b = met bump getoond)
       ...(["a", "b", "c"].includes(b.checkout_ab) ? { jj_checkout_ab: b.checkout_ab } : {}), // A/B-test checkout NeuroTone
@@ -128,7 +141,7 @@ export default async function handler(req, res) {
 
     // --- prijzen (automatisch aangemaakt, daarna hergebruikt) ---
     const membershipPrice = onetime
-      ? await getOrCreatePrice(`jj_onetime_zero_${V}`, {
+      ? await getOrCreatePrice(`jj_onetime_zero${CS}_${V}`, {
           currency: CURRENCY,
           unit_amount: 0,
           recurring: { interval: "month", interval_count: 1 },
@@ -147,7 +160,7 @@ export default async function handler(req, res) {
     });
     const addInvoiceItems = [{ price: bundlePrice, quantity: 1 }];
     if (ship.price > 0) {
-      const shipPrice = await getOrCreatePrice(`jj_ship_${ship.code}_${ship.price}_${V}`, {
+      const shipPrice = await getOrCreatePrice(`jj_ship_${ship.code}_${ship.price}${CS}_${V}`, {
         currency: CURRENCY,
         unit_amount: ship.price,
         product_data: { name: ship.title },
@@ -155,15 +168,15 @@ export default async function handler(req, res) {
       addInvoiceItems.push({ price: shipPrice, quantity: 1 });
     }
     if (insurance) {
-      const insPrice = await getOrCreatePrice(`jj_insurance_${INSURANCE.price}_${V}`, {
+      const insPrice = await getOrCreatePrice(`jj_insurance_${INSURANCE.price}${CS}_${V}`, {
         currency: CURRENCY,
         unit_amount: INSURANCE.price,
-        product_data: { name: INSURANCE.title },
+        product_data: { name: INS.title },
       });
       addInvoiceItems.push({ price: insPrice, quantity: 1 });
     }
     if (bump) {
-      const bumpPrice = await getOrCreatePrice(`jj_bump_${BUMP.key}_${BUMP.price}_${V}`, {
+      const bumpPrice = await getOrCreatePrice(`jj_bump_${BUMP.key}_${BUMP.price}${CS}_${V}`, {
         currency: CURRENCY,
         unit_amount: BUMP.price,
         product_data: { name: BUMP.title },
@@ -181,9 +194,11 @@ export default async function handler(req, res) {
       preferred_locales: [market.locale],
       metadata,
     };
-    const existing = await stripe.customers.list({ email, limit: 1 });
-    const customer = existing.data.length
-      ? await stripe.customers.update(existing.data[0].id, customerData)
+    // Niet-EUR (USD): eigen Stripe-klant per valuta, zodat een bestaande EUR-klant met hetzelfde e-mailadres niet botst
+    const existing = await stripe.customers.list({ email, limit: CS ? 10 : 1 });
+    const reuse = CS ? existing.data.find((c) => c.metadata?.currency === CURRENCY) : existing.data[0];
+    const customer = reuse
+      ? await stripe.customers.update(reuse.id, customerData)
       : await stripe.customers.create(customerData);
 
     // --- kortingscode (optioneel) ---
@@ -229,12 +244,12 @@ export default async function handler(req, res) {
 
     const invoice = subscription.latest_invoice;
     const pi = invoice && invoice.payment_intent;
-    if (!pi || !pi.client_secret) return res.status(500).json({ error: "Impossibile avviare il pagamento" });
+    if (!pi || !pi.client_secret) return res.status(500).json({ error: EN ? "Could not start the payment" : "Impossibile avviare il pagamento" });
 
     // Metadata ook op de betaling zelf (handig in Stripe en voor de dashboards)
     await stripe.paymentIntents.update(pi.id, {
       metadata: { ...metadata, subscription_id: subscription.id, invoice_id: invoice.id },
-      description: onetime ? `${PRODUCT_TITLE} — ${bundle.label}` : `${bundle.label} + ${MEMBERSHIP.name} (prova ${MEMBERSHIP.trialDays} giorni)`,
+      description: onetime ? `${PRODUCT_TITLE} — ${bundle.label}` : EN ? `${bundle.label} + ${MEMBERSHIP.name} (${MEMBERSHIP.trialDays}-day trial)` : `${bundle.label} + ${MEMBERSHIP.name} (prova ${MEMBERSHIP.trialDays} giorni)`,
       receipt_email: email,
       shipping: { name: name || email, phone: phone || undefined, address },
     });
@@ -243,6 +258,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ clientSecret: pi.client_secret, subscriptionId: subscription.id, amount: pi.amount });
   } catch (e) {
     console.error("stripe/create-subscription:", e.message);
-    return res.status(500).json({ error: e.type === "StripeCardError" ? e.message : "Si è verificato un errore. Riprova tra qualche istante." });
+    const en = getProduct((req.body || {}).product).market === "us";
+    return res.status(500).json({ error: e.type === "StripeCardError" ? e.message : en ? "Something went wrong. Please try again in a moment." : "Si è verificato un errore. Riprova tra qualche istante." });
   }
 }

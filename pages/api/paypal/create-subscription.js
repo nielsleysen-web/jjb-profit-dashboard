@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product, insurance, bump);
     const s = b.shipping || {};
     // Markt: it (standaard) of nl (NL/BE) — bepaalt postcodecheck, landcode en PayPal-taal
-    const market = getMarket(b.market);
+    const market = getMarket(prod.market || b.market);
     const country = market.countries.includes(String(s.country || "").toUpperCase()) ? String(s.country).toUpperCase() : market.countries[0];
     const full = !!(s.line1 && s.city && zipValidFor(market, s.postal_code, country) && (s.name || b.name));
 
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}, plan.product.key, plan.insurance, b.checkout_ab, plan.bump, b.bump_ab),
       application_context: {
         brand_name: "Just Jenny",
-        locale: market.key === "nl" ? "nl-NL" : "it-IT",
+        locale: market.key === "nl" ? "nl-NL" : market.key === "us" ? "en-US" : "it-IT",
         shipping_preference: full ? "SET_PROVIDED_ADDRESS" : "GET_FROM_FILE",
         user_action: "SUBSCRIBE_NOW",
       },
@@ -68,6 +68,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ id: sub.id });
   } catch (e) {
     console.error("paypal/create-subscription:", e.message);
-    return res.status(500).json({ error: "Impossibile avviare PayPal. Riprova o paga con carta." });
+    return res.status(500).json({ error: getProduct((req.body || {}).product).market === "us" ? "Could not start PayPal. Please try again or pay by card." : "Impossibile avviare PayPal. Riprova o paga con carta." });
   }
 }
