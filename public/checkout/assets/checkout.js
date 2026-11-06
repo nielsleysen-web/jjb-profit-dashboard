@@ -775,7 +775,7 @@ const BASE_FONT = IS_MOBILE ? '16px' : '14px';
 const appearance = {
   labels: 'floating',
   variables: {
-    colorPrimary: '#2c6e65',
+    colorPrimary: IS_US ? '#C9643A' : '#2c6e65',
     colorText: '#1a1a1a',
     colorTextSecondary: '#707070',
     colorDanger: '#c0392b',
@@ -787,7 +787,7 @@ const appearance = {
   },
   rules: {
     '.Input': { borderColor: '#d9d9d9', padding: '6px 12px' },
-    '.Input:focus': { borderColor: '#2c6e65', boxShadow: '0 0 0 1px #2c6e65' },
+    '.Input:focus': IS_US ? { borderColor: '#C9643A', boxShadow: '0 0 0 1px #C9643A' } : { borderColor: '#2c6e65', boxShadow: '0 0 0 1px #2c6e65' },
     '.Label': { color: '#707070' },
   },
 };

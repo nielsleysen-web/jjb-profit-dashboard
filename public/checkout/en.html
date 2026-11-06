@@ -6,30 +6,15 @@
 <meta name="robots" content="noindex">
 <title>Checkout — Just Jenny</title>
 <link rel="stylesheet" href="/checkout/assets/checkout.css?v=22">
-<style>
-.offers{margin-top:28px}
-.offers h2{margin-bottom:12px}
-.offer-list{display:flex;flex-direction:column;gap:10px}
-.offer{position:relative;display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:10px;padding:15px 16px;background:#fff;cursor:pointer}
-.offer input{position:absolute;opacity:0;pointer-events:none}
-.offer.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);background:var(--selected-fill)}
-.of-radio{flex:0 0 20px;height:20px;border-radius:50%;border:2px solid #b9b9b9;position:relative;background:#fff}
-.offer.selected .of-radio{border-color:var(--accent)}
-.offer.selected .of-radio:after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
-.of-main{flex:1;display:flex;flex-direction:column;gap:2px}
-.of-main b{font-size:16px;font-weight:700}
-.of-main small{font-size:13px;color:var(--savings);font-weight:600}
-.of-price{display:flex;flex-direction:column;align-items:flex-end}
-.of-price s{font-size:13px;color:#d23b2f}
-.of-price b{font-size:18px;font-weight:800}
-.of-tag{position:absolute;top:-9px;right:14px;background:#d23b2f;color:#fff;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:999px;padding:3px 8px}
-.of-note{margin-top:10px;font-size:13px;color:var(--muted);text-align:center}
-.of-img{flex:0 0 56px;width:56px;height:56px;border-radius:8px;border:1px solid #eee;background:#fff;overflow:hidden;display:flex;align-items:center;justify-content:center}
-.of-img img{width:100%;height:100%;object-fit:contain}
-.offer{padding:12px 16px}
-.offer.selected{padding-top:14px}
-</style>
 <script src="https://js.stripe.com/v3/"></script>
+<style>
+/* Merkkleuren Pumpkin Seed Oil (oranje, zoals de salespagina) */
+:root{--accent:#C9643A;--accent-dark:#A85F3C;--selected-fill:#FDF4EF;--jj-brand:#C9643A}
+body.pay-dark .pay-btn,.pay-btn{background:#C9643A}
+body.pay-dark .pay-btn:hover,.pay-btn:hover{background:#A85F3C}
+.trust-row .trust-item{background:#FDF4EF;border-color:#F1E4D8}
+</style>
+
 <style>.cc-row .cc-fld{min-width:0}.cc-ph{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}</style>
 <!-- Meta Pixel wordt geladen door checkout.js zodra META_PIXEL_ID in Vercel staat (uit met META_TRACKING=off) -->
 <!-- WeTracked (externe Meta-tracking): zelfde snippet als op de funnelpagina's en de Shopify-store -->
@@ -92,33 +77,21 @@
         <div class="or-divider"><span>OR</span></div>
       </section>
 
-      <!-- Bundelkeuze op de checkout (1/3/5, checkout.js setPack) -->
-      <section class="offers" id="offers">
-        <h2>Choose your offer</h2>
-        <div class="offer-list" role="radiogroup">
-          <label class="offer"><input type="radio" name="offer" value="1">
-            <span class="of-radio"></span>
-            <span class="of-img"><img src="https://cannella.getjustjenny.com/assets/offer/zakje-1x.webp?v=o1" alt="" loading="eager"></span>
-            <span class="of-main"><b>Buy One</b><small>$29.95 each</small></span>
-            <span class="of-price"><s>$59.95</s><b>$29.95</b></span>
-          </label>
-          <label class="offer"><input type="radio" name="offer" value="3">
-            <span class="of-tag">MOST POPULAR</span>
-            <span class="of-radio"></span>
-            <span class="of-img"><img src="https://cannella.getjustjenny.com/assets/offer/zakjes-3x.webp?v=o1" alt="" loading="eager"></span>
-            <span class="of-main"><b>Buy 2, Get 1 FREE</b><small>$19.98 each</small></span>
-            <span class="of-price"><s>$119.95</s><b>$59.95</b></span>
-          </label>
-          <label class="offer"><input type="radio" name="offer" value="5">
-            <span class="of-tag">BEST VALUE</span>
-            <span class="of-radio"></span>
-            <span class="of-img"><img src="https://cannella.getjustjenny.com/assets/offer/zakjes-5x.webp?v=o1" alt="" loading="eager"></span>
-            <span class="of-main"><b>Buy 3, Get 2 FREE</b><small>$17.99 each</small></span>
-            <span class="of-price"><s>$179.95</s><b>$89.95</b></span>
-          </label>
+      <div class="trust-row" style="margin:18px 0 6px" aria-hidden="false">
+        <div class="trust-item">
+          <svg width="22" height="24" viewBox="0 0 22 24"><path d="M11 1l9 3.5v6c0 5.8-3.8 10.4-9 12.5-5.2-2.1-9-6.7-9-12.5v-6L11 1z" fill="none" stroke="#C9643A" stroke-width="1.6"/><path d="M7 11.5l2.8 2.8L15 9" fill="none" stroke="#C9643A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span><b>90-Day Guarantee</b>Money-back guarantee</span>
         </div>
-        <p class="of-note">Free standard shipping on every offer</p>
-      </section>
+        <div class="trust-item">
+          <svg width="26" height="24" viewBox="0 0 26 24"><path d="M1.5 5.5h13v11h-13z" fill="none" stroke="#C9643A" stroke-width="1.6" stroke-linejoin="round"/><path d="M14.5 9.5h5l4 4v3h-9z" fill="none" stroke="#C9643A" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6" cy="18.5" r="2.2" fill="#fff" stroke="#C9643A" stroke-width="1.6"/><circle cx="19" cy="18.5" r="2.2" fill="#fff" stroke="#C9643A" stroke-width="1.6"/></svg>
+          <span><b>Order by 11 PM</b>= ships tomorrow ✔</span>
+        </div>
+        <div class="trust-item">
+          <svg width="20" height="24" viewBox="0 0 18 22"><rect x="1.5" y="9" width="15" height="11.5" rx="2" fill="none" stroke="#C9643A" stroke-width="1.6"/><path d="M5 9V6a4 4 0 018 0v3" fill="none" stroke="#C9643A" stroke-width="1.6"/><circle cx="9" cy="14.5" r="1.4" fill="#C9643A"/></svg>
+          <span><b>Secure payment</b>SSL encryption</span>
+        </div>
+      </div>
+
 
       <!-- Contact -->
       <section>
@@ -327,20 +300,6 @@
       <div id="pay-error" class="pay-error" role="alert" hidden></div>
       <button type="submit" id="pay-btn" class="pay-btn"><span id="pay-btn-text">Complete order</span><span id="pay-spinner" class="spinner" hidden></span></button>
 
-      <div class="trust-row" aria-hidden="false">
-        <div class="trust-item">
-          <svg width="22" height="24" viewBox="0 0 22 24"><path d="M11 1l9 3.5v6c0 5.8-3.8 10.4-9 12.5-5.2-2.1-9-6.7-9-12.5v-6L11 1z" fill="none" stroke="#2c6e65" stroke-width="1.6"/><path d="M7 11.5l2.8 2.8L15 9" fill="none" stroke="#2c6e65" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span><b>90-Day Guarantee</b>Money-back guarantee</span>
-        </div>
-        <div class="trust-item">
-          <svg width="26" height="24" viewBox="0 0 26 24"><path d="M1.5 5.5h13v11h-13z" fill="none" stroke="#2c6e65" stroke-width="1.6" stroke-linejoin="round"/><path d="M14.5 9.5h5l4 4v3h-9z" fill="none" stroke="#2c6e65" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6" cy="18.5" r="2.2" fill="#fff" stroke="#2c6e65" stroke-width="1.6"/><circle cx="19" cy="18.5" r="2.2" fill="#fff" stroke="#2c6e65" stroke-width="1.6"/></svg>
-          <span><b>Order by 11 PM</b>= ships tomorrow ✔</span>
-        </div>
-        <div class="trust-item">
-          <svg width="20" height="24" viewBox="0 0 18 22"><rect x="1.5" y="9" width="15" height="11.5" rx="2" fill="none" stroke="#2c6e65" stroke-width="1.6"/><path d="M5 9V6a4 4 0 018 0v3" fill="none" stroke="#2c6e65" stroke-width="1.6"/><circle cx="9" cy="14.5" r="1.4" fill="#2c6e65"/></svg>
-          <span><b>Secure payment</b>SSL encryption</span>
-        </div>
-      </div>
 
       <!-- Informativa abbonamento — moet zichtbaar blijven bij de bestelknop (kaartnetwerken / consumentenrecht):
            bedrag, cyclus, proefperiode en hoe je opzegt. Bedragen worden ingevuld door updateAmounts(). -->
@@ -395,6 +354,6 @@
   </ul>
 </template>
 
-<script src="/checkout/assets/checkout.js?v=55"></script>
+<script src="/checkout/assets/checkout.js?v=56"></script>
 </body>
 </html>
