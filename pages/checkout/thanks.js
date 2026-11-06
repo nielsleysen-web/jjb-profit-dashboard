@@ -7,7 +7,7 @@ import { getProduct, pickBundleFor, shippingFor, insuranceFor, currencyOf } from
 
 const GREEN = "#5f9a7c";
 const PURPLE = "#5433eb";
-const IMG = "https://cannella.getjustjenny.com/assets/opt/gallery-main-1.webp?v=pso1";
+const IMGS = { 1: "https://cannella.getjustjenny.com/assets/offer/zakje-1x.webp?v=o1", 3: "https://cannella.getjustjenny.com/assets/offer/zakjes-3x.webp?v=o1", 5: "https://cannella.getjustjenny.com/assets/offer/zakjes-5x.webp?v=o1" };
 const COUNTRY = { US: "United States", CA: "Canada", GB: "United Kingdom", AU: "Australia", NZ: "New Zealand" };
 const BRAND = { amex: "American Express", visa: "Visa", mastercard: "Mastercard", maestro: "Maestro", discover: "Discover", jcb: "JCB", unionpay: "UnionPay", diners: "Diners Club" };
 const WALLET = { apple_pay: "Apple Pay", google_pay: "Google Pay", link: "Link" };
@@ -228,7 +228,7 @@ export default function Thanks() {
             <div className="gz-card">
               <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
                 <div style={{ position: "relative", width: "64px", height: "64px", border: "1px solid #e3e3e3", borderRadius: "10px", background: "#f7f7f7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <img src={IMG} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  <img src={IMGS[bundle.qty] || IMGS[1]} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
                   <span style={{ position: "absolute", top: "-8px", right: "-8px", background: "#111", color: "#fff", borderRadius: "999px", minWidth: "21px", height: "21px", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>1</span>
                 </div>
                 <div style={{ flex: 1, fontSize: "14.5px", paddingTop: "14px" }}>

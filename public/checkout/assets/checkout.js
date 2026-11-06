@@ -227,9 +227,9 @@ const PACKS_CEYLON = {
 // Pumpkin Seed Oil Softgels (Shopify-product 10704578609418, USD): 1/3/5, prijzen = salespagina
 const PSO = 'https://cannella.getjustjenny.com/';
 const PACKS_PUMPKINOIL = {
-  1: { label: '1x Pumpkin Seed Oil Softgels', amount: 2995, compare: 5995, save: 3000, savePct: 50, img: PSO + 'assets/opt/gallery-main-1.webp?v=pso1' },
-  3: { label: '3x Pumpkin Seed Oil Softgels', amount: 5995, compare: 11995, save: 6000, savePct: 50, img: PSO + 'assets/opt/gallery-main-1.webp?v=pso1' },
-  5: { label: '5x Pumpkin Seed Oil Softgels', amount: 8995, compare: 17995, save: 9000, savePct: 50, img: PSO + 'assets/opt/gallery-main-1.webp?v=pso1' },
+  1: { label: '1x Pumpkin Seed Oil Softgels', amount: 2995, compare: 5995, save: 3000, savePct: 50, img: PSO + 'assets/offer/zakje-1x.webp?v=o1' },
+  3: { label: '3x Pumpkin Seed Oil Softgels', amount: 5995, compare: 11995, save: 6000, savePct: 50, img: PSO + 'assets/offer/zakjes-3x.webp?v=o1' },
+  5: { label: '5x Pumpkin Seed Oil Softgels', amount: 8995, compare: 17995, save: 9000, savePct: 50, img: PSO + 'assets/offer/zakjes-5x.webp?v=o1' },
 };
 const PACKS = PRODUCT_KEY === 'pumpkinoil' ? PACKS_PUMPKINOIL : PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
