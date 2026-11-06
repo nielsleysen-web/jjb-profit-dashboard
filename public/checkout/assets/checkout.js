@@ -892,7 +892,7 @@ function initCardElements() {
 function initExpress() {
   const base = { paypal: 'never', link: 'never', amazonPay: 'never', klarna: 'never' };
   if (IS_US) {
-    const one = { maxColumns: 1, maxRows: 1, overflow: 'never' };
+    const one = { maxColumns: 1, maxRows: 1, overflow: 'auto' }; // overflow 'never' toont bij Stripe niets
     mountExpress(elementsExpress, '#express-checkout-element', { ...base, applePay: 'always', googlePay: 'never' }, one);
     elementsExpress2 = stripe.elements(ECE_OPTS);
     mountExpress(elementsExpress2, '#express-checkout-element-2', { ...base, applePay: 'never', googlePay: 'always' }, one);
