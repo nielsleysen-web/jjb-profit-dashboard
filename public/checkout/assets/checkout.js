@@ -459,6 +459,7 @@ function updateAmounts() {
     $$('.js-discount-amt').forEach(el => el.textContent = '-' + money(discountCents()));
   }
   if (elementsExpress) elementsExpress.update({ amount: totalCents() });
+  if (elementsExpress2) elementsExpress2.update({ amount: totalCents() });
   if (elementsPay) elementsPay.update({ amount: totalCents() });
   updatePayPalGate();
 }
@@ -733,6 +734,8 @@ function renderShipDates() {
 if (typeof Stripe === 'undefined') logClient('fatal', 'Stripe.js failed to load');
 let stripe = null; // aangemaakt in boot() zodra de publishable key uit /api/checkout-config binnen is
 let elementsExpress = null;
+let elementsExpress2 = null; // US: tweede groep (Google Pay apart naast Apple Pay)
+let ECE_OPTS = null;
 let elementsPay = null; // NL/BE: Payment Element (iDEAL / Bancontact / kaart) i.p.v. de losse kaartvelden
 let payComplete = false;
 let cardNumber = null;
@@ -812,15 +815,16 @@ function initStripe() {
   }
   // Express checkout gets its own deferred group with Link enabled
   // (the card form below uses classic split elements — no Link UI).
-  elementsExpress = stripe.elements({
+  ECE_OPTS = {
     mode: 'subscription',
     amount: totalCents(),
     currency: CUR,
     setupFutureUsage: 'off_session',
-    paymentMethodTypes: CONFIG.STRIPE_PAYPAL && !IS_NL ? ['card', 'link', 'paypal'] : ['card', 'link'],
+    paymentMethodTypes: CONFIG.STRIPE_PAYPAL && !IS_NL && !IS_US ? ['card', 'link', 'paypal'] : ['card', 'link'],
     appearance,
     locale: IS_US ? 'en' : MARKET,
-  });
+  };
+  elementsExpress = stripe.elements(ECE_OPTS);
   if (IS_NL) CONFIG.STRIPE_PAYPAL = false; // /api/checkout-config zet dit aan; NL/BE doet PayPal rechtstreeks, niet via Stripe
 
   if (IS_NL) {
@@ -883,17 +887,30 @@ function initCardElements() {
     el.on('blur', () => { if (el._wrap) el._wrap.classList.remove('focus'); });
   });
 }
+// Snelle knoppen bovenaan. US (Engelse checkout): Apple Pay en Google Pay elk in een eigen kolom naast de PayPal-knop
+// (Stripe zet in één element maar 1 knop + "See more" in een smalle kolom) → twee Express Checkout-elementen.
 function initExpress() {
+  const base = { paypal: 'never', link: 'never', amazonPay: 'never', klarna: 'never' };
+  if (IS_US) {
+    const one = { maxColumns: 1, maxRows: 1, overflow: 'never' };
+    mountExpress(elementsExpress, '#express-checkout-element', { ...base, applePay: 'always', googlePay: 'never' }, one);
+    elementsExpress2 = stripe.elements(ECE_OPTS);
+    mountExpress(elementsExpress2, '#express-checkout-element-2', { ...base, applePay: 'never', googlePay: 'always' }, one);
+    return;
+  }
+  mountExpress(elementsExpress, '#express-checkout-element', { ...base, paypal: IS_NL ? 'never' : 'auto', googlePay: 'always', applePay: 'always' }, { maxColumns: 3, maxRows: 1, overflow: 'auto' });
+}
+function mountExpress(grp, target, pm, layout) {
   // Snelle knoppen bovenaan: PayPal + Google Pay (+ Apple Pay op iPhone/Safari), naast elkaar
-  const expressCheckout = elementsExpress.create('expressCheckout', {
+  const expressCheckout = grp.create('expressCheckout', {
     buttonHeight: 48,
-    layout: IS_US ? { maxColumns: 2, maxRows: 1, overflow: 'auto' } : { maxColumns: 3, maxRows: 1, overflow: 'auto' }, // US: Apple Pay + Google Pay naast de PayPal-knop (3 naast elkaar)
+    layout,
     buttonTheme: { paypal: 'gold', googlePay: 'black', applePay: 'black' },
-    paymentMethods: { paypal: IS_NL || IS_US ? 'never' : 'auto', googlePay: 'always', applePay: 'always', link: 'never', amazonPay: 'never', klarna: 'never' },
+    paymentMethods: pm,
   });
-  expressCheckout.mount('#express-checkout-element');
+  expressCheckout.mount(target);
   expressCheckout.on('ready', (e) => {
-    if (!e.availablePaymentMethods) $('#express-checkout-element').style.display = 'none';
+    if (!e.availablePaymentMethods) $(target).style.display = 'none';
     if (e.availablePaymentMethods) {
       expressAvailable = true;
       if (!apGuardActive) $('#express-section').hidden = false;
@@ -938,13 +955,13 @@ function initExpress() {
       country_name: COUNTRIES[ship.address.country] || ship.address.country || 'Italia',
     } : null;
     try {
-      const { error: submitError } = await elementsExpress.submit();
+      const { error: submitError } = await grp.submit();
       if (submitError) { showError(submitError.message); return; }
       const { clientSecret, amount, subscriptionId } = await createSubscription({ email, name, phone, shipping: flatShipping, ...(IS_NL ? { market: 'nl' } : IS_US ? { market: 'us' } : {}) });
-      if (amount && amount !== totalCents()) elementsExpress.update({ amount });
+      if (amount && amount !== totalCents()) grp.update({ amount });
       saveOrderForThankYou({ email, name, shipping: flatShipping, wallet: true });
       const { error } = await stripe.confirmPayment({
-        elements: elementsExpress, clientSecret,
+        elements: grp, clientSecret,
         confirmParams: { return_url: successUrl(subscriptionId) },
       });
       if (error) { showPayError(error, 'wallet_confirm'); }

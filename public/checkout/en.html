@@ -13,7 +13,7 @@
 body.pay-dark .pay-btn,.pay-btn{background:#C9643A}
 body.pay-dark .pay-btn:hover,.pay-btn:hover{background:#A85F3C}
 .trust-row .trust-item{background:#FDF4EF;border-color:#F1E4D8}
-.express-row{display:grid!important;grid-template-columns:2fr 1fr;gap:10px}.express-row>#express-checkout-element{order:1}.express-row>#paypal-button-container{order:2}
+.express-row{display:flex;gap:10px}.express-row>div{flex:1 1 0;min-width:0}#express-checkout-element{order:1}#express-checkout-element-2{order:2}#paypal-button-container{order:3}
 .prod-thumb img,.mobile-total img{object-fit:contain!important;padding:4px;background:#fff}
 @media (max-width:640px){.trust-row{display:grid!important;grid-template-columns:repeat(3,1fr);gap:6px}.trust-row .trust-item{flex-direction:column;text-align:center;padding:8px 4px;font-size:11px;gap:4px}.trust-row .trust-item span b{display:block}}
 </style>
@@ -72,6 +72,7 @@ body.pay-dark .pay-btn:hover,.pay-btn:hover{background:#A85F3C}
         <div class="express-row">
           <div id="paypal-button-container" class="paypal-container"></div>
           <div id="express-checkout-element"></div>
+          <div id="express-checkout-element-2"></div>
         </div>
         <div class="ece-preview" id="ece-preview" hidden>
           <span class="pp"><i>Pay</i><em>Pal</em></span>
@@ -357,6 +358,6 @@ body.pay-dark .pay-btn:hover,.pay-btn:hover{background:#A85F3C}
   </ul>
 </template>
 
-<script src="/checkout/assets/checkout.js?v=58"></script>
+<script src="/checkout/assets/checkout.js?v=59"></script>
 </body>
 </html>
