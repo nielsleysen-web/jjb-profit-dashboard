@@ -1430,7 +1430,7 @@ function startTimer() {
   const KEY = 'jj_timer_end', LEN = 7 * 60 * 1000;
   let end = 0;
   try { end = parseInt(sessionStorage.getItem(KEY) || '0', 10); } catch (e) {}
-  if (!end || end < Date.now() - 30 * 60 * 1000) { end = Date.now() + LEN; try { sessionStorage.setItem(KEY, String(end)); } catch (e) {} }
+  if (!end || end < Date.now() - 30 * 60 * 1000 || (IS_US && end <= Date.now())) { // US: afgelopen + opnieuw geladen → nieuwe 7 minuten end = Date.now() + LEN; try { sessionStorage.setItem(KEY, String(end)); } catch (e) {} }
   const tick = () => {
     const left = Math.max(0, end - Date.now());
     if (left <= 0) {
