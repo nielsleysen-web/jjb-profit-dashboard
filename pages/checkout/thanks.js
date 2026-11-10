@@ -3,10 +3,12 @@
 // without the Italian quiz and upsell. Stripe: ?sub=sub_…  PayPal: ?pp=I-…  Without ?sub= → preview with sample data.
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { getProduct, pickBundleFor, shippingFor, insuranceFor, currencyOf } from "../../lib/checkout";
+import { getProduct, pickBundleFor, shippingFor, insuranceFor, currencyOf, membershipOf } from "../../lib/checkout";
 
 const GREEN = "#5f9a7c";
 const PURPLE = "#5433eb";
+const SGL = "https://cannella.getjustjenny.com/sage/assets/uploads/";
+const IMGS_BY = { sageleaf: { 1: SGL + "ed-pic-8.webp?v=c1", 3: SGL + "ed-pic-9.webp?v=c1", 5: SGL + "ed-pic-10.webp?v=c1" } };
 const IMGS = { 1: "https://cannella.getjustjenny.com/assets/offer/zakje-1x.webp?v=o1", 3: "https://cannella.getjustjenny.com/assets/offer/zakjes-3x.webp?v=o1", 5: "https://cannella.getjustjenny.com/assets/offer/zakjes-5x.webp?v=o1" };
 const COUNTRY = { US: "United States", CA: "Canada", GB: "United Kingdom", AU: "Australia", NZ: "New Zealand" };
 const BRAND = { amex: "American Express", visa: "Visa", mastercard: "Mastercard", maestro: "Maestro", discover: "Discover", jcb: "JCB", unionpay: "UnionPay", diners: "Diners Club" };
@@ -150,7 +152,7 @@ export default function Thanks() {
   const date = fmtDate(data?.created || Math.floor(Date.now() / 1000));
   const addr = data?.address || {};
   const buyAgain = `/en/${product.key}?b=${bundle.qty}`;
-  const M = product.membership;
+  const M = membershipOf(product, bundle);
 
   return (
     <>
@@ -221,14 +223,15 @@ export default function Thanks() {
 
             {M && (
               <div className="gz-card" style={{ background: "#f6faf7", borderColor: "#d9eadf", fontSize: "14px", lineHeight: 1.55 }}>
-                <b>Your {M.name}</b> is active, starting with a {M.trialDays}-day free trial. After that it’s {fmt(M.price)} every {M.intervalDays} days — cancel anytime by emailing <a href="mailto:Hello@justjennybeauty.com" style={{ color: GREEN }}>Hello@justjennybeauty.com</a>. <a href="/checkout/terms#membership" target="_blank" rel="noopener" style={{ color: GREEN }}>Membership terms</a>
+                {M.refill ? (<><b>Your refill subscription is active.</b> The same bundle ({bundle.label}) ships every {M.intervalDays} days for {fmt(M.price)} with free shipping. Your first refill is charged {M.intervalDays} days from today. Skip or cancel anytime by emailing <a href="mailto:Hello@justjennybeauty.com" style={{ color: GREEN }}>Hello@justjennybeauty.com</a>. <a href="/checkout/terms#refill" target="_blank" rel="noopener" style={{ color: GREEN }}>Refill terms</a></>) : (<><b>Your {M.name}</b> is active, starting with a {M.trialDays}-day free trial. After that it’s {fmt(M.price)} every {M.intervalDays} days — cancel anytime by emailing <a href="mailto:Hello@justjennybeauty.com" style={{ color: GREEN }}>Hello@justjennybeauty.com</a>. <a href="/checkout/terms#membership" target="_blank" rel="noopener" style={{ color: GREEN }}>Membership terms</a>
+              </>)}
               </div>
             )}
 
             <div className="gz-card">
               <div style={{ display: "flex", gap: "14px", alignItems: "flex-start" }}>
                 <div style={{ position: "relative", width: "64px", height: "64px", border: "1px solid #e3e3e3", borderRadius: "10px", background: "#f7f7f7", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <img src={IMGS[bundle.qty] || IMGS[1]} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                  <img src={(IMGS_BY[product.key] || IMGS)[bundle.qty] || IMGS[1]} alt="" style={{ maxWidth: "54px", maxHeight: "54px" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
                   <span style={{ position: "absolute", top: "-8px", right: "-8px", background: "#111", color: "#fff", borderRadius: "999px", minWidth: "21px", height: "21px", fontSize: "12px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>1</span>
                 </div>
                 <div style={{ flex: 1, fontSize: "14.5px", paddingTop: "14px" }}>

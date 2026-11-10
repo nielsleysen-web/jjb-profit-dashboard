@@ -13,7 +13,7 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor, currencyOf, shippingFor, insuranceFor } from "../../../lib/checkout";
+import { TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor, currencyOf, shippingFor, insuranceFor, membershipOf } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
@@ -53,9 +53,10 @@ export default async function handler(req, res) {
     const b = req.body || {};
     // Product: NeuroTone (standaard) of LubriSense (checkout.getjustjenny.com/lubrisense) — elk met een eigen membership
     const product = getProduct(b.product);
-    const MEMBERSHIP = product.membership, PRODUCT_TITLE = product.title;
+    const PRODUCT_TITLE = product.title;
     const bundle = pickBundleFor(product, b.pack);
     // Valuta per product (standaard EUR; Pumpkin Seed Oil Softgels = USD). Niet-EUR-prijzen krijgen een eigen lookup key (_usd).
+    const MEMBERSHIP = membershipOf(product, bundle); // refill-product (Sage Leaf): bundelprijs elke 28 dagen
     const CURRENCY = currencyOf(product);
     const CS = CURRENCY === "eur" ? "" : `_${CURRENCY}`;
     const SHIP = shippingFor(CURRENCY), INS = insuranceFor(CURRENCY);
@@ -249,7 +250,7 @@ export default async function handler(req, res) {
     // Metadata ook op de betaling zelf (handig in Stripe en voor de dashboards)
     await stripe.paymentIntents.update(pi.id, {
       metadata: { ...metadata, subscription_id: subscription.id, invoice_id: invoice.id },
-      description: onetime ? `${PRODUCT_TITLE} — ${bundle.label}` : EN ? `${bundle.label} + ${MEMBERSHIP.name} (${MEMBERSHIP.trialDays}-day trial)` : `${bundle.label} + ${MEMBERSHIP.name} (prova ${MEMBERSHIP.trialDays} giorni)`,
+      description: onetime ? `${PRODUCT_TITLE} — ${bundle.label}` : MEMBERSHIP.refill ? `${bundle.label} — refill every ${MEMBERSHIP.intervalDays} days` : EN ? `${bundle.label} + ${MEMBERSHIP.name} (${MEMBERSHIP.trialDays}-day trial)` : `${bundle.label} + ${MEMBERSHIP.name} (prova ${MEMBERSHIP.trialDays} giorni)`,
       receipt_email: email,
       shipping: { name: name || email, phone: phone || undefined, address },
     });

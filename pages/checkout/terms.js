@@ -54,7 +54,7 @@ export default function Terms() {
           <p className="upd">Last updated: {UPDATED}</p>
 
           <div className="toc">
-            <a href="#overview">Overview</a><a href="#law">Governing law</a><a href="#membership">{MNAME}</a><a href="#guarantee">90-day guarantee</a><a href="#products">Products</a><a href="#sms">SMS</a><a href="#general">General conditions</a><a href="#contact">Contact</a>
+            <a href="#overview">Overview</a><a href="#law">Governing law</a><a href="#membership">{MNAME}</a><a href="#refill">Refill subscription</a><a href="#guarantee">90-day guarantee</a><a href="#products">Products</a><a href="#sms">SMS</a><a href="#general">General conditions</a><a href="#contact">Contact</a>
           </div>
 
           <h2 id="overview">Overview</h2>
@@ -100,6 +100,17 @@ export default function Terms() {
           <h3>Authorization</h3>
           <p>By completing your purchase with the membership included, you confirm that you have read and agree to these {MNAME} Terms. You authorize Just Jenny to charge your selected payment method {PRICE} every {CYCLE} days after the {TRIAL}-day free trial, until you cancel.</p>
           <p>For questions about your membership, email {mail}.</p>
+
+          <h2 id="refill">Refill subscription (Just Jenny™ Sage Leaf Extract)</h2>
+          <div className="box">
+            <p><b>In short:</b> when you order Just Jenny™ Sage Leaf Extract, you start a <b>refill subscription</b>. Today you pay for your first order. After that, <b>the same bundle you chose is shipped again every 28 days</b> and your payment method is charged <b>the same bundle price every 28 days</b> ($29.95 for 1 bottle, $59.95 for 3 bottles, $89.95 for 5 bottles), starting 28 days after your order, until you cancel. Refills ship with free standard shipping. You can skip or cancel at any time by emailing {mail}.</p>
+          </div>
+          <h3>Recurring charges</h3>
+          <p>By completing your purchase you authorize Just Jenny to automatically charge the payment method used for your original order the price of your chosen bundle (USD) every 28 days until you cancel. Each successful charge creates a new shipment of the same bundle to your shipping address.</p>
+          <h3>Cancelling, skipping or changing</h3>
+          <p>You can cancel, skip a shipment or change your bundle at any time by emailing {mail}. To avoid the next charge, contact us before your next billing date. We reply within one business day. Cancelling stops future charges and shipments; it does not cancel or refund refills that have already been charged.</p>
+          <h3>Billing descriptor and refunds</h3>
+          <p>Refill charges appear on your statement as <b>JUST JENNY</b>. Refills are covered by the same money-back guarantee as your first order (see below).</p>
 
           <h2 id="guarantee">90-day money-back guarantee</h2>
           <p>The 90-day money-back guarantee applies only to <b>unopened</b> products with the seal intact, returned within 90 days of the order date. Consumable products that have been opened cannot be returned or refunded for hygiene and safety reasons. To start a refund request, email {mail} with your order number and you will receive return instructions. The refund is processed to the original payment method after the returned products have been received and checked.</p>

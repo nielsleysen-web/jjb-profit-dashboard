@@ -70,12 +70,13 @@ async function orderExistsForInvoice(invoiceId) {
   return d.orders.nodes[0] || null;
 }
 
-async function createShopifyOrder({ invoice, subscription, customer, paymentIntent }) {
+// refill = true: rebill van een refill-product (Sage Leaf) → zelfde bundel opnieuw verzenden, gratis standaardverzending
+async function createShopifyOrder({ invoice, subscription, customer, paymentIntent, refill = false }) {
   const md = { ...(subscription?.metadata || {}), ...(paymentIntent?.metadata || {}) };
   const qty = parseInt(md.qty || md.bundle || "3", 10);
   const product = getProduct(md.product_key); // NeuroTone of LubriSense
   const bundle = product.bundles[qty] || product.bundles[3];
-  const shipCode = md.shipping || "insured";
+  const shipCode = refill ? "free" : md.shipping || "insured";
   const ship = shippingFor(currencyOf(product))[shipCode] || SHIPPING.insured;
   const addr = customer?.shipping?.address || customer?.address || {};
   const fullName = customer?.shipping?.name || customer?.name || "";
@@ -99,7 +100,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   const addrCountry = market.countries.includes(String(addr.country || "").toUpperCase()) ? String(addr.country).toUpperCase() : market.countries[0];
   const addrOk = !!(addr.line1 && addr.city && zipValidFor(market, addr.postal_code, addrCountry));
   // Eenmalig product (Magnesium Freeze, geen membership) → NIET als membership-front-end taggen (dashboards/portaal-backfill)
-  const tags = ["stripe", product.membership ? "subscription-frontend" : "onetime-frontend", invTag(invoice.id)];
+  const tags = ["stripe", refill ? "refill" : product.membership ? "subscription-frontend" : "onetime-frontend", invTag(invoice.id)];
   if (!addrOk) tags.push("missing-address");
   if (product.tag) tags.push(product.tag);
   if (market.tag) tags.push(market.tag);
@@ -121,7 +122,9 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
     financialStatus: "PAID",
     sourceName: "stripe-checkout",
     tags,
-    note: product.membership
+    note: refill ? `Refill (elke ${product.membership.intervalDays} dagen) — ${bundle.label}. Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`
+      : product.refill ? `Stripe checkout — ${bundle.label}, refill elke ${product.membership.intervalDays} dagen (${CURU}). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`
+      : product.membership
       ? `Stripe checkout — ${bundle.label} + ${product.membership.name} (${product.membership.trialDays} ${CUR === "eur" ? "giorni prova" : "day trial, " + CURU}). Invoice ${invoice.id}, subscription ${subscription?.id || "?"}`
       : `Stripe checkout — ${bundle.label} (acquisto singolo, nessuna membership). Invoice ${invoice.id}`,
     customAttributes,
@@ -146,14 +149,14 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   }
 
   // Verzendverzekering (4,95 €, aangevinkt op de checkout) → eigen orderregel, zodat de betaling en de order kloppen
-  if (md.insurance === "1") { order.lineItems.push(insuranceLineItem(CUR)); order.tags.push("shipping-insurance"); order.note += ` + ${insuranceFor(CUR).title} (${(INSURANCE.price / 100).toFixed(2)} ${CURU})`; }
+  if (!refill && md.insurance === "1") { order.lineItems.push(insuranceLineItem(CUR)); order.tags.push("shipping-insurance"); order.note += ` + ${insuranceFor(CUR).title} (${(INSURANCE.price / 100).toFixed(2)} ${CURU})`; }
   // Order bump (Spray Neutralizzante 9,95 €, "Aggiungi" op de checkout) → eigen productregel op dezelfde order
   const BUMP = bumpFor(product.key);
-  if (BUMP && md.bump === BUMP.key) { order.lineItems.push(bumpLineItem(BUMP, CUR)); order.tags.push(BUMP.tag); order.note += ` + ${BUMP.title} (${(BUMP.price / 100).toFixed(2).replace(".", ",")} €)`; }
+  if (!refill && BUMP && md.bump === BUMP.key) { order.lineItems.push(bumpLineItem(BUMP, CUR)); order.tags.push(BUMP.tag); order.note += ` + ${BUMP.title} (${(BUMP.price / 100).toFixed(2).replace(".", ",")} €)`; }
   // Abandoned-checkout-mail 2: 1 flacone in omaggio
   // Bundel met gratis cadeau (e-book, €0) → zelfde regel als de oude Shopify-cartlink
-  if (bundle.gift) { order.lineItems.push(giftLineItem(CUR)); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
-  const bonus = product.abandoned ? await hasCheckoutBonus(order.email) : false;
+  if (!refill && bundle.gift) { order.lineItems.push(giftLineItem(CUR)); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
+  const bonus = !refill && product.abandoned ? await hasCheckoutBonus(order.email) : false;
   if (bonus) { order.lineItems.push(bonusLineItem(product.key)); order.tags.push("abandon-bonus"); order.note += ` + 1x ${product.title} in omaggio (abandoned checkout)`; }
 
   const d = await shopifyGraphql(
@@ -284,10 +287,20 @@ export default async function handler(req, res) {
         const sub = subId ? await stripe.subscriptions.retrieve(subId).catch(() => null) : null;
         const product = getProduct(sub?.metadata?.product_key);
         if (!product.membership) return res.status(200).json({ received: true, ignored: "onetime" });
+        // Refill-product (Sage Leaf): elke rebill = dezelfde bundel opnieuw → Shopify-order (1x per factuur)
+        let refillOrder = null;
+        if (product.refill) {
+          refillOrder = await orderExistsForInvoice(inv.id);
+          if (!refillOrder) {
+            const custId = typeof inv.customer === "string" ? inv.customer : inv.customer?.id;
+            const customer = custId ? await stripe.customers.retrieve(custId) : null;
+            refillOrder = await createShopifyOrder({ invoice: inv, subscription: sub, customer, paymentIntent: null, refill: true });
+          }
+        }
         if (!product.portal) {
           await productMemberEvent(product, "renewed", { paidAt: inv.created * 1000, email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
             amountPaid: paidAmount(inv), nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });
-          return res.status(200).json({ received: true, renewal: true, product: product.key });
+          return res.status(200).json({ received: true, renewal: true, product: product.key, ...(refillOrder ? { order: refillOrder.name } : {}) });
         }
         await syncRenewal({ email: inv.customer_email, provider: "stripe", subscriptionId: subId, invoiceId: inv.id,
           amountPaid: paidAmount(inv), nextCharge: sub?.current_period_end ? sub.current_period_end * 1000 : null });

@@ -5,7 +5,7 @@
 // Events: BILLING.SUBSCRIPTION.ACTIVATED (+ CANCELLED/EXPIRED → Klaviyo) · CUSTOMER.DISPUTE.CREATED (message to the buyer,
 // see lib/paypal-disputes.js) · PAYMENT.SALE.COMPLETED (portal retention offer → refund the difference) · Env: PAYPAL_WEBHOOK_ID, PAYPAL_DISPUTE_AUTOREPLY=on
 
-import { paypalConfigured, pp, ensureOrderForPaypal, cancelMemberForPaypal, unpackCustom } from "../../../lib/paypal";
+import { paypalConfigured, pp, ensureOrderForPaypal, cancelMemberForPaypal, unpackCustom, refillOrderForPaypalSale } from "../../../lib/paypal";
 import { trackEvent } from "../../../lib/klaviyo";
 import { productMemberEvent } from "../../../lib/portal-members";
 import { getProduct } from "../../../lib/checkout";
@@ -56,6 +56,9 @@ export default async function handler(req, res) {
       return res.status(200).json({ received: true, paymentFailed: true });
     }
     if (event.event_type === "PAYMENT.SALE.COMPLETED" && event.resource?.billing_agreement_id) {
+      // Refill-product (Sage Leaf): elke rebill = dezelfde bundel opnieuw verzenden → Shopify-order
+      const refill = await refillOrderForPaypalSale(event.resource);
+      if (refill) return res.status(200).json({ received: true, refill });
       // Rebill of a member who accepted a retention offer in the portal (€24,95 / 15% off): refund the difference
       const r = await applyPaypalOfferRefund(event.resource);
       if (r?.refunded && r.email) await runWithBrand(r.brand || "neurotone", () => markOfferApplied(r.email)).catch(() => {});

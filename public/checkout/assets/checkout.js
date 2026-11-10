@@ -28,7 +28,8 @@ const CONFIG = {
    checkout.getjustjenny.com/lubrisense  (of /checkout?p=lubrisense) → LubriSense met een eigen membership.
    Bedragen moeten gelijk zijn aan PRODUCTS in lib/checkout.js. */
 const _pq = (new URLSearchParams(location.search).get('p') || '').toLowerCase();
-const PRODUCT_KEY = (/pumpkinoil/i.test(location.pathname) || _pq === 'pumpkinoil' || /(^|\/)en(\/|\.html|$)/i.test(location.pathname)) ? 'pumpkinoil' // /en/… = Engelse USD-checkout
+const PRODUCT_KEY = (/sageleaf/i.test(location.pathname) || _pq === 'sageleaf') ? 'sageleaf' // Sage Leaf Extract (Engels, USD, refill elke 28 dagen)
+  : (/pumpkinoil/i.test(location.pathname) || _pq === 'pumpkinoil' || /(^|\/)en(\/|\.html|$)/i.test(location.pathname)) ? 'pumpkinoil' // /en/… = Engelse USD-checkout
   : (/lubrisense/i.test(location.pathname) || _pq === 'lubrisense') ? 'lubrisense'
   : (/magnesium/i.test(location.pathname) || _pq === 'magnesium') ? 'magnesium'
   : (/emorroidi/i.test(location.pathname) || _pq === 'emorroidi') ? 'emorroidi'
@@ -41,7 +42,7 @@ const PRODUCT_KEY = (/pumpkinoil/i.test(location.pathname) || _pq === 'pumpkinoi
 const TDS_VARIANT = /\/3ds\/?$/i.test(location.pathname) || new URLSearchParams(location.search).get('ab') === '3ds';
 // Markt: 'nl' (NL/BE: /nl/<product> of nl.html — iDEAL + Bancontact + kaart via het Payment Element, SEPA-rebills) of 'it'
 // 'us': Engelstalige USD-checkout (en.html, checkout.getjustjenny.com/en/pumpkinoil) — US/CA/UK/AU/NZ (Shopify-markt "Big 5")
-const MARKET = (PRODUCT_KEY === 'pumpkinoil' || /(^|\/)en(\/|\.html|$)/i.test(location.pathname)) ? 'us'
+const MARKET = (PRODUCT_KEY === 'pumpkinoil' || PRODUCT_KEY === 'sageleaf' || /(^|\/)en(\/|\.html|$)/i.test(location.pathname)) ? 'us'
   : (/(^|\/)nl(\/|\.html|$)/i.test(location.pathname) || new URLSearchParams(location.search).get('m') === 'nl') ? 'nl' : 'it';
 const IS_NL = MARKET === 'nl';
 const IS_US = MARKET === 'us';
@@ -123,6 +124,15 @@ const PRODUCT_CONFIG = {
     MEMBERSHIP_NAME: 'Just Jenny Daily Vitality Membership',
     META_CONTENT_IDS: ['10704578609418'],
     TRIAL_DAYS: 14, CYCLE_DAYS: 28, MEMBERSHIP_CENTS: 4995,
+    PAY_LABEL: 'Complete order',
+  },
+  // Sage Leaf Extract (Engels, USD): REFILL — de gekozen bundel wordt elke 28 dagen opnieuw aangerekend en verzonden
+  sageleaf: {
+    PRODUCT_NAME: 'Sage Leaf Extract',
+    SUCCESS_PATH: '/checkout/thanks',
+    MEMBERSHIP_NAME: 'Just Jenny Sage Leaf Refill Plan',
+    META_CONTENT_IDS: ['10710604906762'],
+    TRIAL_DAYS: 28, CYCLE_DAYS: 28, MEMBERSHIP_CENTS: 5995, REFILL: true,
     PAY_LABEL: 'Complete order',
   },
   // Cannella di Ceylon: eigen membership (zelfde voorwaarden), zonder upsellpagina; knop zoals UrinaPatches
@@ -231,7 +241,14 @@ const PACKS_PUMPKINOIL = {
   3: { label: '3x Pumpkin Seed Oil Softgels', amount: 5995, compare: 11995, save: 6000, savePct: 50, img: PSO + 'assets/offer/zakjes-3x.webp?v=o1' },
   5: { label: '5x Pumpkin Seed Oil Softgels', amount: 8995, compare: 17995, save: 9000, savePct: 50, img: PSO + 'assets/offer/zakjes-5x.webp?v=o1' },
 };
-const PACKS = PRODUCT_KEY === 'pumpkinoil' ? PACKS_PUMPKINOIL : PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
+// Sage Leaf Extract (Shopify-product 10710604906762, USD): 1/3/5, prijzen = salespagina /sage
+const SGL = 'https://cannella.getjustjenny.com/sage/assets/uploads/';
+const PACKS_SAGELEAF = {
+  1: { label: '1x Sage Leaf Extract', amount: 2995, compare: 5995, save: 3000, savePct: 50, img: SGL + 'ed-pic-8.webp?v=c1' },
+  3: { label: '3x Sage Leaf Extract', amount: 5995, compare: 17997, save: 12002, savePct: 67, img: SGL + 'ed-pic-9.webp?v=c1' },
+  5: { label: '5x Sage Leaf Extract', amount: 8995, compare: 29995, save: 21000, savePct: 70, img: SGL + 'ed-pic-10.webp?v=c1' },
+};
+const PACKS = PRODUCT_KEY === 'sageleaf' ? PACKS_SAGELEAF : PRODUCT_KEY === 'pumpkinoil' ? PACKS_PUMPKINOIL : PRODUCT_KEY === 'ceylon' ? PACKS_CEYLON : PRODUCT_KEY === 'lubrisense' ? PACKS_LUBRISENSE : PRODUCT_KEY === 'magnesium' ? PACKS_MAGNESIUM : PRODUCT_KEY === 'emorroidi' ? PACKS_EMORROIDI : PRODUCT_KEY === 'urinapatches' ? PACKS_URINAPATCHES : PRODUCT_KEY === 'pumpkinseed' ? PACKS_PUMPKINSEED : PACKS_NEUROTONE;
 // Verzendopties — moeten gelijk zijn aan SHIPPING in lib/checkout.js
 const SHIP = {
   free:    { cents: 0,   title: T.shipFree },
@@ -290,7 +307,7 @@ function bumpCents() { return BUMP && bumpOn ? BUMP.price : 0; }
 function totalCents() { return P.amount + shipCents() + insCents() + bumpCents() - discountCents(); }
 // Wat de membership daarna kost: vol bedrag, tenzij de kortingscode "forever" geldt
 function renewalCents() {
-  const M = CONFIG.MEMBERSHIP_CENTS;
+  const M = CONFIG.REFILL ? P.amount : CONFIG.MEMBERSHIP_CENTS; // refill: de bundel zelf, elke 28 dagen
   if (!promo || promo.duration !== 'forever') return M;
   if (promo.amount_off) return Math.max(0, M - promo.amount_off);
   if (promo.percent_off) return Math.round(M * (100 - promo.percent_off) / 100);
@@ -778,7 +795,7 @@ const BASE_FONT = IS_MOBILE ? '16px' : '14px';
 const appearance = {
   labels: 'floating',
   variables: {
-    colorPrimary: IS_US ? '#C9643A' : '#2c6e65',
+    colorPrimary: PRODUCT_KEY === 'sageleaf' ? '#2F5A45' : IS_US ? '#C9643A' : '#2c6e65',
     colorText: '#1a1a1a',
     colorTextSecondary: '#707070',
     colorDanger: '#c0392b',
@@ -790,7 +807,7 @@ const appearance = {
   },
   rules: {
     '.Input': { borderColor: '#d9d9d9', padding: '6px 12px' },
-    '.Input:focus': IS_US ? { borderColor: '#C9643A', boxShadow: '0 0 0 1px #C9643A' } : { borderColor: '#2c6e65', boxShadow: '0 0 0 1px #2c6e65' },
+    '.Input:focus': PRODUCT_KEY === 'sageleaf' ? { borderColor: '#2F5A45', boxShadow: '0 0 0 1px #2F5A45' } : IS_US ? { borderColor: '#C9643A', boxShadow: '0 0 0 1px #C9643A' } : { borderColor: '#2c6e65', boxShadow: '0 0 0 1px #2c6e65' },
     '.Label': { color: '#707070' },
   },
 };
@@ -1805,6 +1822,32 @@ document.addEventListener('DOMContentLoaded', () => {
           + 'e l’<a href="https://www.getjustjenny.com/policies/privacy-policy" target="_blank" rel="noopener">Informativa sulla privacy</a>. '
           + 'Pagamento unico: nessun abbonamento e nessun addebito successivo.';
       });
+    }
+    // Refill-product (Sage Leaf): duidelijke abonnementsvermelding boven de knop + eigen voorwaardentekst
+    if (CONFIG.REFILL) {
+      $$('.sub-terms').forEach(el => {
+        el.innerHTML = 'By clicking «' + PAY_LABEL + '» I agree to the '
+          + '<a href="/checkout/terms#refill" target="_blank" rel="noopener">Terms &amp; Conditions</a>. '
+          + 'This is a refill subscription: the same bundle ships every <span class="js-cycle-days"></span> days and I authorize a charge of '
+          + '<span class="js-renewal-amt"></span> every <span class="js-cycle-days"></span> days, starting <span class="js-cycle-days"></span> days from today, until I cancel. '
+          + 'I can <a href="/checkout/terms#refill" target="_blank" rel="noopener">skip or cancel anytime</a> by emailing Hello@justjennybeauty.com.';
+      });
+      const btn = document.getElementById('pay-btn');
+      if (btn && !document.getElementById('refill-note')) {
+        const n = document.createElement('div');
+        n.id = 'refill-note';
+        n.style.cssText = 'margin:0 0 12px;padding:11px 14px;border:1px solid #d9e6df;background:#f3f8f5;border-radius:8px;font-size:14px;line-height:1.45;color:#1f2a24';
+        n.innerHTML = '<b>Refill subscription:</b> today you pay for your first order. Then the same bundle ships every <span class="js-cycle-days"></span> days for <b><span class="js-renewal-amt"></span></b> with free shipping. Skip or cancel anytime.';
+        btn.parentNode.insertBefore(n, btn);
+      }
+      $$('.js-renewal-amt').forEach(el => { el.textContent = money(renewalCents()); });
+      $$('.js-cycle-days').forEach(el => { el.textContent = CONFIG.CYCLE_DAYS; });
+      // Sage Leaf: groen merk i.p.v. het oranje van Pumpkin Seed Oil (en.html)
+      const st = document.createElement('style');
+      st.textContent = ':root{--accent:#2F5A45;--accent-dark:#244C3A;--selected-fill:#EEF5F1;--jj-brand:#2F5A45}body.pay-dark .pay-btn,.pay-btn{background:#2F5A45}body.pay-dark .pay-btn:hover,.pay-btn:hover{background:#244C3A}.trust-row .trust-item{background:#EEF5F1;border-color:#DCE9E1}.trust-row svg{stroke:#2F5A45!important}';
+      document.head.appendChild(st);
+      $$('[stroke="#C9643A"]').forEach(el => el.setAttribute('stroke', '#2F5A45'));
+      $$('[fill="#C9643A"]').forEach(el => el.setAttribute('fill', '#2F5A45'));
     }
     if (PRODUCT_KEY !== 'neurotone') {
       document.title = 'Checkout — ' + CONFIG.PRODUCT_NAME + ' — Just Jenny';

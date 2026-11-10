@@ -68,6 +68,13 @@ export function middleware(req) {
   // A/B-test 3DS: /3ds, /lubrisense/3ds, /magnesium/3ds en /emorroidi/3ds → zelfde checkoutpagina (checkout.js leest "/3ds" uit het pad)
   const lubri = onCheckoutHost && /^\/(?:(lubrisense|magnesium|emorroidi|urinapatches|pumpkinseed|ceylon)(?:\/3ds)?|3ds)\/?$/.test(url.pathname);
   // Engels/USD: checkout.getjustjenny.com/en/pumpkinoil (of /pumpkinoil, /checkout/en) → en.html; checkout.js leest product + markt uit het pad
+  // Sage Leaf Extract (refill): checkout.getjustjenny.com/en/sageleaf (of /sageleaf)
+  if (/^\/(?:checkout\/)?en\/sageleaf\/?$/.test(url.pathname) || (onCheckoutHost && /^\/sageleaf\/?$/.test(url.pathname))) {
+    const to = url.clone();
+    to.pathname = "/checkout/en.html";
+    to.searchParams.set("p", "sageleaf");
+    return NextResponse.rewrite(to);
+  }
   if (/^\/(?:checkout\/)?en(?:\/pumpkinoil)?\/?$/.test(url.pathname) || (onCheckoutHost && /^\/pumpkinoil\/?$/.test(url.pathname))) {
     const to = url.clone();
     to.pathname = "/checkout/en.html";
