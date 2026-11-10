@@ -133,7 +133,7 @@ const PRODUCT_CONFIG = {
     MEMBERSHIP_NAME: 'Just Jenny Sage Leaf Refill Plan',
     META_CONTENT_IDS: ['10710604906762'],
     TRIAL_DAYS: 28, CYCLE_DAYS: 28, MEMBERSHIP_CENTS: 5995, REFILL: true,
-    PAY_LABEL: 'Complete order',
+    PAY_LABEL: 'Pay Now',
   },
   // Cannella di Ceylon: eigen membership (zelfde voorwaarden), zonder upsellpagina; knop zoals UrinaPatches
   ceylon: {
@@ -1826,11 +1826,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Refill-product (Sage Leaf): duidelijke abonnementsvermelding boven de knop + eigen voorwaardentekst
     if (CONFIG.REFILL) {
       $$('.sub-terms').forEach(el => {
-        el.innerHTML = 'By clicking «' + PAY_LABEL + '» I agree to the '
-          + '<a href="/checkout/terms#refill" target="_blank" rel="noopener">Terms &amp; Conditions</a>. '
-          + 'This is a refill subscription: the same bundle ships every <span class="js-cycle-days"></span> days and I authorize a charge of '
-          + '<span class="js-renewal-amt"></span> every <span class="js-cycle-days"></span> days, starting <span class="js-cycle-days"></span> days from today, until I cancel. '
-          + 'I can <a href="/checkout/terms#refill" target="_blank" rel="noopener">skip or cancel anytime</a> by emailing Hello@justjennybeauty.com.';
+        el.innerHTML = 'By clicking “' + PAY_LABEL + ',” you agree to Just Jenny\'s '
+          + '<a href="/checkout/terms#refill" target="_blank" rel="noopener">Terms of Sale</a> and '
+          + '<a href="https://www.getjustjenny.com/policies/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>. '
+          + 'You will be enrolled in a subscription and billed on a recurring basis at the price and frequency shown in the order summary above '
+          + '(<span class="js-renewal-amt"></span> every <span class="js-cycle-days"></span> days, starting <span class="js-cycle-days"></span> days from today). '
+          + 'You can cancel anytime before your next billing date by emailing hello@justjennybeauty.com';
       });
       const btn = document.getElementById('pay-btn');
       if (btn && !document.getElementById('refill-note')) {
@@ -1846,6 +1847,48 @@ document.addEventListener('DOMContentLoaded', () => {
       const st = document.createElement('style');
       st.textContent = ':root{--accent:#2F5A45;--accent-dark:#244C3A;--selected-fill:#EEF5F1;--jj-brand:#2F5A45}body.pay-dark .pay-btn,.pay-btn{background:#2F5A45}body.pay-dark .pay-btn:hover,.pay-btn:hover{background:#244C3A}.trust-row .trust-item{background:#EEF5F1;border-color:#DCE9E1}.trust-row svg{stroke:#2F5A45!important}';
       document.head.appendChild(st);
+      // Header: logo + groene klantenbalk + drie zekerheden; timer in rustige stijl
+      st.textContent += '.jh{padding:18px 16px 14px;text-align:center}.jh .jh-logo{display:block;margin:0 auto 12px;height:34px;width:auto;position:static}'
+        + '.jh-join{max-width:720px;margin:0 auto 12px;padding:15px 18px;border-radius:12px;background:linear-gradient(90deg,#1F4534,#2F5A45 55%,#4C8A6B);color:#fff;font-weight:800;font-size:19px;letter-spacing:.02em;text-transform:uppercase;line-height:1.2}'
+        + '.jh .jh-ben{display:flex;justify-content:center;align-items:center;gap:0;flex-wrap:nowrap;font-size:16px;color:#111}.jh .jh-ben span{display:inline-flex;align-items:center;gap:7px;padding:0 12px;white-space:nowrap}.jh .jh-ben svg{width:24px;height:24px;flex:none}.jh .jh-ben i{display:block;width:2px;height:26px;background:#2F5A45;flex:none}'
+        + '@media(max-width:640px){.jh-join{font-size:14px;padding:12px 10px;border-radius:10px}.jh .jh-ben{font-size:10.5px}.jh .jh-ben span{padding:0 5px;gap:3px}.jh .jh-ben svg{width:14px;height:14px}.jh .jh-ben i{height:16px;width:1.5px}}'
+        + '.sg-trust{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:18px}.sg-trust li{display:flex;gap:14px;align-items:flex-start}.sg-trust svg{width:38px;height:38px;flex:none}.sg-trust b{display:block;font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:3px}.sg-trust span{font-size:14px;line-height:1.45;color:#444}.sg-every{font-size:13px;color:#444;margin-top:2px}'
+        + '.sg-trust-h{display:none}@media(max-width:999px){.sg-trust-h{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px;padding:0;list-style:none}.sg-trust-h li{text-align:center;font-size:11.5px;font-weight:700;line-height:1.25;color:#1a1a1a}.sg-trust-h svg{width:30px;height:30px;display:block;margin:0 auto 5px}}'
+        + '#jj-timer.jj-timer{background:#FAECEA;border:1px solid #F3D9D5;border-radius:12px;color:#5A2A22;font-weight:400;padding:16px 18px;display:flex;align-items:center;gap:12px}#jj-timer.jj-timer *{color:#5A2A22;font-weight:400}#jj-timer.jj-timer svg{width:22px;height:22px;flex:none}';
+      const jh = document.querySelector('header.jh'), ben = jh && jh.querySelector('.jh-ben');
+      if (ben && !jh.querySelector('.jh-join')) {
+        const j = document.createElement('div'); j.className = 'jh-join'; j.textContent = 'Join over 10,000+ happy customers';
+        jh.insertBefore(j, ben);
+        const I = {
+          g: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1-8.5 6" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/><path d="M2.6 4.2l.9 5 4.9-1.2" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="12" y="16.2" text-anchor="middle" font-size="10.5" font-weight="800" fill="#111" font-family="Arial">$</text></svg>',
+          s: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#111" d="M1 6h13v10H1zM15 9h4l4 4v3h-8z"/><circle cx="6" cy="17.5" r="2.4" fill="#111" stroke="#fff" stroke-width="1.2"/><circle cx="18" cy="17.5" r="2.4" fill="#111" stroke="#fff" stroke-width="1.2"/></svg>',
+          c: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#111" d="M12 2l8 3v6c0 5-3.4 9.2-8 11-4.6-1.8-8-6-8-11V5z"/><path d="M8.2 12l2.7 2.6 4.9-5.1" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+        };
+        ben.innerHTML = '<span>' + I.g + '90-Day Guarantee</span><i></i><span>' + I.s + 'Fast US Shipping</span><i></i><span>' + I.c + 'Secure Checkout</span>';
+      }
+      // Vertrouwensblok: rechts onder de kortingscode/totalen (desktop) en horizontaal vlak boven de knop (mobiel)
+      const TI = [
+        ['<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#2F5A45" d="M20 3l14 5v10c0 9-6 16-14 19C12 34 6 27 6 18V8z"/><path d="M13 19l5 5 9-10" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>', '90-Day Money Back Guarantee', 'Feel the difference within 90 days or we\'ll make it right.'],
+        ['<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#2F5A45" d="M3 11h20v16H3zM24 16h7l6 6v5H24z"/><circle cx="11" cy="29" r="4" fill="#2F5A45" stroke="#f4f4f4" stroke-width="2"/><circle cx="30" cy="29" r="4" fill="#2F5A45" stroke="#f4f4f4" stroke-width="2"/></svg>', 'Free shipping', 'Free standard shipping on your order and on every refill.'],
+        ['<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="13" r="6" fill="#2F5A45"/><path fill="#2F5A45" d="M8 33c0-7 5-11 12-11s12 4 12 11z"/><circle cx="7.5" cy="16" r="4" fill="#2F5A45"/><circle cx="32.5" cy="16" r="4" fill="#2F5A45"/><path fill="#2F5A45" d="M0 31c0-5 3-8 7-8 1 0 2 .2 3 .6C7.500 26 6.500 28.500 6.200 31zM40 31c0-5-3-8-7-8-1 0-2 .2-3 .6 2.500 2.400 3.500 4.900 3.800 7.400z"/></svg>', '10,000+ happy customers', 'Customers around the world have enjoyed our products that are continuously improved based on community feedback.'],
+      ];
+      const vHtml = '<ul class="sg-trust">' + TI.map(t => '<li>' + t[0] + '<div><b>' + t[1] + '</b><span>' + t[2] + '</span></div></li>').join('') + '</ul>';
+      const fixSummary = (root) => {
+        const stl = root.querySelector('.sum-trust'); if (stl) stl.outerHTML = vHtml;
+        const pv = root.querySelector('.prod-variant');
+        if (pv && !root.querySelector('.sg-every')) pv.insertAdjacentHTML('afterend', '<div class="sg-every">Ships every ' + CONFIG.CYCLE_DAYS + ' days</div>');
+      };
+      const tplS = document.getElementById('summary-template'); if (tplS) fixSummary(tplS.content);
+      $$('.js-summary-slot').forEach(fixSummary);
+      const rn = document.getElementById('refill-note') || btn;
+      if (rn && !document.querySelector('.sg-trust-h')) rn.insertAdjacentHTML('beforebegin', '<ul class="sg-trust-h">' + TI.map(t => '<li>' + t[0] + t[1] + '</li>').join('') + '</ul>');
+      const tb = document.getElementById('jj-timer');
+      if (tb) {
+        const sv = tb.querySelector('svg');
+        if (sv) sv.outerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5" fill="none" stroke="#5A2A22" stroke-width="1.6"/><path d="M12 11v6" stroke="#5A2A22" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="7.6" r="1.1" fill="#5A2A22"/></svg>';
+        const tt = document.getElementById('jj-timer-text');
+        if (tt && tt.firstChild && tt.firstChild.nodeType === 3) tt.firstChild.nodeValue = tt.firstChild.nodeValue.replace('demand,', 'demand'); // klok-element blijft staan (timer loopt door)
+      }
       $$('[stroke="#C9643A"]').forEach(el => el.setAttribute('stroke', '#2F5A45'));
       $$('[fill="#C9643A"]').forEach(el => el.setAttribute('fill', '#2F5A45'));
     }
