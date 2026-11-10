@@ -1826,7 +1826,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Refill-product (Sage Leaf): duidelijke abonnementsvermelding boven de knop + eigen voorwaardentekst
     if (CONFIG.REFILL) {
       $$('.sub-terms').forEach(el => {
-        el.innerHTML = 'By clicking “' + PAY_LABEL + ',” you agree to Just Jenny\'s '
+        el.innerHTML = '<b>Refill subscription:</b> today you pay for your first order. Then the same bundle ships every <span class="js-cycle-days"></span> days for <b><span class="js-renewal-amt"></span></b> with free shipping. Skip or cancel anytime.<br><br>'
+          + 'By clicking “' + PAY_LABEL + ',” you agree to Just Jenny\'s '
           + '<a href="/checkout/terms#refill" target="_blank" rel="noopener">Terms of Sale</a> and '
           + '<a href="https://www.getjustjenny.com/policies/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>. '
           + 'You will be enrolled in a subscription and billed on a recurring basis at the price and frequency shown in the order summary above '
@@ -1834,13 +1835,6 @@ document.addEventListener('DOMContentLoaded', () => {
           + 'You can cancel anytime before your next billing date by emailing hello@justjennybeauty.com';
       });
       const btn = document.getElementById('pay-btn');
-      if (btn && !document.getElementById('refill-note')) {
-        const n = document.createElement('div');
-        n.id = 'refill-note';
-        n.style.cssText = 'margin:0 0 12px;padding:11px 14px;border:1px solid #d9e6df;background:#f3f8f5;border-radius:8px;font-size:14px;line-height:1.45;color:#1f2a24';
-        n.innerHTML = '<b>Refill subscription:</b> today you pay for your first order. Then the same bundle ships every <span class="js-cycle-days"></span> days for <b><span class="js-renewal-amt"></span></b> with free shipping. Skip or cancel anytime.';
-        btn.parentNode.insertBefore(n, btn);
-      }
       $$('.js-renewal-amt').forEach(el => { el.textContent = money(renewalCents()); });
       $$('.js-cycle-days').forEach(el => { el.textContent = CONFIG.CYCLE_DAYS; });
       // Sage Leaf: groen merk i.p.v. het oranje van Pumpkin Seed Oil (en.html)
@@ -1851,9 +1845,9 @@ document.addEventListener('DOMContentLoaded', () => {
       st.textContent += '.jh{padding:18px 16px 14px;text-align:center}.jh .jh-logo{display:block;margin:0 auto 12px;height:34px;width:auto;position:static}'
         + '.jh-join{max-width:720px;margin:0 auto 12px;padding:15px 18px;border-radius:12px;background:linear-gradient(90deg,#1F4534,#2F5A45 55%,#4C8A6B);color:#fff;font-weight:800;font-size:19px;letter-spacing:.02em;text-transform:uppercase;line-height:1.2}'
         + '.jh .jh-ben{display:flex;justify-content:center;align-items:center;gap:0;flex-wrap:nowrap;font-size:16px;color:#111}.jh .jh-ben span{display:inline-flex;align-items:center;gap:7px;padding:0 12px;white-space:nowrap}.jh .jh-ben svg{width:24px;height:24px;flex:none}.jh .jh-ben i{display:block;width:2px;height:26px;background:#2F5A45;flex:none}'
-        + '@media(max-width:640px){.jh-join{font-size:14px;padding:12px 10px;border-radius:10px}.jh .jh-ben{font-size:10.5px}.jh .jh-ben span{padding:0 5px;gap:3px}.jh .jh-ben svg{width:14px;height:14px}.jh .jh-ben i{height:16px;width:1.5px}}'
+        + '@media(max-width:640px){.jh{padding:9px 10px 8px}.jh .jh-logo{height:17px;margin-bottom:7px}.jh-join{font-size:11.5px;padding:7px 8px;border-radius:8px;margin-bottom:7px}#jj-timer.jj-timer{padding:11px 10px!important;gap:6px!important;white-space:nowrap;justify-content:center}#jj-timer.jj-timer,#jj-timer.jj-timer *{font-size:min(12.5px,2.9vw)!important;letter-spacing:-.01em}#jj-timer.jj-timer svg{width:15px!important;height:15px!important}.jh .jh-ben{font-size:10.5px}.jh .jh-ben span{padding:0 5px;gap:3px}.jh .jh-ben svg{width:14px;height:14px}.jh .jh-ben i{height:16px;width:1.5px}}'
         + '.sg-trust{list-style:none;margin:18px 0 0;padding:0;display:grid;gap:18px}.sg-trust li{display:flex;gap:14px;align-items:flex-start}.sg-trust svg{width:38px;height:38px;flex:none}.sg-trust b{display:block;font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:3px}.sg-trust span{font-size:14px;line-height:1.45;color:#444}.sg-every{font-size:13px;color:#444;margin-top:2px}'
-        + '.sg-trust-h{display:none}@media(max-width:999px){.sg-trust-h{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px;padding:0;list-style:none}.sg-trust-h li{text-align:center;font-size:11.5px;font-weight:700;line-height:1.25;color:#1a1a1a}.sg-trust-h svg{width:30px;height:30px;display:block;margin:0 auto 5px}}'
+        + '.sg-trust-h{display:none}@media(max-width:999px){.sg-trust-h{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 12px;padding:0;list-style:none}.sg-trust-h li{text-align:center;font-size:10.5px;font-weight:700;line-height:1.2;color:#1a1a1a}.sg-trust-h svg{width:25px;height:25px;display:block;margin:0 auto 3px}}'
         + '#jj-timer.jj-timer{background:#FAECEA;border:1px solid #F3D9D5;border-radius:12px;color:#5A2A22;font-weight:400;padding:16px 18px;display:flex;align-items:center;gap:12px}#jj-timer.jj-timer *{color:#5A2A22;font-weight:400}#jj-timer.jj-timer svg{width:22px;height:22px;flex:none}';
       const jh = document.querySelector('header.jh'), ben = jh && jh.querySelector('.jh-ben');
       if (ben && !jh.querySelector('.jh-join')) {
