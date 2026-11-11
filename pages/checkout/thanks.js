@@ -3,7 +3,7 @@
 // without the Italian quiz and upsell. Stripe: ?sub=sub_…  PayPal: ?pp=I-…  Without ?sub= → preview with sample data.
 import { useEffect, useRef, useState } from "react";
 import Head from "next/head";
-import { getProduct, pickBundleFor, shippingFor, insuranceFor, currencyOf, membershipOf } from "../../lib/checkout";
+import { getProduct, pickBundleFor, shippingFor, insuranceFor, currencyOf, membershipOf, insuranceOf } from "../../lib/checkout";
 
 const GREEN = "#5f9a7c";
 const PURPLE = "#5433eb";
@@ -243,7 +243,7 @@ export default function Thanks() {
               <div style={{ marginTop: "26px" }}>
                 <div className="gz-line"><span>Subtotal</span><span>{fmt(bundle.price)}</span></div>
                 <div className="gz-line"><span>Shipping</span><span>{ship.price ? fmt(ship.price) : "Free"}</span></div>
-                {insurance > 0 && <div className="gz-line"><span>{insuranceFor(currencyOf(product)).title}</span><span>{fmt(insurance)}</span></div>}
+                {insurance > 0 && <div className="gz-line"><span>{insuranceOf(product).title}</span><span>{fmt(insurance)}</span></div>}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: "14px" }}>
                   <span style={{ fontSize: "18px", fontWeight: 700 }}>Total</span>
                   <span><span style={{ fontSize: "12px", color: "#6b6b6b", marginRight: "6px" }}>{CUR}</span><b style={{ fontSize: "19px" }}>{fmt(total)}</b></span>

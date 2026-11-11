@@ -6,7 +6,7 @@
 // abonnementen van de laatste 30 dagen.
 
 import Stripe from "stripe";
-import { SHIPPING, UPSELL, getProduct, INSURANCE, bumpFor } from "../../../lib/checkout";
+import { SHIPPING, UPSELL, getProduct, INSURANCE, bumpFor, insuranceOf } from "../../../lib/checkout";
 import { findOrderForInvoice } from "../../../lib/shopify-admin";
 import { sweepIfDue } from "../../../lib/upsell-queue";
 
@@ -59,9 +59,9 @@ export default async function handler(req, res) {
       gift: !!bundle.gift,
       bundlePrice: bundle.price,
       shipping: ship.code,
-      insurance: md.insurance === "1" ? INSURANCE.price : 0,
+      insurance: md.insurance === "1" ? insuranceOf(product).price : 0,
       bump: md.bump && bumpFor(product.key) && md.bump === bumpFor(product.key).key ? { title: bumpFor(product.key).title, price: bumpFor(product.key).price } : null,
-      amountPaid: inv?.amount_paid ?? bundle.price + ship.price + (md.insurance === "1" ? INSURANCE.price : 0) + (md.bump && bumpFor(product.key) ? bumpFor(product.key).price : 0),
+      amountPaid: inv?.amount_paid ?? bundle.price + ship.price + (md.insurance === "1" ? insuranceOf(product).price : 0) + (md.bump && bumpFor(product.key) ? bumpFor(product.key).price : 0),
       email: cust.email || "",
       name: sh.name || cust.name || "",
       phone: sh.phone || cust.phone || "",

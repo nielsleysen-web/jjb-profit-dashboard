@@ -11,7 +11,7 @@
 
 import Stripe from "stripe";
 import axios from "axios";
-import { SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem, bumpFor, bumpLineItem, getMarket, zipValidFor, currencyOf, moneyBag, shippingFor, insuranceFor } from "../../../lib/checkout";
+import { insuranceOf, SHIPPING, getProduct, giftLineItem, BUNDLE_GIFT, INSURANCE, insuranceLineItem, bumpFor, bumpLineItem, getMarket, zipValidFor, currencyOf, moneyBag, shippingFor, insuranceFor } from "../../../lib/checkout";
 import { runWithBrand } from "../../../lib/portal-brand";
 import { syncNewMember, syncRenewal, syncCancel, trackEvent, syncProductMember } from "../../../lib/klaviyo";
 import { PORTAL_URL } from "../../../lib/portal-auth";
@@ -149,7 +149,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   }
 
   // Verzendverzekering (4,95 €, aangevinkt op de checkout) → eigen orderregel, zodat de betaling en de order kloppen
-  if (!refill && md.insurance === "1") { order.lineItems.push(insuranceLineItem(CUR)); order.tags.push("shipping-insurance"); order.note += ` + ${insuranceFor(CUR).title} (${(INSURANCE.price / 100).toFixed(2)} ${CURU})`; }
+  if (!refill && md.insurance === "1") { order.lineItems.push(insuranceLineItem(CUR, product)); order.tags.push("shipping-insurance"); order.note += ` + ${insuranceOf(product).title} (${(insuranceOf(product).price / 100).toFixed(2)} ${CURU})`; }
   // Order bump (Spray Neutralizzante 9,95 €, "Aggiungi" op de checkout) → eigen productregel op dezelfde order
   const BUMP = bumpFor(product.key);
   if (!refill && BUMP && md.bump === BUMP.key) { order.lineItems.push(bumpLineItem(BUMP, CUR)); order.tags.push(BUMP.tag); order.note += ` + ${BUMP.title} (${(BUMP.price / 100).toFixed(2).replace(".", ",")} €)`; }
@@ -262,7 +262,7 @@ export default async function handler(req, res) {
           address: { address1: addr.line1, city: addr.city, zip: addr.postal_code, province: addr.state, country: addr.country || "IT" },
           provider: "stripe", subscriptionId: subscription?.id || subId, stripeCustomerId: custId, qty,
           bundleLabel: (product.bundles[qty] || product.bundles[3]).label, shippingTitle: (shippingFor(currencyOf(product))[md.shipping] || SHIPPING.insured).title,
-          insurance: md.insurance === "1" ? INSURANCE.price / 100 : 0,
+          insurance: md.insurance === "1" ? insuranceOf(product).price / 100 : 0,
           amountPaid: (inv.amount_paid || 0) / 100, trialEnds: subscription?.trial_end ? subscription.trial_end * 1000 : null,
           orderName: order.name, membershipPrice: product.membership.price / 100, intervalDays: product.membership.intervalDays,
           startedAt: inv.created * 1000, nextChargeAt: subscription?.current_period_end ? subscription.current_period_end * 1000 : null,

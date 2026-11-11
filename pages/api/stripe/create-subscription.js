@@ -13,7 +13,7 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor, currencyOf, shippingFor, insuranceFor, membershipOf } from "../../../lib/checkout";
+import { TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor, currencyOf, shippingFor, insuranceFor, membershipOf, insuranceOf } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     const MEMBERSHIP = membershipOf(product, bundle); // refill-product (Sage Leaf): bundelprijs elke 28 dagen
     const CURRENCY = currencyOf(product);
     const CS = CURRENCY === "eur" ? "" : `_${CURRENCY}`;
-    const SHIP = shippingFor(CURRENCY), INS = insuranceFor(CURRENCY);
+    const SHIP = shippingFor(CURRENCY), INS = insuranceOf(product);
     const ship = SHIP[b.ship_method] || SHIP.insured;
     const insurance = b.insurance === true || b.insurance === "1" || b.insurance === 1; // verzendverzekering (4,95 €, eenmalig)
     // Order bump (UrinaPatches: Spray Neutralizzante 9,95 €, A/B-test) — alleen voor producten met een bump
@@ -121,7 +121,7 @@ export default async function handler(req, res) {
       shipping: ship.code,
       amount_frontend: String(bundle.price),
       amount_shipping: String(ship.price),
-      ...(insurance ? { insurance: "1", amount_insurance: String(INSURANCE.price) } : {}),
+      ...(insurance ? { insurance: "1", amount_insurance: String(INS.price) } : {}),
       ...(CURRENCY !== "eur" ? { currency: CURRENCY } : {}),
       ...(bump ? { bump: BUMP.key, amount_bump: String(BUMP.price) } : {}),
       ...(bumpAb ? { jj_bump_ab: bumpAb } : {}), // A/B-test order bump (a = zonder, b = met bump getoond)
@@ -169,9 +169,9 @@ export default async function handler(req, res) {
       addInvoiceItems.push({ price: shipPrice, quantity: 1 });
     }
     if (insurance) {
-      const insPrice = await getOrCreatePrice(`jj_insurance_${INSURANCE.price}${CS}_${V}`, {
+      const insPrice = await getOrCreatePrice(`jj_insurance_${INS.price}${CS}_${V}`, {
         currency: CURRENCY,
-        unit_amount: INSURANCE.price,
+        unit_amount: INS.price,
         product_data: { name: INS.title },
       });
       addInvoiceItems.push({ price: insPrice, quantity: 1 });

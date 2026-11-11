@@ -132,7 +132,7 @@ const PRODUCT_CONFIG = {
     SUCCESS_PATH: '/checkout/thanks',
     MEMBERSHIP_NAME: 'Just Jenny Sage Leaf Refill Plan',
     META_CONTENT_IDS: ['10710604906762'],
-    TRIAL_DAYS: 28, CYCLE_DAYS: 28, MEMBERSHIP_CENTS: 5995, REFILL: true,
+    TRIAL_DAYS: 28, CYCLE_DAYS: 28, MEMBERSHIP_CENTS: 5995, REFILL: true, INS_CENTS: 295,
     PAY_LABEL: 'Pay Now',
   },
   // Cannella di Ceylon: eigen membership (zelfde voorwaarden), zonder upsellpagina; knop zoals UrinaPatches
@@ -295,7 +295,7 @@ function discountCents() {
   if (promo.percent_off) return Math.round(base * promo.percent_off / 100);
   return 0;
 }
-const INS_PRICE = 495; // verzendverzekering (4,95 €), standaard aangevinkt
+const INS_PRICE = CONFIG.INS_CENTS || 495; // verzendverzekering (4,95 €; Sage Leaf $2.95), standaard aangevinkt
 function insCents() { const c = document.getElementById('ins-check'); return c && c.checked ? INS_PRICE : 0; }
 /* Order bump (UrinaPatches, A/B-test): "Spray Neutralizzante" 9,95 € met een Aggiungi-knop boven het totaal
    (index.html #bump-template). Variant per bezoeker (cookie jj_bump: a = zonder, b = met), verdeling CONFIG.BUMP_SPLIT
@@ -1869,6 +1869,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const vHtml = '<ul class="sg-trust">' + TI.map(t => '<li>' + t[0] + '<div><b>' + t[1] + '</b><span>' + t[2] + '</span></div></li>').join('') + '</ul>';
       const fixSummary = (root) => {
         const stl = root.querySelector('.sum-trust'); if (stl) stl.outerHTML = vHtml;
+        const tt = root.querySelector('.t-total');
+        if (tt && !root.querySelector('.js-ins-line')) tt.insertAdjacentHTML('beforebegin', '<div class="t-row js-ins-line" hidden><span>Shipping Insurance</span><span class="js-ins-amt"></span></div>');
         const pv = root.querySelector('.prod-variant');
         if (pv && !root.querySelector('.sg-every')) pv.insertAdjacentHTML('afterend', '<div class="sg-every">Ships every ' + CONFIG.CYCLE_DAYS + ' days</div>');
       };
@@ -1876,6 +1878,17 @@ document.addEventListener('DOMContentLoaded', () => {
       $$('.js-summary-slot').forEach(fixSummary);
       const rn = document.getElementById('refill-note') || btn;
       if (rn && !document.querySelector('.sg-trust-h')) rn.insertAdjacentHTML('beforebegin', '<ul class="sg-trust-h">' + TI.map(t => '<li>' + t[0] + t[1] + '</li>').join('') + '</ul>');
+      // Shipping Insurance ($2.95) onder de verzendmethode — standaard aangevinkt (niet voor GB: daar is een vooraf aangevinkte betaalde extra niet toegestaan)
+      const shipSec = document.getElementById('ship-options') && document.getElementById('ship-options').parentNode;
+      if (shipSec && !document.getElementById('ins-check')) {
+        st.textContent += '.sg-ins-h{margin:22px 0 10px}.sg-ins{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1.5px dashed #c9cfcc;border-radius:10px;cursor:pointer;background:#fff}.sg-ins svg{width:40px;height:40px;flex:none}.sg-ins .t{flex:1;min-width:0}.sg-ins b{display:block;font-size:16px;color:#1a1a1a;margin-bottom:3px}.sg-ins span.d{display:block;font-size:14px;line-height:1.4;color:#555}.sg-ins input{width:22px;height:22px;flex:none;accent-color:#2F5A45;cursor:pointer}@media(max-width:640px){.sg-ins{gap:11px;padding:13px 12px}.sg-ins svg{width:32px;height:32px}.sg-ins b{font-size:15px}.sg-ins span.d{font-size:13px}}';
+        shipSec.insertAdjacentHTML('beforeend', '<h2 class="h2-sm sg-ins-h">Shipping Insurance</h2><label class="sg-ins" id="ins-card"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4l13 5v9c0 8.5-5.5 15-13 18-7.5-3-13-9.5-13-18V9z" fill="none" stroke="#2F5A45" stroke-width="2.4" stroke-linejoin="round"/><path d="M13.5 20l4.7 4.6 8.5-9" fill="none" stroke="#2F5A45" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="t"><b>Shipping Insurance</b><span class="d">Protect your order against theft, loss or damage for just ' + money(INS_PRICE) + '</span></span><input type="checkbox" id="ins-check" name="insurance" value="1" checked></label>');
+        const ic = document.getElementById('ins-check'), ctry = document.getElementById('country');
+        ic.addEventListener('change', () => { ic.dataset.touched = '1'; updateAmounts(); });
+        const gb = () => { if (ctry && !ic.dataset.touched) { ic.checked = ctry.value !== 'GB'; updateAmounts(); } };
+        if (ctry) ctry.addEventListener('change', gb);
+        setTimeout(gb, 0); setTimeout(gb, 1500);
+      }
       const tb = document.getElementById('jj-timer');
       if (tb) {
         const sv = tb.querySelector('svg');
