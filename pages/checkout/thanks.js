@@ -162,7 +162,6 @@ export default function Thanks() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex" />
         <style dangerouslySetInnerHTML={{ __html: css }} />
-        <script src="https://pixel.wetracked.io/funnel/init.js" async />
       </Head>
 
       <header className="jh">
