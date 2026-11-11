@@ -1863,7 +1863,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Vertrouwensblok: rechts onder de kortingscode/totalen (desktop) en horizontaal vlak boven de knop (mobiel)
       const TI = [
         ['<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#2F5A45" d="M20 3l14 5v10c0 9-6 16-14 19C12 34 6 27 6 18V8z"/><path d="M13 19l5 5 9-10" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>', '90-Day Money Back Guarantee', 'Feel the difference within 90 days or we\'ll make it right.'],
-        ['<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#2F5A45" d="M3 11h20v16H3zM24 16h7l6 6v5H24z"/><circle cx="11" cy="29" r="4" fill="#2F5A45" stroke="#f4f4f4" stroke-width="2"/><circle cx="30" cy="29" r="4" fill="#2F5A45" stroke="#f4f4f4" stroke-width="2"/></svg>', 'Free shipping', 'Free standard shipping on your order and on every refill.'],
+        ['<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#2F5A45" d="M3 11h20v16H3zM24 16h7l6 6v5H24z"/><circle cx="11" cy="29" r="4" fill="#2F5A45" stroke="#f4f4f4" stroke-width="2"/><circle cx="30" cy="29" r="4" fill="#2F5A45" stroke="#f4f4f4" stroke-width="2"/></svg>', 'Free shipping', 'Free standard shipping on your order.'],
         ['<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="13" r="6" fill="#2F5A45"/><path fill="#2F5A45" d="M8 33c0-7 5-11 12-11s12 4 12 11z"/><circle cx="7.5" cy="16" r="4" fill="#2F5A45"/><circle cx="32.5" cy="16" r="4" fill="#2F5A45"/><path fill="#2F5A45" d="M0 31c0-5 3-8 7-8 1 0 2 .2 3 .6C7.500 26 6.500 28.500 6.200 31zM40 31c0-5-3-8-7-8-1 0-2 .2-3 .6 2.500 2.400 3.500 4.900 3.800 7.400z"/></svg>', '10,000+ happy customers', 'Customers around the world have enjoyed our products that are continuously improved based on community feedback.'],
       ];
       const vHtml = '<ul class="sg-trust">' + TI.map(t => '<li>' + t[0] + '<div><b>' + t[1] + '</b><span>' + t[2] + '</span></div></li>').join('') + '</ul>';
@@ -1871,23 +1871,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const stl = root.querySelector('.sum-trust'); if (stl) stl.outerHTML = vHtml;
         const tt = root.querySelector('.t-total');
         if (tt && !root.querySelector('.js-ins-line')) tt.insertAdjacentHTML('beforebegin', '<div class="t-row js-ins-line" hidden><span>Shipping Insurance</span><span class="js-ins-amt"></span></div>');
-        const pv = root.querySelector('.prod-variant');
-        if (pv && !root.querySelector('.sg-every')) pv.insertAdjacentHTML('afterend', '<div class="sg-every">Ships every ' + CONFIG.CYCLE_DAYS + ' days</div>');
       };
       const tplS = document.getElementById('summary-template'); if (tplS) fixSummary(tplS.content);
       $$('.js-summary-slot').forEach(fixSummary);
       const rn = document.getElementById('refill-note') || btn;
       if (rn && !document.querySelector('.sg-trust-h')) rn.insertAdjacentHTML('beforebegin', '<ul class="sg-trust-h">' + TI.map(t => '<li>' + t[0] + t[1] + '</li>').join('') + '</ul>');
-      // Shipping Insurance ($2.95) onder de verzendmethode — standaard aangevinkt (niet voor GB: daar is een vooraf aangevinkte betaalde extra niet toegestaan)
+      // Shipping Insurance ($2.95) onder de verzendmethode — standaard aangevinkt voor elke klant
       const shipSec = document.getElementById('ship-options') && document.getElementById('ship-options').parentNode;
       if (shipSec && !document.getElementById('ins-check')) {
         st.textContent += '.sg-ins-h{margin:22px 0 10px}.sg-ins{display:flex;align-items:center;gap:16px;padding:16px 18px;border:1.5px dashed #c9cfcc;border-radius:10px;cursor:pointer;background:#fff}.sg-ins svg{width:40px;height:40px;flex:none}.sg-ins .t{flex:1;min-width:0}.sg-ins b{display:block;font-size:16px;color:#1a1a1a;margin-bottom:3px}.sg-ins span.d{display:block;font-size:14px;line-height:1.4;color:#555}.sg-ins input{width:22px;height:22px;flex:none;accent-color:#2F5A45;cursor:pointer}@media(max-width:640px){.sg-ins{gap:11px;padding:13px 12px}.sg-ins svg{width:32px;height:32px}.sg-ins b{font-size:15px}.sg-ins span.d{font-size:13px}}';
         shipSec.insertAdjacentHTML('beforeend', '<h2 class="h2-sm sg-ins-h">Shipping Insurance</h2><label class="sg-ins" id="ins-card"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4l13 5v9c0 8.5-5.5 15-13 18-7.5-3-13-9.5-13-18V9z" fill="none" stroke="#2F5A45" stroke-width="2.4" stroke-linejoin="round"/><path d="M13.5 20l4.7 4.6 8.5-9" fill="none" stroke="#2F5A45" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="t"><b>Shipping Insurance</b><span class="d">Protect your order against theft, loss or damage for just ' + money(INS_PRICE) + '</span></span><input type="checkbox" id="ins-check" name="insurance" value="1" checked></label>');
-        const ic = document.getElementById('ins-check'), ctry = document.getElementById('country');
-        ic.addEventListener('change', () => { ic.dataset.touched = '1'; updateAmounts(); });
-        const gb = () => { if (ctry && !ic.dataset.touched) { ic.checked = ctry.value !== 'GB'; updateAmounts(); } };
-        if (ctry) ctry.addEventListener('change', gb);
-        setTimeout(gb, 0); setTimeout(gb, 1500);
+        const ic = document.getElementById('ins-check');
+        ic.addEventListener('change', () => updateAmounts());
+        setTimeout(updateAmounts, 0);
       }
       const tb = document.getElementById('jj-timer');
       if (tb) {
