@@ -1826,8 +1826,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Refill-product (Sage Leaf): duidelijke abonnementsvermelding boven de knop + eigen voorwaardentekst
     if (CONFIG.REFILL) {
       $$('.sub-terms').forEach(el => {
-        el.innerHTML = '<b>Refill subscription:</b> today you pay for your first order. Then the same bundle ships every <span class="js-cycle-days"></span> days for <b><span class="js-renewal-amt"></span></b> with free shipping. Skip or cancel anytime.<br><br>'
-          + 'By clicking “' + PAY_LABEL + ',” you agree to Just Jenny\'s '
+        el.innerHTML = 'By clicking “' + PAY_LABEL + ',” you agree to Just Jenny\'s '
           + '<a href="/checkout/terms#refill" target="_blank" rel="noopener">Terms of Sale</a> and '
           + '<a href="https://www.getjustjenny.com/policies/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>. '
           + 'You will be enrolled in a subscription and billed on a recurring basis at the price and frequency shown in the order summary above '
