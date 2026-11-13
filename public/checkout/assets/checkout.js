@@ -1485,6 +1485,21 @@ function abView() {
   } catch (e) {}
 }
 
+// Checkout-bezoek tellen voor het dashboard (per Miami-dag, product, land en salespagina) — mag nooit iets breken
+(function () {
+  try {
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const k = 'jj_cv_' + PRODUCT_KEY;
+    let u = 0;
+    try { if (localStorage.getItem(k) !== day) { u = 1; localStorage.setItem(k, day); } } catch (e) { u = 1; }
+    const q = new URLSearchParams(location.search);
+    let src = q.get('host') || q.get('jjb_host') || '';
+    if (!src && document.referrer) { try { src = new URL(document.referrer).host; } catch (e) {} }
+    if (src === location.host) src = '';
+    fetch('/api/checkout-visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p: PRODUCT_KEY, src: src, u: u }), keepalive: true }).catch(function () {});
+  } catch (e) {}
+})();
+
 document.addEventListener('DOMContentLoaded', async () => {
   startTimer();
   abView();

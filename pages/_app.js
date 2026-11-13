@@ -45,6 +45,7 @@ const CATEGORIES = [
     items: [
       { href: "/product-launching", label: "Product Pipeline", icon: "🚀" },
       { href: "/ab-test", label: "A/B Tests", icon: "🧪" },
+      { href: "/checkout-visits", label: "Checkout Visits", icon: "🛒" },
     ],
   },
   {
