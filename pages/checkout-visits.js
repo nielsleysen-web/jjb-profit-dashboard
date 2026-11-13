@@ -71,6 +71,42 @@ function List({ title, rows, render, empty }) {
   );
 }
 
+// Lokale tijd in de landen waar we op adverteren (grote landen: hoofdzone + tweede zone)
+const CLOCKS = [
+  { cc: "US", name: "United States", tz: "America/New_York", city: "New York", alt: { tz: "America/Los_Angeles", city: "Los Angeles" } },
+  { cc: "GB", name: "United Kingdom", tz: "Europe/London", city: "London" },
+  { cc: "CA", name: "Canada", tz: "America/Toronto", city: "Toronto", alt: { tz: "America/Vancouver", city: "Vancouver" } },
+  { cc: "AU", name: "Australia", tz: "Australia/Sydney", city: "Sydney", alt: { tz: "Australia/Perth", city: "Perth" } },
+  { cc: "NZ", name: "New Zealand", tz: "Pacific/Auckland", city: "Auckland" },
+];
+const hhmm = (now, tz) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(now);
+const wday = (now, tz) => new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(now);
+const hourIn = (now, tz) => Number(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hour12: false }).format(now)) % 24;
+
+function LocalTimes() {
+  const [now, setNow] = useState(null); // pas na het laden invullen (geen server/browser-verschil)
+  useEffect(() => { setNow(new Date()); const t = setInterval(() => setNow(new Date()), 20000); return () => clearInterval(t); }, []);
+  return (
+    <div style={{ ...ui.card, padding: "18px 20px", marginBottom: "16px" }}>
+      <div style={{ ...ui.label, marginBottom: "12px" }}>Local time in our countries</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: "10px" }}>
+        {CLOCKS.map((c) => {
+          const h = now ? hourIn(now, c.tz) : 12;
+          const day = h >= 7 && h < 22;
+          return (
+            <div key={c.cc} style={{ border: "1px solid #eceef2", borderRadius: "12px", padding: "12px 14px", background: day ? "#ffffff" : "#f4f6fb" }}>
+              <div style={{ fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{flag(c.cc)}&nbsp; {c.name}</div>
+              <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: 1.15, marginTop: "6px", fontVariantNumeric: "tabular-nums" }}>{now ? hhmm(now, c.tz) : "--:--"}</div>
+              <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{now ? `${day ? "☀️" : "🌙"} ${wday(now, c.tz)} · ${c.city}` : c.city}</div>
+              {c.alt && <div style={{ fontSize: "12px", color: "#94a3b8", marginTop: "2px", fontVariantNumeric: "tabular-nums" }}>{c.alt.city} {now ? hhmm(now, c.alt.tz) : "--:--"}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const QUICK = [
   { key: "today", label: "Today" },
   { key: "yesterday", label: "Yesterday" },
@@ -130,6 +166,8 @@ export default function CheckoutVisits() {
           {multiDay ? `${dayLabel(range.from)} – ${dayLabel(range.to)}` : dayLabel(range.from)} · Miami time
         </div>
       </div>
+
+      <LocalTimes />
 
       <div style={{ display: "grid", gap: "16px", opacity: loading ? 0.5 : 1 }}>
         <List title="By country" rows={byCountry} empty="No clicks yet." render={(k) => <span>{flag(k)}&nbsp; {countryName(k)}</span>} />
