@@ -258,7 +258,7 @@ const PACKS_SAGELEAF = {
   3: { label: '3x Sage Leaf Extract', amount: 5995, compare: 17997, save: 12002, savePct: 67, img: SGL + 'ed-pic-9.webp?v=c1' },
   5: { label: '5x Sage Leaf Extract', amount: 8995, compare: 29995, save: 21000, savePct: 70, img: SGL + 'ed-pic-10.webp?v=c1' },
 };
-const CYA = 'https://cayenne.getjustjenny.com/cayenne/assets/';
+const CYA = 'https://cannella.getjustjenny.com/cayenne/assets/';
 const PACKS_CAYENNE = {
   1: { label: '1x Cayenne Pepper Softgels', amount: 2995, compare: 5995, save: 3000, savePct: 50, img: CYA + 'pouch.webp' },
   3: { label: '2x Cayenne Pepper Softgels', amount: 4995, compare: 17985, save: 12990, savePct: 72, img: CYA + 'bundle-2-jar.webp',
@@ -465,7 +465,7 @@ function syncBumpRows() {
 }
 
 function updateAmounts() {
-  $$('.prod-row:not(.jj-bgift) .prod-thumb img, .mobile-total img').forEach(el => { el.src = P.img; el.alt = CONFIG.PRODUCT_NAME; });
+  $$('.prod-row:not(.jj-bgift):not(.jj-gift-line) .prod-thumb img, .mobile-total img').forEach(el => { el.src = P.img; el.alt = CONFIG.PRODUCT_NAME; });
   $$('.js-pack-label').forEach(el => el.textContent = P.label);
   const hasCompare = P.compare > P.amount;
   $$('.js-compare').forEach(el => { el.textContent = hasCompare ? money(P.compare) : ''; el.hidden = !hasCompare; });
