@@ -155,6 +155,8 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   if (!refill && BUMP && md.bump === BUMP.key) { order.lineItems.push(bumpLineItem(BUMP, CUR)); order.tags.push(BUMP.tag); order.note += ` + ${BUMP.title} (${(BUMP.price / 100).toFixed(2).replace(".", ",")} €)`; }
   // Abandoned-checkout-mail 2: 1 flacone in omaggio
   // Bundel met gratis cadeau (e-book, €0) → zelfde regel als de oude Shopify-cartlink
+  // Gratis cadeaus per bundel (Cayenne: jar / softgel case) → €0-regels op de eerste order
+  if (!refill && bundle.gifts) for (const g of bundle.gifts) { order.lineItems.push({ variantId: g.variantId, quantity: 1, priceSet: mb(0) }); order.note += ` + ${g.title}`; }
   if (!refill && bundle.gift) { order.lineItems.push(giftLineItem(CUR)); order.note += ` + ${BUNDLE_GIFT.title} (${BUNDLE_GIFT.note})`; }
   const bonus = !refill && product.abandoned ? await hasCheckoutBonus(order.email) : false;
   if (bonus) { order.lineItems.push(bonusLineItem(product.key)); order.tags.push("abandon-bonus"); order.note += ` + 1x ${product.title} in omaggio (abandoned checkout)`; }

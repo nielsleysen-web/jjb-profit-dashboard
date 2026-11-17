@@ -34,7 +34,7 @@ const PRESETS = [
   { key: "custom", label: "Custom period" },
 ];
 
-const PRODUCT_NAMES = { sageleaf: "Sage Leaf Extract", pumpkinoil: "Pumpkin Seed Oil (EN)", pumpkinseed: "Pumpkin Seed (IT)", ceylon: "Cannella di Ceylon", neurotone: "NeuroTone", lubrisense: "LubriSense", magnesium: "Magnesium", emorroidi: "Emorroidi", urinapatches: "UrinaPatches" };
+const PRODUCT_NAMES = { cayenne: "Cayenne Pepper Softgels", sageleaf: "Sage Leaf Extract", pumpkinoil: "Pumpkin Seed Oil (EN)", pumpkinseed: "Pumpkin Seed (IT)", ceylon: "Cannella di Ceylon", neurotone: "NeuroTone", lubrisense: "LubriSense", magnesium: "Magnesium", emorroidi: "Emorroidi", urinapatches: "UrinaPatches" };
 const productName = (k) => PRODUCT_NAMES[k] || k;
 let regionNames = null;
 try { regionNames = new Intl.DisplayNames(["en"], { type: "region" }); } catch (e) {}

@@ -8,7 +8,8 @@ import { getProduct, pickBundleFor, shippingFor, insuranceFor, currencyOf, membe
 const GREEN = "#5f9a7c";
 const PURPLE = "#5433eb";
 const SGL = "https://cannella.getjustjenny.com/sage/assets/uploads/";
-const IMGS_BY = { sageleaf: { 1: SGL + "ed-pic-8.webp?v=c1", 3: SGL + "ed-pic-9.webp?v=c1", 5: SGL + "ed-pic-10.webp?v=c1" } };
+const CYA = "https://cayenne.getjustjenny.com/cayenne/assets/";
+const IMGS_BY = { cayenne: { 1: CYA + "pouch.webp", 3: CYA + "bundle-2-jar.webp", 5: CYA + "bundle-3-gifts.webp" }, sageleaf: { 1: SGL + "ed-pic-8.webp?v=c1", 3: SGL + "ed-pic-9.webp?v=c1", 5: SGL + "ed-pic-10.webp?v=c1" } };
 const IMGS = { 1: "https://cannella.getjustjenny.com/assets/offer/zakje-1x.webp?v=o1", 3: "https://cannella.getjustjenny.com/assets/offer/zakjes-3x.webp?v=o1", 5: "https://cannella.getjustjenny.com/assets/offer/zakjes-5x.webp?v=o1" };
 const COUNTRY = { US: "United States", CA: "Canada", GB: "United Kingdom", AU: "Australia", NZ: "New Zealand" };
 const BRAND = { amex: "American Express", visa: "Visa", mastercard: "Mastercard", maestro: "Maestro", discover: "Discover", jcb: "JCB", unionpay: "UnionPay", diners: "Diners Club" };

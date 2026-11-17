@@ -69,6 +69,13 @@ export function middleware(req) {
   const lubri = onCheckoutHost && /^\/(?:(lubrisense|magnesium|emorroidi|urinapatches|pumpkinseed|ceylon)(?:\/3ds)?|3ds)\/?$/.test(url.pathname);
   // Engels/USD: checkout.getjustjenny.com/en/pumpkinoil (of /pumpkinoil, /checkout/en) → en.html; checkout.js leest product + markt uit het pad
   // Sage Leaf Extract (refill): checkout.getjustjenny.com/en/sageleaf (of /sageleaf)
+  // Cayenne Pepper Softgels (refill): checkout.getjustjenny.com/en/cayenne (of /cayenne)
+  if (/^\/(?:checkout\/)?en\/cayenne\/?$/.test(url.pathname) || (onCheckoutHost && /^\/cayenne\/?$/.test(url.pathname))) {
+    const to = url.clone();
+    to.pathname = "/checkout/en.html";
+    to.searchParams.set("p", "cayenne");
+    return NextResponse.rewrite(to);
+  }
   if (/^\/(?:checkout\/)?en\/sageleaf\/?$/.test(url.pathname) || (onCheckoutHost && /^\/sageleaf\/?$/.test(url.pathname))) {
     const to = url.clone();
     to.pathname = "/checkout/en.html";
