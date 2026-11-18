@@ -668,3 +668,8 @@ body.pay-dark .pay-btn:hover{background:#093a20}
 .pe-loading { padding: 16px 14px; border: 1px solid var(--border-input); border-radius: var(--radius); color: #707070; font-size: 14px; }
 .pe-note { margin: 10px 0 0; padding: 10px 12px; background: #f3f6f4; border-radius: 10px; font-size: 12.5px; line-height: 1.45; color: #2c4a44; }
 .pm-group[hidden] { display: none; }
+
+/* Geen witte strook rechts op mobiel: de PayPal-knop (iframe) mag nooit breder worden dan zijn vak */
+html{overflow-x:clip}
+.express-row>div,.paypal-container{min-width:0;max-width:100%;overflow:hidden}
+.paypal-container iframe,.paypal-container .paypal-buttons,.paypal-container>div{max-width:100%!important;min-width:0!important}

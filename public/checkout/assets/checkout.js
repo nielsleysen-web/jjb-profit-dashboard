@@ -134,7 +134,7 @@ const PRODUCT_CONFIG = {
     MEMBERSHIP_NAME: 'Just Jenny Cayenne Refill Plan',
     META_CONTENT_IDS: ['10722937110794'],
     TRIAL_DAYS: 28, CYCLE_DAYS: 28, MEMBERSHIP_CENTS: 4995, REFILL: true, INS_CENTS: 295,
-    PAY_LABEL: 'Pay Now',
+    PAY_LABEL: 'Complete Order',
   },
   // Sage Leaf Extract (Engels, USD): REFILL — de gekozen bundel wordt elke 28 dagen opnieuw aangerekend en verzonden
   sageleaf: {
@@ -1868,7 +1868,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (CONFIG.REFILL) {
       // Kleuren: Sage Leaf groen, Cayenne wine & gold
       const RC = PRODUCT_KEY === 'cayenne' ? { a: '#8E1B20', d: '#6E1418', f: '#FDEEEE', b: '#F3D3D4', g1: '#3A0507', g3: '#B3262B' } : { a: '#2F5A45', d: '#244C3A', f: '#EEF5F1', b: '#DCE9E1', g1: '#1F4534', g3: '#4C8A6B' };
-      $$('.sub-terms').forEach(el => {
+      // Cayenne: eigen voorwaardentekst (aangeleverd 18 nov 2026)
+      if (PRODUCT_KEY === 'cayenne') $$('.sub-terms').forEach(el => {
+        el.innerHTML = 'By clicking “' + PAY_LABEL + '”, you agree to our <a href="/checkout/terms#refill" target="_blank" rel="noopener">terms of service</a> '
+          + 'including arbitration agreement and class action waiver. You agree to charges at the listed price and frequency until canceled. '
+          + 'Change or cancel anytime by logging into your portal or by emailing hello@justjennybeauty.com';
+      });
+      else $$('.sub-terms').forEach(el => {
         el.innerHTML = 'By clicking “' + PAY_LABEL + ',” you agree to Just Jenny\'s '
           + '<a href="/checkout/terms#refill" target="_blank" rel="noopener">Terms of Sale</a> and '
           + '<a href="https://www.getjustjenny.com/policies/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a>. '
