@@ -77,7 +77,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   const product = getProduct(md.product_key); // NeuroTone of LubriSense
   const bundle = product.bundles[qty] || product.bundles[3];
   const shipCode = refill ? "free" : md.shipping || "insured";
-  const ship = shippingFor(currencyOf(product))[shipCode] || SHIPPING.insured;
+  const ship = shippingFor(String(invoice.currency || md.currency || currencyOf(product)).toLowerCase())[shipCode] || SHIPPING.insured;
   const addr = customer?.shipping?.address || customer?.address || {};
   const fullName = customer?.shipping?.name || customer?.name || "";
   const [firstName, ...rest] = fullName.split(" ");
@@ -95,7 +95,7 @@ async function createShopifyOrder({ invoice, subscription, customer, paymentInte
   // Onbruikbaar adres → tag, zodat je die orders in Shopify kunt filteren vóór verzending
   const market = getMarket(product.market || md.market);
   // Valuta van het product (USD voor Pumpkin Seed Oil Softgels): Shopify-order in presentmentCurrency, omgerekend naar EUR
-  const CUR = currencyOf(product), CURU = CUR.toUpperCase();
+  const CUR = String(invoice.currency || md.currency || currencyOf(product)).toLowerCase(), CURU = CUR.toUpperCase(); // munt van de factuur (lokale munt bij Cayenne)
   const mb = (cents) => moneyBag(cents, CUR);
   const addrCountry = market.countries.includes(String(addr.country || "").toUpperCase()) ? String(addr.country).toUpperCase() : market.countries[0];
   const addrOk = !!(addr.line1 && addr.city && zipValidFor(market, addr.postal_code, addrCountry));

@@ -34,6 +34,7 @@ export default async function handler(req, res) {
       bundleLabel: bundle.label,
       gift: !!bundle.gift,
       bundlePrice: bundle.price,
+      currency: String(meta.cur || sub.billing_info?.last_payment?.amount?.currency_code || "").toLowerCase() || undefined,
       shipping: ship.code,
       insurance: meta.insurance ? insuranceOf(product).price : 0,
       bump: meta.bump && bumpFor(product.key) ? { title: bumpFor(product.key).title, price: bumpFor(product.key).price } : null,

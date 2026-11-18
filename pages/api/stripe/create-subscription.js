@@ -13,7 +13,7 @@
 // Env: STRIPE_SECRET_KEY · optioneel STRIPE_PAYPAL=1 (als PayPal in Stripe aanstaat)
 
 import Stripe from "stripe";
-import { TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor, currencyOf, shippingFor, insuranceFor, membershipOf, insuranceOf } from "../../../lib/checkout";
+import { orderCurrency, TRACK_KEYS, getProduct, pickBundleFor, INSURANCE, bumpFor, getMarket, zipValidFor, currencyOf, shippingFor, insuranceFor, membershipOf, insuranceOf } from "../../../lib/checkout";
 import { saveCheckoutPhone } from "../../../lib/klaviyo";
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-12-18.acacia" }) : null;
@@ -57,7 +57,8 @@ export default async function handler(req, res) {
     const bundle = pickBundleFor(product, b.pack);
     // Valuta per product (standaard EUR; Pumpkin Seed Oil Softgels = USD). Niet-EUR-prijzen krijgen een eigen lookup key (_usd).
     const MEMBERSHIP = membershipOf(product, bundle); // refill-product (Sage Leaf): bundelprijs elke 28 dagen
-    const CURRENCY = currencyOf(product);
+    const CURRENCY = orderCurrency(product, b.currency); // lokale munt (Cayenne: GBP/CAD/AUD/NZD), anders die van het product
+    const LP = product.lookupPrefix + (CURRENCY !== currencyOf(product) ? `_${CURRENCY}` : ""); // eigen Stripe-prijzen per munt
     const CS = CURRENCY === "eur" ? "" : `_${CURRENCY}`;
     const SHIP = shippingFor(CURRENCY), INS = insuranceOf(product);
     const ship = SHIP[b.ship_method] || SHIP.insured;
@@ -148,13 +149,13 @@ export default async function handler(req, res) {
           recurring: { interval: "month", interval_count: 1 },
           product_data: { name: "Just Jenny — acquisto singolo (nessun abbonamento)" },
         })
-      : process.env[product.priceEnv] || (await getOrCreatePrice(`${product.lookupPrefix}_membership_${MEMBERSHIP.price}_${MEMBERSHIP.intervalDays}d_${V}`, {
+      : (CURRENCY === currencyOf(product) && process.env[product.priceEnv]) || (await getOrCreatePrice(`${LP}_membership_${MEMBERSHIP.price}_${MEMBERSHIP.intervalDays}d_${V}`, {
           currency: CURRENCY,
           unit_amount: MEMBERSHIP.price,
           recurring: { interval: "day", interval_count: MEMBERSHIP.intervalDays },
           product_data: { name: MEMBERSHIP.name },
         }));
-    const bundlePrice = await getOrCreatePrice(`${product.lookupPrefix}_bundle_${bundle.qty}_${bundle.price}_${V}`, {
+    const bundlePrice = await getOrCreatePrice(`${LP}_bundle_${bundle.qty}_${bundle.price}_${V}`, {
       currency: CURRENCY,
       unit_amount: bundle.price,
       product_data: { name: `${PRODUCT_TITLE} — ${bundle.label}` },

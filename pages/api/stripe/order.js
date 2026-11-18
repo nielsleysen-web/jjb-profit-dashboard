@@ -58,6 +58,7 @@ export default async function handler(req, res) {
       bundleLabel: bundle.label,
       gift: !!bundle.gift,
       bundlePrice: bundle.price,
+      currency: String(inv?.currency || md.currency || "").toLowerCase() || undefined, // lokale munt (Cayenne)
       shipping: ship.code,
       insurance: md.insurance === "1" ? insuranceOf(product).price : 0,
       bump: md.bump && bumpFor(product.key) && md.bump === bumpFor(product.key).key ? { title: bumpFor(product.key).title, price: bumpFor(product.key).price } : null,

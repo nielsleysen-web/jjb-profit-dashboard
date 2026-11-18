@@ -47,7 +47,11 @@ const MARKET = (PRODUCT_KEY === 'pumpkinoil' || PRODUCT_KEY === 'sageleaf' || PR
   : (/(^|\/)nl(\/|\.html|$)/i.test(location.pathname) || new URLSearchParams(location.search).get('m') === 'nl') ? 'nl' : 'it';
 const IS_NL = MARKET === 'nl';
 const IS_US = MARKET === 'us';
-const CUR = IS_US ? 'usd' : 'eur';
+// Lokale munt (alleen Cayenne): ?cur= wordt door de middleware gezet op basis van het land van het IP-adres. Zelfde cijfer, andere munt.
+const LOCAL_CUR = PRODUCT_KEY === 'cayenne' && ['gbp', 'cad', 'aud', 'nzd'].includes((new URLSearchParams(location.search).get('cur') || '').toLowerCase())
+  ? new URLSearchParams(location.search).get('cur').toLowerCase() : '';
+const CUR = IS_US ? (LOCAL_CUR || 'usd') : 'eur';
+const CUR_SYM = CUR === 'gbp' ? '£' : '$';
 const L = (it, en) => (IS_US ? en : it); // Italiaanse tekst, of Engels op de USD-checkout
 // Teksten die checkout.js zelf schrijft (de vaste teksten staan in index.html / nl.html / en.html)
 const T = IS_US ? {
@@ -300,7 +304,7 @@ let promo = null; // { code, percent_off, amount_off, duration }
 
 const $ = (s, r) => (r || document).querySelector(s);
 const $$ = (s, r) => [...(r || document).querySelectorAll(s)];
-const money = (c) => IS_US ? (c < 0 ? '-' : '') + '$' + (Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : IS_NL ? '€ ' + (c / 100).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const money = (c) => IS_US ? (c < 0 ? '-' : '') + CUR_SYM + (Math.abs(c) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : IS_NL ? '€ ' + (c / 100).toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   : (c / 100).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
 function shipCents() { return (SHIP[shipMethod] || SHIP.free).cents; }
@@ -465,6 +469,7 @@ function syncBumpRows() {
 }
 
 function updateAmounts() {
+  if (LOCAL_CUR) $$('.usd-pill, .t-total .usd').forEach(el => { el.textContent = CUR.toUpperCase(); });
   $$('.prod-row:not(.jj-bgift):not(.jj-gift-line) .prod-thumb img, .mobile-total img').forEach(el => { el.src = P.img; el.alt = CONFIG.PRODUCT_NAME; });
   $$('.js-pack-label').forEach(el => el.textContent = P.label);
   const hasCompare = P.compare > P.amount;
@@ -1091,7 +1096,7 @@ function initPayPal() {
         const r = await fetch('/api/paypal/create-subscription', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            pack, product: PRODUCT_KEY, ship_method: shipMethod, insurance: insCents() > 0, checkout_ab: AB_VARIANT || undefined, track: attribution(),
+            pack, product: PRODUCT_KEY, ship_method: shipMethod, insurance: insCents() > 0, checkout_ab: AB_VARIANT || undefined, track: attribution(), ...(LOCAL_CUR ? { currency: LOCAL_CUR } : {}),
             bump: bumpCents() > 0, bump_ab: bumpVariant || undefined,
             email: $('#email').value.trim(), name: sh ? sh.name : '', shipping: sh, ...(IS_NL ? { market: 'nl' } : IS_US ? { market: 'us' } : {}),
           }),
@@ -1169,6 +1174,7 @@ function createSubscription(customer) {
       body: JSON.stringify({
         pack,
         product: PRODUCT_KEY,
+        ...(LOCAL_CUR ? { currency: LOCAL_CUR } : {}),
         ship_method: shipMethod,
         insurance: insCents() > 0,
         bump: bumpCents() > 0, bump_ab: bumpVariant || undefined,

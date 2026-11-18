@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     if (!prod.membership || prod.paypal === false) return res.status(400).json({ error: "PayPal non disponibile per questo prodotto: paga con carta, Apple Pay o Google Pay." });
     const insurance = !prod?.noInsurance && (b.insurance === true || b.insurance === "1" || b.insurance === 1); // noInsurance: Cayenne, voorlopig // verzendverzekering (4,95 €, in de setup fee)
     const bump = b.bump === true || b.bump === "1" || b.bump === 1; // order bump (Spray Neutralizzante 9,95 €, in de setup fee)
-    const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product, insurance, bump);
+    const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product, insurance, bump, b.currency); // b.currency: lokale munt (Cayenne)
     const s = b.shipping || {};
     // Markt: it (standaard) of nl (NL/BE) — bepaalt postcodecheck, landcode en PayPal-taal
     const market = getMarket(prod.market || b.market);
@@ -27,7 +27,7 @@ export default async function handler(req, res) {
 
     const body = {
       plan_id: plan.id,
-      custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}, plan.product.key, plan.insurance, b.checkout_ab, plan.bump, b.bump_ab),
+      custom_id: packCustom(plan.bundle.qty, plan.ship.code, b.track || {}, plan.product.key, plan.insurance, b.checkout_ab, plan.bump, b.bump_ab, plan.currency),
       application_context: {
         brand_name: "Just Jenny",
         locale: market.key === "nl" ? "nl-NL" : market.key === "us" ? "en-US" : "it-IT",

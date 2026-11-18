@@ -74,6 +74,10 @@ export function middleware(req) {
     const to = url.clone();
     to.pathname = "/checkout/en.html";
     to.searchParams.set("p", "cayenne");
+    // Lokale munt op basis van het land van het IP-adres (Vercel): GB → £, CA/AU/NZ → eigen dollar, rest USD
+    const cc = String(req.headers.get("x-vercel-ip-country") || "").toUpperCase();
+    const cur = { GB: "gbp", CA: "cad", AU: "aud", NZ: "nzd" }[cc];
+    if (cur && !to.searchParams.get("cur")) to.searchParams.set("cur", cur);
     return NextResponse.rewrite(to);
   }
   if (/^\/(?:checkout\/)?en\/sageleaf\/?$/.test(url.pathname) || (onCheckoutHost && /^\/sageleaf\/?$/.test(url.pathname))) {

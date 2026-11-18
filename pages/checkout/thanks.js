@@ -132,7 +132,7 @@ export default function Thanks() {
       const S = shippingFor(currencyOf(prod));
       window.fbq("track", "Purchase", {
         value: (data.amountPaid ?? b.price + (S[data.shipping] || S.insured).price) / 100,
-        currency: currencyOf(prod).toUpperCase(),
+        currency: String(data.currency || currencyOf(prod)).toUpperCase(),
         content_type: "product", content_ids: [prod.shopifyProductId],
         contents: [{ id: prod.shopifyProductId, quantity: b.qty }], num_items: b.qty, order_id: orderNo,
       }, { eventID: `jjb-${orderNo}` });
@@ -143,8 +143,9 @@ export default function Thanks() {
   const preview = q && !q.sub;
   const failed = q?.rs === "failed";
   const product = getProduct(data?.product || q?.p || "pumpkinoil");
-  const CUR = currencyOf(product).toUpperCase();
-  const fmt = (c) => (CUR === "USD" ? "$" : "") + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (CUR === "USD" ? "" : " " + CUR);
+  const CUR = String(data?.currency || currencyOf(product)).toUpperCase(); // lokale munt van de betaling (Cayenne: GBP/CAD/AUD/NZD)
+  const SYM = { USD: "$", CAD: "$", AUD: "$", NZD: "$", GBP: "£" }[CUR];
+  const fmt = (c) => (SYM || "") + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (SYM && CUR === "USD" ? "" : " " + CUR);
   const SHIP = shippingFor(currencyOf(product));
   const bundle = pickBundleFor(product, data?.qty || q?.b);
   const ship = SHIP[data?.shipping] || SHIP.insured;
