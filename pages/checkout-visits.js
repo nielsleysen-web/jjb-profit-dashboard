@@ -52,7 +52,7 @@ function group(rows, keyFn) {
   return [...m.values()];
 }
 
-function List({ title, rows, render, empty }) {
+function List({ title, rows, render, empty, wide }) {
   const max = Math.max(0, ...rows.map((r) => r.visitors));
   return (
     <div style={{ ...ui.card, padding: "18px 20px" }}>
@@ -60,7 +60,7 @@ function List({ title, rows, render, empty }) {
       {rows.length === 0 && <div style={{ color: "#94a3b8", fontSize: "13.5px", padding: "10px 0" }}>{empty}</div>}
       {rows.map((r) => (
         <div key={r.key} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "9px 0", borderTop: "1px solid #f1f3f6" }}>
-          <div style={{ width: "170px", fontSize: "14px", fontWeight: 600, flex: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{render(r.key)}</div>
+          <div style={{ width: wide ? "260px" : "170px", maxWidth: "45%", fontSize: "14px", fontWeight: 600, flex: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{render(r.key)}</div>
           <div style={{ flex: 1, height: "10px", background: "#eef1f6", borderRadius: "999px", overflow: "hidden" }}>
             <div style={{ width: `${max > 0 ? Math.max(2, (r.visitors / max) * 100) : 0}%`, height: "100%", background: ACCENT, borderRadius: "999px" }} />
           </div>
@@ -138,6 +138,7 @@ export default function CheckoutVisits() {
   const rows = all.filter((r) => product === "all" || r.product === product);
   const total = rows.reduce((s, r) => s + r.visitors, 0);
   const byCountry = group(rows, (r) => r.country).sort((a, b) => b.visitors - a.visitors || b.views - a.views);
+  const byFunnel = group(rows, (r) => r.source || "direct").sort((a, b) => b.visitors - a.visitors || b.views - a.views);
   const byDay = group(rows, (r) => r.day).sort((a, b) => (a.key < b.key ? 1 : -1));
   const multiDay = range.from !== range.to;
   const dayLabel = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
@@ -170,6 +171,7 @@ export default function CheckoutVisits() {
       <LocalTimes />
 
       <div style={{ display: "grid", gap: "16px", opacity: loading ? 0.5 : 1 }}>
+        <List title="By funnel" rows={byFunnel} empty="No clicks yet." wide render={(k) => <span title={k}>{k === "direct" ? "Direct / unknown" : k}</span>} />
         <List title="By country" rows={byCountry} empty="No clicks yet." render={(k) => <span>{flag(k)}&nbsp; {countryName(k)}</span>} />
         {multiDay && <List title="Per day" rows={byDay} empty="No clicks yet." render={(k) => dayLabel(k)} />}
       </div>
