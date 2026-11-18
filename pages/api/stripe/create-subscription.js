@@ -61,7 +61,7 @@ export default async function handler(req, res) {
     const CS = CURRENCY === "eur" ? "" : `_${CURRENCY}`;
     const SHIP = shippingFor(CURRENCY), INS = insuranceOf(product);
     const ship = SHIP[b.ship_method] || SHIP.insured;
-    const insurance = b.insurance === true || b.insurance === "1" || b.insurance === 1; // verzendverzekering (4,95 €, eenmalig)
+    const insurance = !product?.noInsurance && (b.insurance === true || b.insurance === "1" || b.insurance === 1); // noInsurance: product zonder verzekering (Cayenne, voorlopig) // verzendverzekering (4,95 €, eenmalig)
     // Order bump (UrinaPatches: Spray Neutralizzante 9,95 €, A/B-test) — alleen voor producten met een bump
     const BUMP = bumpFor(product.key);
     const bump = !!BUMP && (b.bump === true || b.bump === "1" || b.bump === 1);

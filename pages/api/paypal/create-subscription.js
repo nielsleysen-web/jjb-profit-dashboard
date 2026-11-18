@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     // Geen PayPal-plannen voor dit product (Magnesium Freeze: paypal:false, of eenmalig zonder membership)
     const prod = getProduct(b.product);
     if (!prod.membership || prod.paypal === false) return res.status(400).json({ error: "PayPal non disponibile per questo prodotto: paga con carta, Apple Pay o Google Pay." });
-    const insurance = b.insurance === true || b.insurance === "1" || b.insurance === 1; // verzendverzekering (4,95 €, in de setup fee)
+    const insurance = !prod?.noInsurance && (b.insurance === true || b.insurance === "1" || b.insurance === 1); // noInsurance: Cayenne, voorlopig // verzendverzekering (4,95 €, in de setup fee)
     const bump = b.bump === true || b.bump === "1" || b.bump === 1; // order bump (Spray Neutralizzante 9,95 €, in de setup fee)
     const plan = await planFor(parseInt(b.pack, 10), b.ship_method, b.product, insurance, bump);
     const s = b.shipping || {};
