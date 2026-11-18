@@ -1,5 +1,5 @@
 // pages/api/checkout-visit.js — telt bezoeken aan de checkout-pagina's
-// POST (vanaf checkout.js bij het laden van de checkout): { p: product, src: host van de salespagina, u: 1 = eerste bezoek vandaag }
+// POST (vanaf checkout.js bij het laden van de checkout): { p: product, src: funnel (host of host/pad van de instap), u: 1 = eerste bezoek vandaag }
 // Land komt van Vercel (x-vercel-ip-country). Dag = kalenderdag in Miami/New York (America/New_York).
 // Redis (Upstash): cv:{dag} (hash)  veld "{product}|{land}|{bron}" = paginaweergaven
 //                  cvu:{dag} (hash) zelfde veld                  = unieke bezoekers (per browser per dag)
@@ -21,7 +21,7 @@ export default async function handler(req, res) {
     let b = req.body;
     if (typeof b === "string") { try { b = JSON.parse(b); } catch { b = {}; } }
     const p = String(b?.p || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30) || "unknown";
-    const src = String(b?.src || "").toLowerCase().replace(/[^a-z0-9.\-]/g, "").slice(0, 60) || "direct";
+    const src = String(b?.src || "").toLowerCase().replace(/[^a-z0-9.\-/]/g, "").slice(0, 80) || "direct"; // domein of domein/funnelpad
     const c = String(req.headers["x-vercel-ip-country"] || "").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 2) || "??";
     const d = etDay();
     const f = `${p}|${c}|${src}`;
