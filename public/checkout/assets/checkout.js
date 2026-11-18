@@ -482,11 +482,13 @@ function updateAmounts() {
       el.classList.remove('t-muted');
     }
   });
-  $$('.js-ins-line').forEach(el => el.hidden = !insCents());
+  // Verzending en verzekering pas in het getoonde totaal zodra het adres is ingevuld; daarvoor alleen het subtotaal
+  const shownTotal = addrComplete() ? totalCents() : totalCents() - shipCents() - insCents();
+  $$('.js-ins-line').forEach(el => el.hidden = !insCents() || !addrComplete());
   $$('.js-ins-amt').forEach(el => el.textContent = money(INS_PRICE));
-  $$('.js-total').forEach(el => el.textContent = money(totalCents()));
+  $$('.js-total').forEach(el => el.textContent = money(shownTotal));
   // Normale prijs doorgestreept boven het totaal (onderaan op mobiel): totaal + de korting op de bundel
-  const cmpTotal = hasCompare ? totalCents() + (P.compare - P.amount) : 0;
+  const cmpTotal = hasCompare ? shownTotal + (P.compare - P.amount) : 0;
   $$('.js-total-compare').forEach(el => { el.textContent = cmpTotal ? money(cmpTotal) : ''; el.hidden = !cmpTotal; });
   // Disclosure shows the RECURRING amount, not today's total — a one-off promo or
   // express shipping changes the first charge but not what rebills every 28 days.
