@@ -1526,6 +1526,8 @@ function abView() {
     try { if (localStorage.getItem(k) !== day) { u = 1; localStorage.setItem(k, day); } } catch (e) { u = 1; }
     const q = new URLSearchParams(location.search);
     let src = q.get('host') || q.get('jjb_host') || '';
+    const fp = q.get('path') || q.get('jjb_path') || ''; // funnel = domein + eerste padsegment (bv. cayenne.getjustjenny.com/listicle)
+    if (src && fp) src += '/' + fp;
     if (!src && document.referrer) { try { src = new URL(document.referrer).host; } catch (e) {} }
     if (src === location.host) src = '';
     fetch('/api/checkout-visit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p: PRODUCT_KEY, src: src, u: u }), keepalive: true }).catch(function () {});
