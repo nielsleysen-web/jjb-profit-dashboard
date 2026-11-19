@@ -124,13 +124,13 @@ const hcell = { ...ui.th, textAlign: "right", whiteSpace: "nowrap" };
 // Checkout-bron ("host/pad", of oude rijen met alleen "host") koppelen aan een funnel-key
 function matchKey(src, funnels) {
   if (!src || src === "direct") return "direct";
-  if (funnels.some((f) => f.key === src)) return src;
   if (!src.includes("/")) {
+    // alleen een domein (oudere rijen of de root-funnel): de funnel op dat domein met de meeste checkout-kliks
     const same = funnels.filter((f) => f.host === src);
     const withCc = same.filter((f) => f.checkoutClicks > 0).sort((a, b) => b.checkoutClicks - a.checkoutClicks);
     if (withCc.length) return withCc[0].key;
-    if (same.length) return same[0].key;
   }
+  if (funnels.some((f) => f.key === src)) return src;
   return src;
 }
 
@@ -166,7 +166,7 @@ export default function CheckoutVisits() {
   const all = data?.rows || [];
   const products = useMemo(() => [...new Set(all.map((r) => r.product))].sort(), [all]);
   const rows = all.filter((r) => product === "all" || r.product === product);
-  const funnelsRaw = fm?.funnels || [];
+  const funnelsRaw = (fm?.funnels || []).filter((f) => !/\.vercel\.app$/i.test(f.host || "")); // preview-deploys niet meetellen
 
   // Checkout-bezoeken per funnel
   const cvBy = {};
