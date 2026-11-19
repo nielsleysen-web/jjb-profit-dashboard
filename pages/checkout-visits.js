@@ -1,6 +1,8 @@
-// pages/checkout-visits.js — Checkout Visits
-// Hoeveel mensen de checkout-pagina openen, per dag (Miami-tijd), per land, per product en
-// vanaf welke salespagina. Bron: beacon in checkout.js → /api/checkout-visit (Upstash Redis).
+// pages/checkout-visits.js — Checkout Clicks (funnel-overzicht in Funnelish-stijl)
+// Per funnel (domein + eerste padsegment) elke stap onder elkaar: pagina's → checkout → order,
+// met unieke bezoekers, paginaweergaven en hoeveel % doorgaat naar de volgende stap.
+// Bronnen: /api/funnel-metrics (pageviews, checkout-kliks, orders, omzet) en
+// /api/checkout-visits (bezoeken aan de checkout-pagina per funnel, land en product).
 
 import { useState, useEffect, useMemo } from "react";
 
@@ -114,42 +116,118 @@ const QUICK = [
   { key: "30d", label: "30 days" },
 ];
 
+const fmtEur = (v) => `€ ${Number(v || 0).toLocaleString("nl-BE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pct = (a, b) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : "—");
+const cell = { padding: "11px 12px", borderBottom: "1px solid #f1f3f6", fontSize: "13.5px", textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
+const hcell = { ...ui.th, textAlign: "right", whiteSpace: "nowrap" };
+
+// Checkout-bron ("host/pad", of oude rijen met alleen "host") koppelen aan een funnel-key
+function matchKey(src, funnels) {
+  if (!src || src === "direct") return "direct";
+  if (funnels.some((f) => f.key === src)) return src;
+  if (!src.includes("/")) {
+    const same = funnels.filter((f) => f.host === src);
+    const withCc = same.filter((f) => f.checkoutClicks > 0).sort((a, b) => b.checkoutClicks - a.checkoutClicks);
+    if (withCc.length) return withCc[0].key;
+    if (same.length) return same[0].key;
+  }
+  return src;
+}
+
+function Bar({ v, max, color = ACCENT }) {
+  return (
+    <div style={{ height: "8px", background: "#eef1f6", borderRadius: "999px", overflow: "hidden", minWidth: "80px" }}>
+      <div style={{ width: `${max > 0 ? Math.max(v > 0 ? 2 : 0, Math.min(100, (v / max) * 100)) : 0}%`, height: "100%", background: color, borderRadius: "999px" }} />
+    </div>
+  );
+}
+
 export default function CheckoutVisits() {
   const [preset, setPreset] = useState("today");
   const [range, setRange] = useState(presetRange("today"));
   const [data, setData] = useState(null);
+  const [fm, setFm] = useState(null);
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState("all");
+  const [sel, setSel] = useState(null);
 
   useEffect(() => { setRange(presetRange(preset)); }, [preset]);
   useEffect(() => {
     if (!range.from || !range.to) return;
     let on = true;
     setLoading(true);
-    fetch(`/api/checkout-visits?from=${range.from}&to=${range.to}`)
-      .then((r) => r.json())
-      .then((d) => { if (on) { setData(d); setLoading(false); } })
-      .catch(() => { if (on) setLoading(false); });
+    Promise.all([
+      fetch(`/api/checkout-visits?from=${range.from}&to=${range.to}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/funnel-metrics?from=${range.from}&to=${range.to}`).then((r) => r.json()).catch(() => null),
+    ]).then(([cv, f]) => { if (on) { setData(cv); setFm(f); setLoading(false); } });
     return () => { on = false; };
   }, [range.from, range.to]);
 
   const all = data?.rows || [];
   const products = useMemo(() => [...new Set(all.map((r) => r.product))].sort(), [all]);
   const rows = all.filter((r) => product === "all" || r.product === product);
-  const total = rows.reduce((s, r) => s + r.visitors, 0);
+  const funnelsRaw = fm?.funnels || [];
+
+  // Checkout-bezoeken per funnel
+  const cvBy = {};
+  rows.forEach((r) => {
+    const k = matchKey(r.source, funnelsRaw);
+    const o = (cvBy[k] = cvBy[k] || { visitors: 0, views: 0 });
+    o.visitors += r.visitors; o.views += r.views;
+  });
+
+  // Funnels samenvoegen: pagina-stappen + checkout + orders
+  let funnels = funnelsRaw.map((f) => ({ ...f, cv: cvBy[f.key] || { visitors: 0, views: 0 } }));
+  Object.keys(cvBy).forEach((k) => {
+    if (k !== "direct" && !funnels.some((f) => f.key === k)) funnels.push({ key: k, host: k.split("/")[0], steps: [], totalUniques: 0, checkoutClicks: 0, orders: 0, revenue: 0, cv: cvBy[k] });
+  });
+  if (product !== "all") funnels = funnels.filter((f) => cvBy[f.key]);
+  funnels = funnels
+    .filter((f) => f.totalUniques > 0 || f.cv.visitors > 0 || f.orders > 0)
+    .sort((a, b) => b.cv.visitors - a.cv.visitors || b.totalUniques - a.totalUniques || b.revenue - a.revenue);
+  const direct = cvBy.direct;
+
+  const cur = funnels.find((f) => f.key === sel) || funnels[0] || null;
+  const tot = funnels.reduce((t, f) => ({ u: t.u + f.totalUniques, cc: t.cc + f.checkoutClicks, cv: t.cv + f.cv.visitors, o: t.o + f.orders, r: t.r + f.revenue }), { u: 0, cc: 0, cv: 0, o: 0, r: 0 });
+  const totalCv = rows.reduce((s, r) => s + r.visitors, 0);
+
+  // Stappen van de gekozen funnel (Funnelish-stijl)
+  const steps = [];
+  if (cur) {
+    const pages = cur.steps || [];
+    pages.forEach((s, i) => {
+      const nxt = pages[i + 1];
+      const toCheckout = s.ccu > 0 || !nxt;
+      steps.push({
+        n: steps.length + 1, kind: "page", label: s.path, sub: `${cur.host}${s.path === "/" ? "" : s.path}`,
+        u: s.pvu, pv: s.pv,
+        next: toCheckout ? s.ccu : nxt.pvu, nextLabel: toCheckout ? "clicked to checkout" : `to ${nxt.path}`,
+      });
+    });
+    steps.push({ n: steps.length + 1, kind: "checkout", label: "Checkout", sub: "checkout.getjustjenny.com", u: cur.cv.visitors, pv: cur.cv.views, next: cur.orders, nextLabel: "bought" });
+    steps.push({ n: steps.length + 1, kind: "order", label: "Order", sub: cur.orders > 0 ? `AOV ${fmtEur(cur.revenue / cur.orders)}` : "", u: cur.orders, pv: null, revenue: cur.revenue });
+  }
+  const top = steps.length ? Math.max(...steps.map((s) => s.u)) : 0;
+
   const byCountry = group(rows, (r) => r.country).sort((a, b) => b.visitors - a.visitors || b.views - a.views);
-  const byFunnel = group(rows, (r) => r.source || "direct").sort((a, b) => b.visitors - a.visitors || b.views - a.views);
-  const byDay = group(rows, (r) => r.day).sort((a, b) => (a.key < b.key ? 1 : -1));
   const multiDay = range.from !== range.to;
   const dayLabel = (d) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
   const pill = (on) => ({ padding: "8px 16px", borderRadius: "999px", border: `1px solid ${on ? ACCENT : "#e2e6ec"}`, background: on ? ACCENT : "#fff", color: on ? "#fff" : "#334155", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" });
+  const kpi = (label, value, sub) => (
+    <div style={{ ...ui.card, padding: "14px 16px" }}>
+      <div style={ui.label}>{label}</div>
+      <div style={{ fontSize: "26px", fontWeight: 800, marginTop: "6px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{value}</div>
+      {sub && <div style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>{sub}</div>}
+    </div>
+  );
 
   return (
-    <div style={{ ...ui.page, maxWidth: "860px" }}>
+    <div style={{ ...ui.page, maxWidth: "1100px" }}>
       <h1 style={{ margin: "0 0 16px 0", fontSize: "22px", fontWeight: 800 }}>🛒 Checkout Clicks</h1>
 
       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
         {QUICK.map((q) => <button key={q.key} onClick={() => setPreset(q.key)} style={pill(preset === q.key)}>{q.label}</button>)}
+        <span style={{ fontSize: "12.5px", color: "#64748b", marginLeft: "6px" }}>{multiDay ? `${dayLabel(range.from)} – ${dayLabel(range.to)}` : dayLabel(range.from)}</span>
         <select value={product} onChange={(e) => setProduct(e.target.value)} style={{ marginLeft: "auto", padding: "8px 12px", border: "1px solid #e2e6ec", borderRadius: "999px", fontSize: "13px", fontFamily: "inherit", color: "#334155", background: "#fff", cursor: "pointer" }}>
           <option value="all">All products</option>
           {products.map((p) => <option key={p} value={p}>{productName(p)}</option>)}
@@ -160,20 +238,97 @@ export default function CheckoutVisits() {
         <div style={{ ...ui.card, padding: "18px", color: "#b91c1c", marginBottom: "16px" }}>Could not load the data: {data.error || "no access"}</div>
       )}
 
-      <div style={{ ...ui.card, padding: "26px 24px", marginBottom: "16px", opacity: loading ? 0.5 : 1 }}>
-        <div style={ui.label}>People who clicked to the checkout</div>
-        <div style={{ fontSize: "64px", lineHeight: 1.05, fontWeight: 800, marginTop: "8px", fontVariantNumeric: "tabular-nums" }}>{fmtInt(total)}</div>
-        <div style={{ fontSize: "13px", color: "#64748b", marginTop: "6px" }}>
-          {multiDay ? `${dayLabel(range.from)} – ${dayLabel(range.to)}` : dayLabel(range.from)} · Miami time
-        </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: "12px", marginBottom: "16px", opacity: loading ? 0.5 : 1 }}>
+        {kpi("Funnel visitors", fmtInt(tot.u), "unique, first page")}
+        {kpi("Clicked to checkout", fmtInt(tot.cc), pct(tot.cc, tot.u) + " of visitors")}
+        {kpi("Reached checkout", fmtInt(totalCv), "unique checkout visitors")}
+        {kpi("Orders", fmtInt(tot.o), pct(tot.o, totalCv) + " of checkout")}
+        {kpi("Revenue", fmtEur(tot.r), tot.u > 0 ? `${fmtEur(tot.r / tot.u)} per visitor` : "")}
       </div>
+
+      {/* Alle funnels */}
+      <div style={{ ...ui.card, marginBottom: "16px", overflowX: "auto", opacity: loading ? 0.5 : 1 }}>
+        <div style={{ ...ui.label, padding: "16px 18px 6px" }}>Funnels</div>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
+          <thead><tr>
+            <th style={ui.th}>Funnel</th>
+            <th style={hcell}>Visitors</th>
+            <th style={hcell}>Clicked to checkout</th>
+            <th style={hcell}>Reached checkout</th>
+            <th style={hcell}>Orders</th>
+            <th style={hcell}>Conv.</th>
+            <th style={hcell}>Revenue</th>
+            <th style={hcell}>Per visitor</th>
+          </tr></thead>
+          <tbody>
+            {funnels.length === 0 && <tr><td colSpan={8} style={{ ...ui.td, color: "#94a3b8" }}>{loading ? "Loading…" : "No funnel traffic in this period."}</td></tr>}
+            {funnels.map((f) => {
+              const on = cur && f.key === cur.key;
+              return (
+                <tr key={f.key} onClick={() => setSel(f.key)} style={{ cursor: "pointer", background: on ? "#eef2ff" : "transparent" }}>
+                  <td style={{ ...cell, textAlign: "left", fontWeight: 700, color: on ? ACCENT : "#0f172a" }}>{on ? "▸ " : ""}{f.key}</td>
+                  <td style={cell}>{fmtInt(f.totalUniques)}</td>
+                  <td style={cell}>{fmtInt(f.checkoutClicks)} <span style={{ color: "#94a3b8" }}>· {pct(f.checkoutClicks, f.totalUniques)}</span></td>
+                  <td style={cell}>{fmtInt(f.cv.visitors)}</td>
+                  <td style={{ ...cell, fontWeight: 700 }}>{fmtInt(f.orders)}</td>
+                  <td style={cell}>{pct(f.orders, f.totalUniques)}</td>
+                  <td style={{ ...cell, fontWeight: 700, color: f.revenue > 0 ? "#166534" : "#0f172a" }}>{fmtEur(f.revenue)}</td>
+                  <td style={cell}>{f.totalUniques > 0 ? fmtEur(f.revenue / f.totalUniques) : "—"}</td>
+                </tr>
+              );
+            })}
+            {direct && direct.visitors > 0 && (
+              <tr><td style={{ ...cell, textAlign: "left", color: "#64748b" }}>Direct / unknown (checkout only)</td><td style={cell}>—</td><td style={cell}>—</td><td style={cell}>{fmtInt(direct.visitors)}</td><td style={cell}>—</td><td style={cell}>—</td><td style={cell}>—</td><td style={cell}>—</td></tr>
+            )}
+          </tbody>
+        </table>
+        <div style={{ fontSize: "12px", color: "#94a3b8", padding: "10px 18px 14px" }}>Click a funnel to see its steps below.</div>
+      </div>
+
+      {/* Stappen van de gekozen funnel */}
+      {cur && (
+        <div style={{ ...ui.card, marginBottom: "16px", overflowX: "auto", opacity: loading ? 0.5 : 1 }}>
+          <div style={{ padding: "16px 18px 6px", display: "flex", alignItems: "baseline", gap: "10px", flexWrap: "wrap" }}>
+            <div style={ui.label}>Funnel steps</div>
+            <div style={{ fontSize: "15px", fontWeight: 800 }}>{cur.key}</div>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
+            <thead><tr>
+              <th style={{ ...ui.th, width: "36px" }}>#</th>
+              <th style={ui.th}>Step</th>
+              <th style={hcell}>Unique visitors</th>
+              <th style={hcell}>Page views</th>
+              <th style={{ ...ui.th, width: "22%" }}></th>
+              <th style={hcell}>Went to next step</th>
+              <th style={hcell}>Rate</th>
+            </tr></thead>
+            <tbody>
+              {steps.map((s) => (
+                <tr key={s.n} style={{ background: s.kind === "order" ? "#f0fdf4" : s.kind === "checkout" ? "#f8fafc" : "transparent" }}>
+                  <td style={{ ...cell, textAlign: "left", color: "#94a3b8", fontWeight: 700 }}>{s.n}</td>
+                  <td style={{ ...cell, textAlign: "left", whiteSpace: "normal" }}>
+                    <div style={{ fontWeight: 700 }}>{s.kind === "page" ? `Page ${s.label}` : s.kind === "checkout" ? "🛒 Checkout" : "✅ Order"}</div>
+                    {s.sub && <div style={{ fontSize: "12px", color: "#94a3b8" }}>{s.sub}</div>}
+                  </td>
+                  <td style={{ ...cell, fontSize: "16px", fontWeight: 800 }}>{fmtInt(s.u)}</td>
+                  <td style={{ ...cell, color: "#64748b" }}>{s.pv == null ? (s.revenue != null ? <b style={{ color: "#166534" }}>{fmtEur(s.revenue)}</b> : "—") : fmtInt(s.pv)}</td>
+                  <td style={cell}><Bar v={s.u} max={top} color={s.kind === "order" ? "#16a34a" : ACCENT} /></td>
+                  <td style={cell}>{s.kind === "order" ? "" : <>{fmtInt(s.next)} <span style={{ color: "#94a3b8" }}>{s.nextLabel}</span></>}</td>
+                  <td style={{ ...cell, fontWeight: 700 }}>{s.kind === "order" ? "" : pct(s.next, s.u)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontSize: "12px", color: "#94a3b8", padding: "10px 18px 14px" }}>
+            Overall conversion: <b style={{ color: "#334155" }}>{pct(cur.orders, cur.totalUniques)}</b> of first-page visitors bought · revenue per visitor <b style={{ color: "#334155" }}>{cur.totalUniques > 0 ? fmtEur(cur.revenue / cur.totalUniques) : "—"}</b>
+          </div>
+        </div>
+      )}
 
       <LocalTimes />
 
       <div style={{ display: "grid", gap: "16px", opacity: loading ? 0.5 : 1 }}>
-        <List title="By funnel" rows={byFunnel} empty="No clicks yet." wide render={(k) => <span title={k}>{k === "direct" ? "Direct / unknown" : k}</span>} />
-        <List title="By country" rows={byCountry} empty="No clicks yet." render={(k) => <span>{flag(k)}&nbsp; {countryName(k)}</span>} />
-        {multiDay && <List title="Per day" rows={byDay} empty="No clicks yet." render={(k) => dayLabel(k)} />}
+        <List title="Checkout visitors by country" rows={byCountry} empty="No checkout visitors yet." render={(k) => <span>{flag(k)}&nbsp; {countryName(k)}</span>} />
       </div>
     </div>
   );
