@@ -310,7 +310,7 @@ export default async function handler(req, res) {
 
     const FIELDS = [
       "product", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
-      "angle", "advertorialLink", "market", "countryCode", "gender", "ageRange",
+      "angle", "advertorialLink", "market", "countryCode", "language", "gender", "ageRange",
       "concept", "mechanism", "icp", "awareness", "formatType",
       "batchType", "visualBriefing", "iterationType", "referenceAd", "creativeCopy",
       "topCompetitorCreative1", "topCompetitorCreative2", "topCompetitorCreative3", "topCompetitorCreative4", "topCompetitorCreative5",
@@ -339,6 +339,7 @@ export default async function handler(req, res) {
         advertorialLink: "",
         market: "",
         countryCode: "",
+        language: "",
         gender: "",
         ageRange: "",
         batchType: "Net New",

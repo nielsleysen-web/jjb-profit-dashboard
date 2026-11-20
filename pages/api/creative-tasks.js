@@ -287,7 +287,7 @@ export default async function handler(req, res) {
 
     const FIELDS = [
       "product", "scriptLink", "deadline", "strategistEmail", "strategistName", "assigneeEmail", "assigneeName",
-      "angle", "advertorialLink", "market", "countryCode", "type",
+      "angle", "advertorialLink", "market", "countryCode", "language", "type",
       "concept", "mechanism", "icp", "awareness", "scriptStructure", "formatType",
       "referenceAd", "inspirationLink", "aRoll", "aRollAvatarId", "aRollAvatarName",
       "aRollLink", "subtitles", "frameioLink", "finalOutputLink",
@@ -317,6 +317,7 @@ export default async function handler(req, res) {
         advertorialLink: "",
         market: "",
         countryCode: "",
+        language: "",
         type: "Net New",
         inspirationLink: "",
         aRoll: "",

@@ -436,8 +436,10 @@ async function rebuildXlsx(store, task) {
 
 /* ---------------- de run zelf ---------------- */
 async function runGenerate(task, store) {
-  const marketCountry = task.market || "Italy";
-  const langName = LANGUAGES[marketCountry] || "Italian";
+  // Taal van de taak (veld Language) gaat voor; oudere taken hebben alleen een markt
+  const LANG_COUNTRY = { English: "United States", Italian: "Italy", French: "France", Hebrew: "Israel" };
+  const marketCountry = LANG_COUNTRY[task.language] || task.market || "Italy";
+  const langName = task.language || LANGUAGES[marketCountry] || "Italian";
   const year = new Date().getFullYear();
 
   // 1. Research JSON: uit de product pipeline, anders uit de advertorial
@@ -467,7 +469,8 @@ async function runGenerate(task, store) {
   const en = flatten(parseJson(await callClaude({ prompt: headlinePrompt(json, marketCountry, year), maxTokens: 2500 })));
 
   // 3. Vertaling naar de markttaal — op Opus 4.6
-  const tr = flatten(parseJson(await callClaude({ prompt: translatePrompt(langName, marketCountry, unflatten(en)), maxTokens: 2500, model: TRANSLATE_MODEL })));
+  // Engelse taak: de headlines zijn al in de juiste taal, dus geen vertaalstap
+  const tr = langName === "English" ? { ...en } : flatten(parseJson(await callClaude({ prompt: translatePrompt(langName, marketCountry, unflatten(en)), maxTokens: 2500, model: TRANSLATE_MODEL })));
 
   store.en = en;
   store.tr = tr;
