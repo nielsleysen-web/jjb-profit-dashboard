@@ -5,6 +5,7 @@
 // Winner/Loser categorisation (Ads Manager data) comes in phase 2.
 
 import { useState, useEffect } from "react";
+import { taskLanguage } from "../lib/creative-naming";
 
 const ui = {
   page: { padding: "28px 36px", background: "#f7f8fa", minHeight: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", color: "#0f172a" },
@@ -38,7 +39,7 @@ const CREATIVE_FIELDS = [
   { key: "awareness", label: "Awareness Stage" },
   { key: "scriptStructure", label: "Script Structure" },
   { key: "formatType", label: "Format Type" },
-  { key: "market", label: "Market", get: (t) => (t.market ? `${t.market}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
+  { key: "language", label: "Language", get: (t) => taskLanguage(t) },
   { key: "type", label: "Type" },
   { key: "strategistName", label: "Creative Strategist" },
   { key: "assigneeName", label: "Video Editor" },
@@ -63,7 +64,7 @@ const DESIGN_FIELDS = [
   { key: "icp", label: "ICP" },
   { key: "awareness", label: "Awareness Stage" },
   { key: "formatType", label: "Format Type" },
-  { key: "market", label: "Market", get: (t) => (t.market ? `${t.market}${t.countryCode ? ` (${t.countryCode})` : ""}` : "") },
+  { key: "language", label: "Language", get: (t) => taskLanguage(t) },
   { key: "batchType", label: "Batch Type" },
   { key: "iterationType", label: "Iteration Type" },
   { key: "gender", label: "Gender" },

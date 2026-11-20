@@ -3,7 +3,7 @@
 // (from the Video Editor and Graphic Designer boards only).
 
 import { useState, useEffect } from "react";
-import { videoNaming, designNaming, videoConcept } from "../lib/creative-naming";
+import { videoNaming, designNaming, videoConcept, taskLanguage } from "../lib/creative-naming";
 
 const ui = {
   page: { padding: "28px 36px", background: "#f7f8fa", minHeight: "100vh", fontFamily: "Inter, system-ui, -apple-system, sans-serif", color: "#0f172a" },
@@ -156,7 +156,7 @@ export default function ReadyToLaunch() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: "15px", fontWeight: 700 }}>
                         {t.product?.title || "Creative"}
-                        {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
+                        {(taskLanguage(t) || t.countryCode) && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{taskLanguage(t) || t.countryCode}</span>}
                         {t.type && <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 700, color: "#7c3aed", background: "#ede9fe", padding: "3px 9px", borderRadius: "999px" }}>{t.type}</span>}
                       </div>
                       {videoConcept(t) && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{videoConcept(t)}{t.mechanism ? ` · ${t.mechanism}` : ""}</div>}
@@ -197,7 +197,7 @@ export default function ReadyToLaunch() {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontSize: "15px", fontWeight: 700 }}>
                         {t.product?.title || "Design"}
-                        {t.countryCode && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{t.countryCode}</span>}
+                        {(taskLanguage(t) || t.countryCode) && <span style={{ marginLeft: "8px", fontSize: "11px", fontWeight: 700, color: "#334155", background: "#f1f5f9", padding: "3px 9px", borderRadius: "999px" }}>{taskLanguage(t) || t.countryCode}</span>}
                         {t.batchType && <span style={{ marginLeft: "6px", fontSize: "11px", fontWeight: 700, color: "#be185d", background: "#fce7f3", padding: "3px 9px", borderRadius: "999px" }}>{t.batchType}</span>}
                       </div>
                       {videoConcept(t) && <div style={{ fontSize: "13px", color: "#64748b", marginTop: "3px" }}>{videoConcept(t)}{t.mechanism ? ` · ${t.mechanism}` : ""}</div>}

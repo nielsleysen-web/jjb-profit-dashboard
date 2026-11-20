@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import CreativesList from "../components/creatives/CreativesList";
-import { designNaming, AWARENESS_STAGES } from "../lib/creative-naming";
+import { designNaming, AWARENESS_STAGES, LANGUAGES, taskLanguage } from "../lib/creative-naming";
 
 function useIsMobile() {
   const [mobile, setMobile] = useState(false);
@@ -76,9 +76,6 @@ const btnGhost = {
 
 const STATUSES = ["Task Start", "Ready To Work", "In Production", "QA Check", "Revisions", "Ready to launch", "Launched"];
 const BOARD_STATUSES = STATUSES.slice(0, 6); // Launched verhuist naar het Launched-tabblad
-const MARKETS = ["Italy", "France", "Israel"];
-const CODES = ["IT", "FR", "IL"];
-const MARKET_TO_CODE = { Italy: "IT", France: "FR", Israel: "IL" };
 const GENDERS = ["Male", "Female"];
 const AGE_RANGES = ["18-25", "25-40", "40-55", "55+"];
 const TYPES = ["Net New", "Iteration"];
@@ -1821,22 +1818,8 @@ function TaskModal({ t, me, strategists, editors, team, avatars, voices, options
               <Field label="Advertorial Link">
                 <TextField value={t.advertorialLink} disabled={!canEdit} onSave={(v) => save("advertorialLink", v)} type="url" placeholder="https://…" />
               </Field>
-              <Field label="Market">
-                {canEdit ? (
-                  <select
-                    value={t.market || ""}
-                    onChange={(e) => post({ action: "update", taskId: t.id, task: { market: e.target.value, countryCode: MARKET_TO_CODE[e.target.value] || t.countryCode } })}
-                    style={selectStyle}
-                  >
-                    <option value="">—</option>
-                    {MARKETS.map((m) => <option key={m}>{m}</option>)}
-                  </select>
-                ) : (
-                  <span style={{ fontSize: "13px" }}>{t.market || "—"}</span>
-                )}
-              </Field>
-              <Field label="Country Code" last>
-                <SelectField value={t.countryCode} options={CODES} onSave={(v) => save("countryCode", v)} disabled={!canEdit} />
+              <Field label="Language" last>
+                <SelectField value={taskLanguage(t)} options={LANGUAGES} onSave={(v) => save("language", v)} disabled={!canEdit} />
               </Field>
             </Section>
 
