@@ -5,6 +5,7 @@
 // Licht/donker thema via de knop rechtsboven (onthouden per browser).
 
 import { useState, useEffect } from "react";
+import { taskLanguage } from "../../lib/creative-naming";
 
 export const BOARD_STATUSES = ["Task Start", "Ready To Work", "In Production", "QA Check", "Revisions", "Ready to launch"];
 const STAGE_COLOR = {
@@ -152,7 +153,7 @@ export default function CreativesList({
       (!fProduct || t.product?.title === fProduct) &&
       (!fDeadline || (t.deadline && new Date(t.deadline) <= new Date(`${fDeadline}T23:59:59`))) &&
       (!ql ||
-        [t.concept, t.mechanism, t.icp, t.angle, t.product?.title, t.assigneeName, t.strategistName, t.countryCode, namingFor?.(t)]
+        [t.concept, t.mechanism, t.icp, t.angle, t.product?.title, t.assigneeName, t.strategistName, t.countryCode, taskLanguage(t), namingFor?.(t)]
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
@@ -162,7 +163,7 @@ export default function CreativesList({
   const productOptions = [...new Set(tasks.map((t) => t.product?.title).filter(Boolean))].sort();
 
   const subline = (t) => {
-    const parts = [t.product?.title, t.countryCode];
+    const parts = [t.product?.title, taskLanguage(t) || t.countryCode];
     if (kind === "design") parts.push([t.batchType, t.iterationType].filter(Boolean).join(" · "));
     else parts.push(t.type);
     return parts.filter(Boolean).join(" · ");
